@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrimeSys | Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; color: #0f172a; }
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 24px; background: #0f172a; color: #fff;
+        }
+        header h1 { margin: 0; font-size: 18px; }
+        header a { color: #cbd5e1; text-decoration: none; font-size: 13px; }
+        main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card { background: #fff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card .label { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+        .card .value { font-size: 24px; font-weight: 700; }
+        .value.positive { color: #15803d; }
+        .value.negative { color: #b91c1c; }
+        .panel { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
+        .panel h2 { margin: 0 0 16px; font-size: 15px; color: #334155; }
+        .loading { color: #94a3b8; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e2e8f0; }
+        th { color: #64748b; font-weight: 600; }
+        .filtro {
+            display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+            background: #fff; border-radius: 14px; padding: 16px 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px;
+        }
+        .filtro label { display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+        .filtro input {
+            border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 13px;
+        }
+        .filtro button {
+            border: 0; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 700;
+            color: #fff; background: #0f172a; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PrimeSys &middot; {{ empresa_nome }}</h1>
+        <a href="/logout">Sair</a>
+    </header>
+    <main>
+        <form class="filtro" id="form-filtro">
+            <div>
+                <label for="filtro-inicio">De</label>
+                <input id="filtro-inicio" name="inicio" type="date" required />
+            </div>
+            <div>
+                <label for="filtro-fim">Até</label>
+                <input id="filtro-fim" name="fim" type="date" required />
+            </div>
+            <button type="submit">Filtrar</button>
+        </form>
+
+        <div class="cards" id="cards">
+            <div class="card"><div class="label">Total vendido no período</div><div class="value loading" id="kpi-vendido">carregando...</div></div>
+            <div class="card"><div class="label">Contas a receber (pendente)</div><div class="value loading" id="kpi-receber">carregando...</div></div>
+            <div class="card"><div class="label">Contas a pagar (pendente)</div><div class="value loading" id="kpi-pagar">carregando...</div></div>
+            <div class="card"><div class="label">Saldo projetado</div><div class="value loading" id="kpi-saldo">carregando...</div></div>
+        </div>
+
+        <div class="panel">
+            <h2 id="vendas-titulo">Mercadorias mais vendidas</h2>
+            <canvas id="chartVendas" height="100"></canvas>
+            <p class="loading" id="vendas-status"></p>
+        </div>
+
+        <div class="panel">
+            <h2>Contas a receber &mdash; vencimentos no período</h2>
+            <table>
+                <thead><tr><th>Vencimento</th><th>Pessoa</th><th>Valor</th></tr></thead>
+                <tbody id="tabela-receber"><tr><td colspan="3" class="loading">carregando...</td></tr></tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        const fmtMoney = (v) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const fmtDate = (v) => v ? new Date(v).toLocaleDateString('pt-BR') : '-';
+        // Datas "puras" (YYYY-MM-DD, sem hora) o JS interpreta como UTC; usar new Date()
+        // direto e formatar no fuso local pode voltar um dia. Aqui só reordenamos a string.
+        const fmtDateOnly = (v) => v ? v.split('-').reverse().join('/') : '-';
+        let chartVendas = null;
+
+        function hojeISO(diasOffset = 0) {
+            const d = new Date();
+            d.setDate(d.getDate() + diasOffset);
+            return d.toISOString().slice(0, 10);
+        }
+
+        async function loadSummary(inicio, fim) {
+            document.getElementById('kpi-receber').classList.remove('positive', 'negative');
+            document.getElementById('kpi-pagar').classList.remove('positive', 'negative');
+            document.getElementById('kpi-saldo').classList.remove('positive', 'negative');
+
+            const params = new URLSearchParams({ inicio, fim });
+            const res = await fetch(`/api/dashboard/summary?${params}`);
+            if (!res.ok) {
+                document.getElementById('kpi-vendido').textContent = 'erro';
+                document.getElementById('kpi-receber').textContent = 'erro';
+                document.getElementById('kpi-pagar').textContent = 'erro';
+                document.getElementById('kpi-saldo').textContent = 'erro';
+                return;
+            }
+            const data = await res.json();
+
+            document.getElementById('vendas-titulo').textContent =
+                `Mercadorias mais vendidas (${fmtDateOnly(inicio)} a ${fmtDateOnly(fim)})`;
+
+            document.getElementById('kpi-vendido').textContent = fmtMoney(data.total_vendido);
+            document.getElementById('kpi-receber').textContent = fmtMoney(data.total_receber);
+            document.getElementById('kpi-pagar').textContent = fmtMoney(data.total_pagar);
+
+            const saldo = (data.total_receber ?? 0) - (data.total_pagar ?? 0);
+            const saldoEl = document.getElementById('kpi-saldo');
+            saldoEl.textContent = fmtMoney(saldo);
+            saldoEl.classList.add(saldo >= 0 ? 'positive' : 'negative');
+
+            const tbody = document.getElementById('tabela-receber');
+            tbody.innerHTML = '';
+            (data.proximos_recebiveis ?? []).slice(0, 8).forEach((item) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${fmtDate(item.vencimento)}</td><td>${item.pessoa ?? '-'}</td><td>${fmtMoney(item.valor)}</td>`;
+                tbody.appendChild(tr);
+            });
+            if (!data.proximos_recebiveis?.length) {
+                tbody.innerHTML = '<tr><td colspan="3">Nenhum registro encontrado.</td></tr>';
+            }
+
+            if (chartVendas) {
+                chartVendas.destroy();
+                chartVendas = null;
+            }
+
+            const statusEl = document.getElementById('vendas-status');
+            const vendas = data.mercadorias_vendidas ?? [];
+            if (!vendas.length) {
+                statusEl.textContent = 'Sem dados de vendas no período.';
+                return;
+            }
+            statusEl.textContent = '';
+            chartVendas = new Chart(document.getElementById('chartVendas'), {
+                type: 'bar',
+                data: {
+                    labels: vendas.map((v) => v.descricao),
+                    datasets: [{ label: 'Quantidade vendida', data: vendas.map((v) => v.quantidade), backgroundColor: '#0f172a' }],
+                },
+                options: { responsive: true, plugins: { legend: { display: false } } },
+            });
+        }
+
+        const inicioInput = document.getElementById('filtro-inicio');
+        const fimInput = document.getElementById('filtro-fim');
+        inicioInput.value = hojeISO(-30);
+        fimInput.value = hojeISO(0);
+
+        document.getElementById('form-filtro').addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            loadSummary(inicioInput.value, fimInput.value);
+        });
+
+        loadSummary(inicioInput.value, fimInput.value);
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+.env
+*.log
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+cookies.txt
+primesys.db

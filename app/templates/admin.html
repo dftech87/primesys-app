@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrimeSys | Admin</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; color: #0f172a; }
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 24px; background: #0f172a; color: #fff;
+        }
+        header h1 { margin: 0; font-size: 18px; }
+        header a { color: #cbd5e1; text-decoration: none; font-size: 13px; }
+        main { padding: 24px; max-width: 900px; margin: 0 auto; }
+        .panel { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
+        .panel h2 { margin: 0 0 16px; font-size: 15px; color: #334155; }
+        label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+        input {
+            width: 100%; border: 1px solid #cbd5e1; border-radius: 10px;
+            padding: 10px 12px; font-size: 14px; margin-bottom: 14px;
+        }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+        button {
+            border: 0; border-radius: 10px; padding: 10px 20px;
+            font-size: 14px; font-weight: 700; color: #fff; background: #0f172a; cursor: pointer;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e2e8f0; }
+        th { color: #64748b; font-weight: 600; }
+        .success {
+            margin-bottom: 16px; padding: 10px 12px; border-radius: 10px;
+            background: #dcfce7; color: #166534; font-size: 13px;
+        }
+        .token { font-family: monospace; color: #64748b; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PrimeSys &middot; Administração</h1>
+        <a href="/admin/logout">Sair</a>
+    </header>
+    <main>
+        {% if message %}<div class="success">{{ message }}</div>{% endif %}
+
+        <div class="panel">
+            <h2>Cadastrar / atualizar cliente</h2>
+            <form method="post" action="/admin/tenants">
+                <div class="grid">
+                    <div>
+                        <label for="cnpj">CNPJ</label>
+                        <input id="cnpj" name="cnpj" type="text" inputmode="numeric" required />
+                    </div>
+                    <div>
+                        <label for="nome_fantasia">Nome do cliente</label>
+                        <input id="nome_fantasia" name="nome_fantasia" type="text" required />
+                    </div>
+                </div>
+                <label for="api_token">Token da API (Meu ERP Online) desse cliente</label>
+                <input id="api_token" name="api_token" type="text" required />
+                <button type="submit">Salvar cliente</button>
+                <p style="color:#64748b;font-size:12px;margin-top:10px;">
+                    O login do cliente final usa o e-mail e a senha que ele já tem no Meu ERP Online
+                    (validados direto na API dele) — não é preciso cadastrar senha aqui.
+                </p>
+            </form>
+        </div>
+
+        <div class="panel">
+            <h2>Clientes cadastrados</h2>
+            <table>
+                <thead><tr><th>CNPJ</th><th>Nome</th><th>Token</th><th>Cadastrado em</th></tr></thead>
+                <tbody>
+                    {% for t in tenants %}
+                    <tr>
+                        <td>{{ t.cnpj }}</td>
+                        <td>{{ t.nome_fantasia }}</td>
+                        <td class="token">{{ t.api_token }}</td>
+                        <td>{{ t.criado_em }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4">Nenhum cliente cadastrado.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+</body>
+</html>
