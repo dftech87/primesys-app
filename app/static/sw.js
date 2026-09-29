@@ -1,4 +1,4 @@
-const CACHE_NAME = "primesys-produtos-v1";
+const CACHE_NAME = "primesys-produtos-v2";
 const APP_SHELL = ["/produtos", "/static/icons/icon-192.png", "/static/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -18,7 +18,15 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) {
     return; // nunca cachear respostas da API — dados de preço/estoque precisam ser sempre atuais
   }
+  // Busca da rede primeiro (pra qualquer atualização visual aparecer na hora que o
+  // app abrir com internet) e só cai pro cache salvo se estiver offline.
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
