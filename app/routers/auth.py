@@ -18,7 +18,12 @@ def _destino_seguro(next_url: str | None) -> str:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, next: str = "/"):
-    return templates.TemplateResponse(request, "login.html", {"error": None, "next": _destino_seguro(next)})
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"error": None, "next": _destino_seguro(next)},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/login")

@@ -51,7 +51,12 @@ async def produtos_page(request: Request):
     tenant = _current_tenant(request)
     if tenant is None:
         return RedirectResponse("/login?next=/produtos", status_code=303)
-    return templates.TemplateResponse(request, "produtos.html", {"empresa_nome": tenant["nome_fantasia"]})
+    return templates.TemplateResponse(
+        request,
+        "produtos.html",
+        {"empresa_nome": tenant["nome_fantasia"]},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/api/produtos/lojas")

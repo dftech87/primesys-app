@@ -25,7 +25,12 @@ async def dashboard_page(request: Request):
     tenant = _current_tenant(request)
     if tenant is None:
         return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse(request, "dashboard.html", {"empresa_nome": tenant["nome_fantasia"]})
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {"empresa_nome": tenant["nome_fantasia"]},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/api/dashboard/summary")

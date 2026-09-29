@@ -466,6 +466,16 @@
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+            // Quando o app é retomado da memória (não recarregado de verdade) e o
+            // Android decide, nesse momento, ativar uma versão nova do service worker,
+            // a página em tela ainda é a antiga — recarrega pra garantir que mostra
+            // a versão atual em vez de ficar "presa" na tela de antes.
+            let jaRecarregou = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (jaRecarregou) return;
+                jaRecarregou = true;
+                window.location.reload();
+            });
         }
     </script>
 </body>
