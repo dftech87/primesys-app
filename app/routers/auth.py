@@ -8,20 +8,35 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 
+def _destino_seguro(next_url: str | None) -> str:
+    """Só aceita caminhos internos (começando com '/', mas não '//') para evitar
+    que um link de login manipulado redirecione pra um site externo."""
+    if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return "/"
+
+
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    return templates.TemplateResponse(request, "login.html", {"error": None})
+async def login_page(request: Request, next: str = "/"):
+    return templates.TemplateResponse(request, "login.html", {"error": None, "next": _destino_seguro(next)})
 
 
 @router.post("/login")
 async def login_submit(
-    request: Request, cnpj: str = Form(...), email: str = Form(...), senha: str = Form(...)
+    request: Request,
+    cnpj: str = Form(...),
+    email: str = Form(...),
+    senha: str = Form(...),
+    next: str = Form("/"),
 ):
+    destino = _destino_seguro(next)
     tenant, erro = await authenticate(cnpj, email, senha)
     if tenant is None:
-        return templates.TemplateResponse(request, "login.html", {"error": erro}, status_code=401)
+        return templates.TemplateResponse(
+            request, "login.html", {"error": erro, "next": destino}, status_code=401
+        )
     request.session["cnpj"] = tenant["cnpj"]
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(destino, status_code=303)
 
 
 @router.get("/logout")

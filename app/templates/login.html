@@ -43,6 +43,7 @@
         <p class="sub">Entre com o CNPJ da empresa e o seu usuário e senha do Meu ERP Online.</p>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
         <form method="post" action="/login">
+            <input type="hidden" name="next" value="{{ next }}" />
             <label for="cnpj">CNPJ da empresa</label>
             <input id="cnpj" name="cnpj" type="text" inputmode="numeric" autocomplete="off" required autofocus />
             <label for="email">E-mail (usuário do ERP)</label>

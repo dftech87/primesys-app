@@ -48,7 +48,7 @@ async def _estoque(client: MeuERPClient, id_variacao: int, id_loja: int) -> floa
 async def produtos_page(request: Request):
     tenant = _current_tenant(request)
     if tenant is None:
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/login?next=/produtos", status_code=303)
     return templates.TemplateResponse(request, "produtos.html", {"empresa_nome": tenant["nome_fantasia"]})
 
 
