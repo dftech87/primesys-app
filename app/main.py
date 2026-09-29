@@ -10,6 +10,10 @@ from app.tenants import create_tenant
 app = FastAPI(title="PrimeSys Dashboard")
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# O Android exige esse arquivo exatamente em /.well-known/assetlinks.json (raiz do
+# domínio) para verificar o app instalado como "dono" do site e abrir sem barra
+# de navegador (Trusted Web Activity totalmente confiável).
+app.mount("/.well-known", StaticFiles(directory="app/static/well-known"), name="well-known")
 
 init_db()
 
