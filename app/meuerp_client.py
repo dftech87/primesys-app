@@ -40,12 +40,22 @@ class _TokenBucket:
 
 
 _buckets: dict[str, _TokenBucket] = {}
+_shared_clients: dict[str, httpx.AsyncClient] = {}
 
 
 def _bucket_for(token: str) -> _TokenBucket:
     if token not in _buckets:
         _buckets[token] = _TokenBucket(RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_SECONDS)
     return _buckets[token]
+
+
+def _client_for(base_url: str) -> httpx.AsyncClient:
+    # Reaberto por request, cada chamada pagava um novo handshake TCP/TLS (~1s+),
+    # o que tornava uma busca com 8 produtos (~17 chamadas) lenta o bastante para
+    # travar a UI. Um client HTTP compartilhado reaproveita a conexão (keep-alive).
+    if base_url not in _shared_clients:
+        _shared_clients[base_url] = httpx.AsyncClient(base_url=base_url, timeout=30.0)
+    return _shared_clients[base_url]
 
 
 class MeuERPClient:
@@ -62,14 +72,14 @@ class MeuERPClient:
 
     async def _request(self, method: str, path: str, **kwargs) -> dict:
         headers = {"Authorization": f"Authentication {self.api_token}"}
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=30.0) as client:
-            for attempt in range(MAX_RETRIES + 1):
-                await self.bucket.acquire()
-                response = await client.request(method, path, headers=headers, **kwargs)
-                if response.status_code == 429 and attempt < MAX_RETRIES:
-                    retry_after = float(response.headers.get("Retry-After", 5))
-                    await asyncio.sleep(retry_after)
-                    continue
-                response.raise_for_status()
-                return response.json()
+        client = _client_for(self.base_url)
+        for attempt in range(MAX_RETRIES + 1):
+            await self.bucket.acquire()
+            response = await client.request(method, path, headers=headers, **kwargs)
+            if response.status_code == 429 and attempt < MAX_RETRIES:
+                retry_after = float(response.headers.get("Retry-After", 5))
+                await asyncio.sleep(retry_after)
+                continue
+            response.raise_for_status()
+            return response.json()
         raise RuntimeError("unreachable")

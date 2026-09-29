@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: primesys
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_USER
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: MEUERP_CNPJ
+        sync: false
+      - key: MEUERP_TOKEN
+        sync: false
+      - key: DATABASE_PATH
+        value: /data/primesys.db
+    disk:
+      name: primesys-data
+      mountPath: /data
+      sizeGB: 1

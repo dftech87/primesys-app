@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>PrimeSys | Consulta de Produtos</title>
+    <meta name="theme-color" content="#0b3895" />
+    <link rel="manifest" href="/static/manifest.json" />
+    <link rel="icon" href="/static/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
+    <style>
+        :root {
+            --azul: #0b3895;
+            --azul-escuro: #082a6e;
+            --ciano: #10ebff;
+            --bg: #f1f5f9;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body {
+            margin: 0; height: 100%; overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: #0f172a;
+        }
+        #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+        header {
+            flex: 0 0 auto;
+            background: linear-gradient(135deg, var(--azul), var(--azul-escuro));
+            color: #fff; padding: 14px 16px 18px;
+        }
+        .header-top { display: flex; align-items: center; gap: 10px; }
+        .btn-voltar {
+            background: rgba(255,255,255,0.15); border: 0; border-radius: 10px;
+            width: 36px; height: 36px; color: #fff; font-size: 18px; cursor: pointer;
+            display: none; align-items: center; justify-content: center; flex: 0 0 auto;
+        }
+        .btn-voltar.mostrar { display: flex; }
+        .header-textos { flex: 1; min-width: 0; }
+        .header-textos h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .header-textos p { margin: 2px 0 0; font-size: 12px; color: #cfe0ff; }
+        .header-logo { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 8px; background: #fff; padding: 3px; }
+
+        select#loja {
+            margin-top: 12px; width: 100%; border: none; border-radius: 12px;
+            padding: 12px 14px; font-size: 14px; background: #fff; color: #0f172a;
+        }
+        .busca-wrap { margin-top: 10px; position: relative; }
+        .busca-wrap input {
+            width: 100%; border: none; border-radius: 12px; padding: 12px 14px 12px 40px;
+            font-size: 14px; background: #fff; color: #0f172a;
+        }
+        .busca-wrap .icone-busca {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            color: #94a3b8; font-size: 16px;
+        }
+
+        main { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+        #vazio { padding: 60px 32px; text-align: center; color: #475569; }
+        #vazio .emoji { font-size: 48px; margin-bottom: 16px; }
+        #vazio .aviso { color: var(--azul); font-size: 13px; margin-top: 10px; }
+
+        #lista { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+        .card {
+            background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            cursor: pointer;
+        }
+        .card .descricao { font-weight: 700; font-size: 14px; margin-bottom: 8px; line-height: 1.3; }
+        .card .linha { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #334155; margin-top: 4px; }
+        .card .linha .rotulo { color: #64748b; }
+        .card .rodape { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .card .preco { font-weight: 700; color: var(--azul); font-size: 16px; }
+        .card .estoque { font-size: 12px; color: #64748b; }
+
+        #detalhe { padding: 16px; }
+        #detalhe h2 { font-size: 17px; margin: 0 0 16px; }
+        .campo {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px;
+        }
+        .campo .rotulo { color: #475569; }
+        .campo .valor { font-weight: 600; }
+        .campo .valor.sim { color: #15803d; }
+        .campo .valor.nao { color: #b91c1c; }
+        .secao-titulo { margin: 24px 0 4px; font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; }
+
+        .loading, .erro { text-align: center; padding: 40px 20px; color: #64748b; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div class="header-top">
+                <button class="btn-voltar" id="btnVoltar">&#8592;</button>
+                <img class="header-logo" src="/static/icons/icon-192.png" alt="" />
+                <div class="header-textos">
+                    <h1 id="tituloHeader">PrimeSys &middot; {{ empresa_nome }}</h1>
+                    <p id="subtituloHeader">Consulta de produtos</p>
+                </div>
+            </div>
+            <select id="loja"></select>
+            <div class="busca-wrap" id="buscaWrap">
+                <span class="icone-busca">&#128269;</span>
+                <input id="busca" type="search" inputmode="search" placeholder="Procure pelo código de barras ou descrição" autocomplete="off" />
+            </div>
+        </header>
+
+        <main>
+            <div id="vazio">
+                <div class="emoji">🔍</div>
+                <div>Use o campo de pesquisa para visualizar os produtos da sua base de dados.</div>
+                <div class="aviso">Só serão aceitas pesquisas maiores que dois caracteres.</div>
+            </div>
+            <div id="lista" style="display:none;"></div>
+            <div id="detalhe" style="display:none;"></div>
+        </main>
+    </div>
+
+    <script>
+        const fmtMoney = (v) => v == null ? '-' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const fmtQtd = (v) => v == null ? '-' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 3 });
+
+        const elVazio = document.getElementById('vazio');
+        const elLista = document.getElementById('lista');
+        const elDetalhe = document.getElementById('detalhe');
+        const elBusca = document.getElementById('busca');
+        const elBuscaWrap = document.getElementById('buscaWrap');
+        const elLoja = document.getElementById('loja');
+        const elBtnVoltar = document.getElementById('btnVoltar');
+        const elTitulo = document.getElementById('tituloHeader');
+        const elSubtitulo = document.getElementById('subtituloHeader');
+        const tituloOriginal = elTitulo.textContent;
+
+        function mostrarView(view) {
+            elVazio.style.display = view === 'vazio' ? 'block' : 'none';
+            elLista.style.display = view === 'lista' ? 'flex' : 'none';
+            elDetalhe.style.display = view === 'detalhe' ? 'block' : 'none';
+        }
+
+        function abrirDetalhe(idVariacao, descricaoResumo) {
+            elBtnVoltar.classList.add('mostrar');
+            elBuscaWrap.style.display = 'none';
+            elLoja.style.display = 'none';
+            elTitulo.textContent = 'Detalhes do produto';
+            elSubtitulo.textContent = descricaoResumo;
+            mostrarView('detalhe');
+            elDetalhe.innerHTML = '<div class="loading">Carregando...</div>';
+
+            fetch(`/api/produtos/${idVariacao}/detalhe?loja=${elLoja.value}`)
+                .then((r) => r.ok ? r.json() : Promise.reject(r))
+                .then((p) => {
+                    elDetalhe.innerHTML = `
+                        <h2>${p.descricao ?? ''}</h2>
+                        <div class="campo"><span class="rotulo">Código de barras</span><span class="valor">${p.codigoBarras || '-'}</span></div>
+                        <div class="campo"><span class="rotulo">Código interno</span><span class="valor">${p.codigoInterno ?? '-'}</span></div>
+                        <div class="campo"><span class="rotulo">Ativo</span><span class="valor ${p.ativo ? 'sim' : 'nao'}">${p.ativo ? 'Sim' : 'Não'}</span></div>
+                        <div class="campo"><span class="rotulo">Unidade</span><span class="valor">${p.unidade || '-'}</span></div>
+                        <div class="campo"><span class="rotulo">Preço de custo</span><span class="valor">${fmtMoney(p.precoCusto)}</span></div>
+                        <div class="campo"><span class="rotulo">Preço de venda</span><span class="valor">${fmtMoney(p.precoVenda)}</span></div>
+                        <div class="secao-titulo">Estoque na loja selecionada</div>
+                        <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${p.unidade || ''}</span></div>
+                    `;
+                })
+                .catch(() => {
+                    elDetalhe.innerHTML = '<div class="erro">Não foi possível carregar este produto.</div>';
+                });
+        }
+
+        function fecharDetalhe() {
+            elBtnVoltar.classList.remove('mostrar');
+            elBuscaWrap.style.display = 'block';
+            elLoja.style.display = 'block';
+            elTitulo.textContent = tituloOriginal;
+            elSubtitulo.textContent = 'Consulta de produtos';
+            if (elBusca.value.trim().length >= 2) {
+                mostrarView('lista');
+            } else {
+                mostrarView('vazio');
+            }
+        }
+        elBtnVoltar.addEventListener('click', fecharDetalhe);
+
+        function renderLista(produtos) {
+            if (!produtos.length) {
+                elLista.innerHTML = '<div class="erro">Nenhum produto encontrado.</div>';
+                return;
+            }
+            elLista.innerHTML = produtos.map((p) => `
+                <div class="card" data-id="${p.idVariacao}" data-desc="${(p.descricao||'').replace(/"/g,'&quot;')}">
+                    <div class="descricao">${p.descricao ?? ''}</div>
+                    <div class="linha"><span class="rotulo">Código de barras:</span> ${p.codigoBarras || '-'}</div>
+                    <div class="linha"><span class="rotulo">Código interno:</span> ${p.codigoInterno ?? '-'}</div>
+                    <div class="rodape">
+                        <span class="estoque">Estoque: ${fmtQtd(p.estoque)} ${p.unidade || ''}</span>
+                        <span class="preco">${fmtMoney(p.precoVenda)}</span>
+                    </div>
+                </div>
+            `).join('');
+            elLista.querySelectorAll('.card').forEach((card) => {
+                card.addEventListener('click', () => abrirDetalhe(card.dataset.id, card.dataset.desc));
+            });
+        }
+
+        let buscaTimeout = null;
+        elBusca.addEventListener('input', () => {
+            clearTimeout(buscaTimeout);
+            const termo = elBusca.value.trim();
+            if (termo.length < 2) {
+                mostrarView('vazio');
+                return;
+            }
+            buscaTimeout = setTimeout(() => {
+                elLista.innerHTML = '<div class="loading">Buscando...</div>';
+                mostrarView('lista');
+                fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${elLoja.value}`)
+                    .then((r) => r.ok ? r.json() : Promise.reject(r))
+                    .then((data) => renderLista(data.produtos || []))
+                    .catch(() => { elLista.innerHTML = '<div class="erro">Erro ao buscar produtos.</div>'; });
+            }, 400);
+        });
+
+        async function carregarLojas() {
+            const res = await fetch('/api/produtos/lojas');
+            const data = await res.json();
+            elLoja.innerHTML = (data.lojas || [])
+                .map((l) => `<option value="${l.codigo}">${l.descricao}</option>`)
+                .join('');
+        }
+
+        carregarLojas();
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

@@ -46,7 +46,10 @@
 <body>
     <header>
         <h1>PrimeSys &middot; {{ empresa_nome }}</h1>
-        <a href="/logout">Sair</a>
+        <div style="display:flex;gap:16px;align-items:center;">
+            <a href="/produtos">Consulta de produtos</a>
+            <a href="/logout">Sair</a>
+        </div>
     </header>
     <main>
         <form class="filtro" id="form-filtro">
