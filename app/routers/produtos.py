@@ -14,7 +14,7 @@ from app.vendas import vendas_por_dia
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-MAX_RESULTADOS_COM_PRECO = 8
+MAX_RESULTADOS_LISTA = 20
 
 
 def _current_tenant(request: Request) -> sqlite3.Row | None:
@@ -85,29 +85,27 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
 
     client = MeuERPClient(tenant["api_token"])
     try:
-        resultado = await client.get("/api/mercadoria/v1", params={"filtro": q, "limit": MAX_RESULTADOS_COM_PRECO})
+        resultado = await client.get("/api/mercadoria/v1", params={"filtro": q, "limit": MAX_RESULTADOS_LISTA})
     except httpx.HTTPStatusError:
         return JSONResponse({"detail": "erro ao consultar produtos"}, status_code=502)
 
     itens = resultado.get("items") or []
 
-    async def montar(item: dict) -> dict:
-        id_variacao = item["codigoMercadoriaVariacao"]
-        preco, estoque = await asyncio.gather(
-            _preco_venda(client, id_variacao), _estoque(client, id_variacao, loja)
-        )
-        return {
-            "idVariacao": id_variacao,
+    # Preço e estoque não entram aqui de propósito: buscá-los por item deixaria a
+    # busca em uma única chamada por resultado (até MAX_RESULTADOS_LISTA x 2), o que
+    # estoura rápido o limite de 20 req/min da API e deixa a busca lenta. Eles só
+    # são consultados na tela de detalhe, ao tocar em um produto específico.
+    produtos = [
+        {
+            "idVariacao": item["codigoMercadoriaVariacao"],
             "descricao": item.get("descricao"),
             "codigoBarras": item.get("codigoBarras"),
             "codigoInterno": item.get("codigoMercadoria"),
             "unidade": item.get("embalagem"),
-            "precoVenda": preco,
-            "estoque": estoque,
         }
-
-    produtos = await asyncio.gather(*(montar(item) for item in itens))
-    return {"total": resultado.get("total"), "produtos": list(produtos)}
+        for item in itens
+    ]
+    return {"total": resultado.get("total"), "produtos": produtos}
 
 
 @router.get("/api/produtos/{id_variacao}/detalhe")
