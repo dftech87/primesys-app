@@ -45,12 +45,41 @@
         }
         .busca-wrap { margin-top: 10px; position: relative; }
         .busca-wrap input {
-            width: 100%; border: none; border-radius: 12px; padding: 12px 14px 12px 40px;
+            width: 100%; border: none; border-radius: 12px; padding: 12px 44px 12px 40px;
             font-size: 14px; background: #fff; color: #0f172a;
         }
         .busca-wrap .icone-busca {
             position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
             color: #94a3b8; font-size: 16px;
+        }
+        .btn-scan {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            background: var(--azul); border: 0; border-radius: 8px; width: 32px; height: 32px;
+            color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+
+        #scanner {
+            position: fixed; inset: 0; background: #000; z-index: 50;
+            display: none; flex-direction: column;
+        }
+        #scanner.aberto { display: flex; }
+        #scanner video { flex: 1; width: 100%; object-fit: cover; }
+        #scanner .scan-topo {
+            position: absolute; top: 0; left: 0; right: 0; padding: 16px;
+            display: flex; justify-content: space-between; align-items: center; z-index: 2;
+        }
+        #scanner .scan-topo button {
+            background: rgba(0,0,0,0.5); border: 0; border-radius: 10px; color: #fff;
+            width: 36px; height: 36px; font-size: 18px; cursor: pointer;
+        }
+        #scanner .scan-moldura {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 78%; max-width: 340px; aspect-ratio: 16 / 9;
+            border: 3px solid var(--ciano); border-radius: 16px; box-shadow: 0 0 0 2000px rgba(0,0,0,0.45);
+        }
+        #scanner .scan-status {
+            position: absolute; bottom: 40px; left: 0; right: 0; text-align: center;
+            color: #fff; font-size: 13px; padding: 0 24px;
         }
 
         main { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -101,6 +130,7 @@
             <div class="busca-wrap" id="buscaWrap">
                 <span class="icone-busca">&#128269;</span>
                 <input id="busca" type="search" inputmode="search" placeholder="Procure pelo código de barras ou descrição" autocomplete="off" />
+                <button class="btn-scan" id="btnScan" title="Ler código de barras">&#128247;</button>
             </div>
         </header>
 
@@ -113,6 +143,15 @@
             <div id="lista" style="display:none;"></div>
             <div id="detalhe" style="display:none;"></div>
         </main>
+    </div>
+
+    <div id="scanner">
+        <div class="scan-topo">
+            <button id="btnFecharScanner">&#10005;</button>
+        </div>
+        <video id="scanVideo" autoplay muted playsinline></video>
+        <div class="scan-moldura"></div>
+        <div class="scan-status" id="scanStatus">Aponte a câmera para o código de barras</div>
     </div>
 
     <script>
@@ -227,6 +266,69 @@
         }
 
         carregarLojas();
+
+        // Leitura de código de barras pela câmera, usando a API nativa do Chrome/Android
+        // (BarcodeDetector) — sem biblioteca externa, já que o app roda dentro do Chrome.
+        const elScanner = document.getElementById('scanner');
+        const elScanVideo = document.getElementById('scanVideo');
+        const elScanStatus = document.getElementById('scanStatus');
+        const btnScan = document.getElementById('btnScan');
+        const btnFecharScanner = document.getElementById('btnFecharScanner');
+        let scanStream = null;
+        let scanAtivo = false;
+
+        async function abrirScanner() {
+            if (!('BarcodeDetector' in window)) {
+                alert('Seu navegador não suporta leitura de código de barras pela câmera. Digite o código manualmente.');
+                return;
+            }
+            try {
+                scanStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                });
+            } catch (err) {
+                alert('Não foi possível acessar a câmera. Verifique a permissão do app.');
+                return;
+            }
+            elScanVideo.srcObject = scanStream;
+            elScanner.classList.add('aberto');
+            elScanStatus.textContent = 'Aponte a câmera para o código de barras';
+            scanAtivo = true;
+
+            const detector = new BarcodeDetector({
+                formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
+            });
+
+            const loop = async () => {
+                if (!scanAtivo) return;
+                try {
+                    const codigos = await detector.detect(elScanVideo);
+                    if (codigos.length > 0) {
+                        const valor = codigos[0].rawValue;
+                        fecharScanner();
+                        elBusca.value = valor;
+                        elBusca.dispatchEvent(new Event('input'));
+                        return;
+                    }
+                } catch (err) {
+                    // frame ainda não pronto ou sem código visível — tenta de novo
+                }
+                requestAnimationFrame(loop);
+            };
+            requestAnimationFrame(loop);
+        }
+
+        function fecharScanner() {
+            scanAtivo = false;
+            elScanner.classList.remove('aberto');
+            if (scanStream) {
+                scanStream.getTracks().forEach((t) => t.stop());
+                scanStream = null;
+            }
+        }
+
+        btnScan.addEventListener('click', abrirScanner);
+        btnFecharScanner.addEventListener('click', fecharScanner);
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js').catch(() => {});
