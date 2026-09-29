@@ -8,6 +8,7 @@
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" href="/static/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --azul: #0b3895;
@@ -85,6 +86,31 @@
 
         main { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
+        .tabbar {
+            flex: 0 0 auto; display: flex; background: #fff; border-top: 1px solid #e2e8f0;
+            padding-bottom: env(safe-area-inset-bottom, 0);
+        }
+        .tabbar button {
+            flex: 1; border: 0; background: none; padding: 10px 4px 8px; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            color: #94a3b8; font-size: 11px;
+        }
+        .tabbar button .tab-icone { font-size: 20px; line-height: 1; }
+        .tabbar button.ativo { color: var(--azul); font-weight: 700; }
+
+        #dashboardView { display: none; padding: 16px; }
+        .dash-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .dash-card {
+            background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .dash-card .rotulo { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+        .dash-card .valor { font-size: 17px; font-weight: 700; color: var(--azul); }
+        .dash-panel {
+            background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 16px;
+        }
+        .dash-panel h3 { margin: 0 0 12px; font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; }
+
         #vazio { padding: 60px 32px; text-align: center; color: #475569; }
         #vazio .emoji { font-size: 48px; margin-bottom: 16px; }
         #vazio .aviso { color: var(--azul); font-size: 13px; margin-top: 10px; }
@@ -144,7 +170,35 @@
             </div>
             <div id="lista" style="display:none;"></div>
             <div id="detalhe" style="display:none;"></div>
+
+            <div id="dashboardView">
+                <div class="dash-cards">
+                    <div class="dash-card"><div class="rotulo">Hoje</div><div class="valor" id="dashHoje">-</div></div>
+                    <div class="dash-card"><div class="rotulo">Na semana</div><div class="valor" id="dashSemana">-</div></div>
+                    <div class="dash-card"><div class="rotulo">No mês</div><div class="valor" id="dashMes">-</div></div>
+                    <div class="dash-card"><div class="rotulo">No ano</div><div class="valor" id="dashAno">-</div></div>
+                </div>
+                <div class="dash-panel">
+                    <h3>Proporção de vendas</h3>
+                    <canvas id="chartDonut" height="200"></canvas>
+                </div>
+                <div class="dash-panel">
+                    <h3>Vendas por dia (este mês)</h3>
+                    <canvas id="chartDiario" height="200"></canvas>
+                </div>
+            </div>
         </main>
+
+        <nav class="tabbar">
+            <button class="ativo" id="tabProdutos">
+                <span class="tab-icone">&#128269;</span>
+                Produtos
+            </button>
+            <button id="tabDashboard">
+                <span class="tab-icone">&#128202;</span>
+                Dashboard
+            </button>
+        </nav>
     </div>
 
     <div id="scanner">
@@ -268,6 +322,84 @@
         }
 
         carregarLojas();
+
+        // Alternância entre as abas "Produtos" e "Dashboard" (barra inferior)
+        const elDashboardView = document.getElementById('dashboardView');
+        const tabProdutos = document.getElementById('tabProdutos');
+        const tabDashboard = document.getElementById('tabDashboard');
+        let dashboardCarregado = false;
+        let chartDonut = null;
+        let chartDiario = null;
+
+        function mostrarTab(tab) {
+            tabProdutos.classList.toggle('ativo', tab === 'produtos');
+            tabDashboard.classList.toggle('ativo', tab === 'dashboard');
+            elDashboardView.style.display = tab === 'dashboard' ? 'block' : 'none';
+
+            if (tab === 'dashboard') {
+                elBuscaWrap.style.display = 'none';
+                elVazio.style.display = 'none';
+                elLista.style.display = 'none';
+                elDetalhe.style.display = 'none';
+                elSubtitulo.textContent = 'Dashboard de vendas';
+                if (!dashboardCarregado) {
+                    carregarDashboardMobile();
+                }
+            } else {
+                elBuscaWrap.style.display = 'block';
+                elLoja.style.display = 'block';
+                elBtnVoltar.classList.remove('mostrar');
+                elTitulo.textContent = tituloOriginal;
+                elSubtitulo.textContent = 'Consulta de produtos';
+                if (elBusca.value.trim().length >= 2) {
+                    mostrarView('lista');
+                } else {
+                    mostrarView('vazio');
+                }
+            }
+        }
+        tabProdutos.addEventListener('click', () => mostrarTab('produtos'));
+        tabDashboard.addEventListener('click', () => mostrarTab('dashboard'));
+
+        async function carregarDashboardMobile() {
+            document.getElementById('dashHoje').textContent = 'carregando...';
+            try {
+                const res = await fetch('/api/produtos/dashboard-mobile');
+                const data = await res.json();
+                dashboardCarregado = true;
+
+                document.getElementById('dashHoje').textContent = fmtMoney(data.hoje);
+                document.getElementById('dashSemana').textContent = fmtMoney(data.semana);
+                document.getElementById('dashMes').textContent = fmtMoney(data.mes);
+                document.getElementById('dashAno').textContent = fmtMoney(data.ano);
+
+                if (chartDonut) chartDonut.destroy();
+                chartDonut = new Chart(document.getElementById('chartDonut'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Hoje', 'Na semana', 'No mês', 'No ano'],
+                        datasets: [{
+                            data: [data.hoje, data.semana, data.mes, data.ano],
+                            backgroundColor: ['#10ebff', '#38bdf8', '#0b3895', '#082a6e'],
+                        }],
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+                });
+
+                if (chartDiario) chartDiario.destroy();
+                const dias = data.vendasPorDia || [];
+                chartDiario = new Chart(document.getElementById('chartDiario'), {
+                    type: 'bar',
+                    data: {
+                        labels: dias.map((d) => d.dia),
+                        datasets: [{ label: 'Vendas', data: dias.map((d) => d.valor), backgroundColor: '#0b3895' }],
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } } },
+                });
+            } catch (err) {
+                document.getElementById('dashHoje').textContent = 'erro';
+            }
+        }
 
         // Leitura de código de barras pela câmera, usando a API nativa do Chrome/Android
         // (BarcodeDetector) — sem biblioteca externa, já que o app roda dentro do Chrome.
