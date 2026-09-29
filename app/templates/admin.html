@@ -71,17 +71,29 @@
         <div class="panel">
             <h2>Clientes cadastrados</h2>
             <table>
-                <thead><tr><th>CNPJ</th><th>Nome</th><th>Token</th><th>Cadastrado em</th></tr></thead>
+                <thead><tr><th>CNPJ</th><th>Nome</th><th>Token</th><th>Status</th><th>Cadastrado em</th><th></th></tr></thead>
                 <tbody>
                     {% for t in tenants %}
                     <tr>
                         <td>{{ t.cnpj }}</td>
                         <td>{{ t.nome_fantasia }}</td>
                         <td class="token">{{ t.api_token }}</td>
+                        <td>{% if t.ativo %}<span style="color:#166534;">Ativo</span>{% else %}<span style="color:#991b1b;">Desativado</span>{% endif %}</td>
                         <td>{{ t.criado_em }}</td>
+                        <td>
+                            {% if t.ativo %}
+                            <form method="post" action="/admin/tenants/{{ t.cnpj }}/desativar" style="margin:0;">
+                                <button type="submit" style="background:#fee2e2;color:#991b1b;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;">Desativar</button>
+                            </form>
+                            {% else %}
+                            <form method="post" action="/admin/tenants/{{ t.cnpj }}/reativar" style="margin:0;">
+                                <button type="submit" style="background:#dcfce7;color:#166534;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;">Reativar</button>
+                            </form>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4">Nenhum cliente cadastrado.</td></tr>
+                    <tr><td colspan="6">Nenhum cliente cadastrado.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

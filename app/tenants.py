@@ -28,6 +28,14 @@ def list_tenants() -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def set_tenant_ativo(cnpj: str, ativo: bool) -> None:
+    with db_session() as conn:
+        conn.execute(
+            "UPDATE empresas SET ativo = ? WHERE cnpj = ?",
+            (1 if ativo else 0, normalize_cnpj(cnpj)),
+        )
+
+
 def get_tenant_by_cnpj(cnpj: str) -> sqlite3.Row | None:
     with db_session() as conn:
         return conn.execute(
