@@ -38,6 +38,7 @@
         .header-textos h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .header-textos p { margin: 2px 0 0; font-size: 12px; color: #cfe0ff; }
         .header-logo { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 8px; background: #fff; padding: 3px; }
+        .btn-sair { flex: 0 0 auto; color: #cfe0ff; text-decoration: none; font-size: 13px; }
 
         select#loja {
             margin-top: 12px; width: 100%; border: none; border-radius: 12px;
@@ -125,6 +126,7 @@
                     <h1 id="tituloHeader">PrimeSys &middot; {{ empresa_nome }}</h1>
                     <p id="subtituloHeader">Consulta de produtos</p>
                 </div>
+                <a href="/logout" class="btn-sair">Sair</a>
             </div>
             <select id="loja"></select>
             <div class="busca-wrap" id="buscaWrap">
