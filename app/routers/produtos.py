@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.meuerp_client import MeuERPClient
 from app.tenants import get_tenant_by_cnpj
-from app.vendas import total_vendido, vendas_por_dia
+from app.vendas import vendas_por_dia
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -153,19 +153,21 @@ async def api_dashboard_mobile(request: Request):
     inicio_mes = hoje.replace(day=1)
     inicio_ano = hoje.replace(month=1, day=1)
 
-    # Sequencial de propósito: rodar as 5 consultas em paralelo soma muitas chamadas
-    # de uma vez e estoura o limite de 20 req/min da API, travando a tela inteira.
-    total_hoje = await total_vendido(client, hoje.isoformat(), amanha.isoformat())
-    total_semana = await total_vendido(client, inicio_semana.isoformat(), amanha.isoformat())
-    total_mes = await total_vendido(client, inicio_mes.isoformat(), amanha.isoformat())
-    total_ano = await total_vendido(client, inicio_ano.isoformat(), amanha.isoformat())
-    por_dia_mes = await vendas_por_dia(client, inicio_mes.isoformat(), amanha.isoformat())
+    # Uma única consulta cobrindo o ano inteiro (em vez de 4 consultas sobrepostas
+    # para hoje/semana/mês/ano) — bem mais rápido, e garante que os 4 números batem
+    # exatamente com a soma do gráfico diário, já que vêm da mesma fonte de dados.
+    por_dia_ano = await vendas_por_dia(client, inicio_ano.isoformat(), amanha.isoformat())
+
+    total_hoje = por_dia_ano.get(hoje.isoformat(), 0)
+    total_semana = sum(v for k, v in por_dia_ano.items() if k >= inicio_semana.isoformat())
+    total_mes = sum(v for k, v in por_dia_ano.items() if k >= inicio_mes.isoformat())
+    total_ano = sum(por_dia_ano.values())
 
     dias_do_mes = []
     cursor = inicio_mes
     while cursor <= hoje:
         chave = cursor.isoformat()
-        dias_do_mes.append({"dia": cursor.strftime("%d/%m"), "valor": por_dia_mes.get(chave, 0)})
+        dias_do_mes.append({"dia": cursor.strftime("%d/%m"), "valor": por_dia_ano.get(chave, 0)})
         cursor += timedelta(days=1)
 
     return {
