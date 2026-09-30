@@ -36,6 +36,15 @@
             margin-bottom: 16px; padding: 10px 12px; border-radius: 10px;
             background: #fee2e2; color: #991b1b; font-size: 13px;
         }
+        .empresa-salva {
+            display: none; align-items: center; justify-content: space-between;
+            margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: #f1f5f9;
+            font-size: 13px;
+        }
+        .empresa-salva button {
+            width: auto; background: none; color: #0b3895; font-weight: 700; padding: 0;
+            text-decoration: underline; cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -44,10 +53,16 @@
         <h1>PrimeSys Info</h1>
         <p class="sub">Entre com o CNPJ da empresa e o seu usuário e senha do Meu ERP Online.</p>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        <form method="post" action="/login">
+        <div class="empresa-salva" id="empresaSalva">
+            <span>CNPJ: <b id="empresaSalvaCnpj"></b></span>
+            <button type="button" id="btnTrocarCnpj">Trocar</button>
+        </div>
+        <form method="post" action="/login" id="formLogin">
             <input type="hidden" name="next" value="{{ next }}" />
-            <label for="cnpj">CNPJ da empresa</label>
-            <input id="cnpj" name="cnpj" type="text" inputmode="numeric" autocomplete="off" required autofocus />
+            <div id="campoCnpj">
+                <label for="cnpj">CNPJ da empresa</label>
+                <input id="cnpj" name="cnpj" type="text" inputmode="numeric" autocomplete="off" required autofocus />
+            </div>
             <label for="email">E-mail (usuário do ERP)</label>
             <input id="email" name="email" type="email" autocomplete="username" required />
             <label for="senha">Senha</label>
@@ -56,6 +71,53 @@
         </form>
     </main>
     <script>
+        // Lembra o CNPJ no aparelho (não sai daqui) depois do primeiro login, pra
+        // quem sempre acessa a mesma empresa não precisar redigitar toda vez.
+        const CHAVE_CNPJ = 'primesys_cnpj';
+        const elCampoCnpj = document.getElementById('campoCnpj');
+        const elCnpj = document.getElementById('cnpj');
+        const elEmpresaSalva = document.getElementById('empresaSalva');
+        const elEmpresaSalvaCnpj = document.getElementById('empresaSalvaCnpj');
+        const elEmail = document.getElementById('email');
+        const elFormLogin = document.getElementById('formLogin');
+
+        function formatarCnpj(cnpj) {
+            const d = (cnpj || '').replace(/\D/g, '');
+            if (d.length !== 14) return cnpj;
+            return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`;
+        }
+
+        function usarCnpjSalvo(cnpj) {
+            elCnpj.value = cnpj;
+            elCnpj.required = false;
+            elCampoCnpj.style.display = 'none';
+            elEmpresaSalvaCnpj.textContent = formatarCnpj(cnpj);
+            elEmpresaSalva.style.display = 'flex';
+            elEmail.focus();
+        }
+
+        function mostrarCampoCnpj() {
+            elCnpj.value = '';
+            elCnpj.required = true;
+            elCampoCnpj.style.display = 'block';
+            elEmpresaSalva.style.display = 'none';
+            elCnpj.focus();
+        }
+
+        try {
+            const salvo = localStorage.getItem(CHAVE_CNPJ);
+            if (salvo) usarCnpjSalvo(salvo);
+        } catch (err) { /* localStorage indisponível — segue com o campo normal */ }
+
+        document.getElementById('btnTrocarCnpj').addEventListener('click', () => {
+            try { localStorage.removeItem(CHAVE_CNPJ); } catch (err) {}
+            mostrarCampoCnpj();
+        });
+
+        elFormLogin.addEventListener('submit', () => {
+            try { localStorage.setItem(CHAVE_CNPJ, elCnpj.value); } catch (err) {}
+        });
+
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js').catch(() => {});
         }
