@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrimeSys | Login</title>
-    <meta name="theme-color" content="#0b3895" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" href="/static/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
@@ -14,14 +14,15 @@
         body {
             margin: 0; min-height: 100vh; font-family: 'Segoe UI', Tahoma, sans-serif;
             display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(135deg, #0f172a, #1e293b); color: #0f172a;
+            background: #ffffff; color: #0f172a;
         }
         .card {
             width: min(100%, 380px); background: #fff; border-radius: 16px;
-            padding: 32px 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+            padding: 32px 28px;
         }
-        h1 { margin: 0 0 4px; font-size: 22px; }
-        p.sub { margin: 0 0 24px; color: #64748b; font-size: 14px; }
+        .logo { display: block; width: 88px; height: 88px; margin: 0 auto 20px; }
+        h1 { margin: 0 0 4px; font-size: 22px; text-align: center; }
+        p.sub { margin: 0 0 24px; color: #64748b; font-size: 14px; text-align: center; }
         label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
         input {
             width: 100%; border: 1px solid #cbd5e1; border-radius: 10px;
@@ -39,6 +40,7 @@
 </head>
 <body>
     <main class="card">
+        <img class="logo" src="/static/icons/icon-192.png" alt="PrimeSys" />
         <h1>PrimeSys Info</h1>
         <p class="sub">Entre com o CNPJ da empresa e o seu usuário e senha do Meu ERP Online.</p>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
