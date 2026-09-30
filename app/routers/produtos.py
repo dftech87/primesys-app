@@ -144,39 +144,41 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
 
 
 @router.get("/api/produtos/dashboard-mobile")
-async def api_dashboard_mobile(request: Request):
+async def api_dashboard_mobile(
+    request: Request,
+    inicio: str | None = Query(default=None),
+    fim: str | None = Query(default=None),
+):
     tenant = _current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
 
-    client = MeuERPClient(tenant["api_token"])
     hoje = date.today()
-    amanha = hoje + timedelta(days=1)
-    inicio_semana = hoje - timedelta(days=6)
-    inicio_mes = hoje.replace(day=1)
-    inicio_ano = hoje.replace(month=1, day=1)
+    try:
+        data_fim = date.fromisoformat(fim) if fim else hoje
+    except ValueError:
+        data_fim = hoje
+    try:
+        data_inicio = date.fromisoformat(inicio) if inicio else hoje
+    except ValueError:
+        data_inicio = hoje
 
-    # Uma única consulta cobrindo o ano inteiro (em vez de 4 consultas sobrepostas
-    # para hoje/semana/mês/ano) — bem mais rápido, e garante que os 4 números batem
-    # exatamente com a soma do gráfico diário, já que vêm da mesma fonte de dados.
-    por_dia_ano = await vendas_por_dia(client, inicio_ano.isoformat(), amanha.isoformat())
+    # DataFim sem horário é tratado pela API como 00:00:00 daquele dia (exclui o
+    # dia inteiro); por isso usamos o início do dia seguinte como limite superior.
+    fim_exclusivo = data_fim + timedelta(days=1)
 
-    total_hoje = por_dia_ano.get(hoje.isoformat(), 0)
-    total_semana = sum(v for k, v in por_dia_ano.items() if k >= inicio_semana.isoformat())
-    total_mes = sum(v for k, v in por_dia_ano.items() if k >= inicio_mes.isoformat())
-    total_ano = sum(por_dia_ano.values())
+    client = MeuERPClient(tenant["api_token"])
+    por_dia = await vendas_por_dia(client, data_inicio.isoformat(), fim_exclusivo.isoformat())
 
-    dias_do_mes = []
-    cursor = inicio_mes
-    while cursor <= hoje:
+    vendas_por_dia_lista = []
+    cursor = data_inicio
+    while cursor <= data_fim:
         chave = cursor.isoformat()
-        dias_do_mes.append({"dia": cursor.strftime("%d/%m"), "valor": por_dia_ano.get(chave, 0)})
+        vendas_por_dia_lista.append({"dia": cursor.strftime("%d/%m"), "valor": por_dia.get(chave, 0)})
         cursor += timedelta(days=1)
 
     return {
-        "hoje": total_hoje,
-        "semana": total_semana,
-        "mes": total_mes,
-        "ano": total_ano,
-        "vendasPorDia": dias_do_mes,
+        "periodo": {"inicio": data_inicio.isoformat(), "fim": data_fim.isoformat()},
+        "total": sum(por_dia.values()),
+        "vendasPorDia": vendas_por_dia_lista,
     }

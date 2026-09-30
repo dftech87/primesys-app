@@ -13,11 +13,11 @@ def _destino_seguro(next_url: str | None) -> str:
     que um link de login manipulado redirecione pra um site externo."""
     if next_url and next_url.startswith("/") and not next_url.startswith("//"):
         return next_url
-    return "/"
+    return "/produtos"
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, next: str = "/"):
+async def login_page(request: Request, next: str = "/produtos"):
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -32,7 +32,7 @@ async def login_submit(
     cnpj: str = Form(...),
     email: str = Form(...),
     senha: str = Form(...),
-    next: str = Form("/"),
+    next: str = Form("/produtos"),
 ):
     destino = _destino_seguro(next)
     tenant, erro = await authenticate(cnpj, email, senha)

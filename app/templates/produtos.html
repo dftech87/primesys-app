@@ -99,12 +99,24 @@
         .tabbar button.ativo { color: var(--azul); font-weight: 700; }
 
         #dashboardView { display: none; padding: 16px; }
+        .dash-filtro {
+            display: flex; align-items: flex-end; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .dash-filtro label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+        .dash-filtro input {
+            border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 13px;
+        }
+        .dash-filtro button {
+            border: 0; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 700;
+            color: #fff; background: var(--azul); cursor: pointer;
+        }
         .dash-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
         .dash-card {
             background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
+        .dash-card.dash-card-full { grid-column: 1 / -1; }
         .dash-card .rotulo { font-size: 12px; color: #64748b; margin-bottom: 4px; }
-        .dash-card .valor { font-size: 17px; font-weight: 700; color: var(--azul); }
+        .dash-card .valor { font-size: 20px; font-weight: 700; color: var(--azul); }
         .dash-panel {
             background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             margin-bottom: 16px;
@@ -172,18 +184,22 @@
             <div id="detalhe" style="display:none;"></div>
 
             <div id="dashboardView">
+                <div class="dash-filtro">
+                    <div>
+                        <label for="dashDe">De</label>
+                        <input id="dashDe" type="date" />
+                    </div>
+                    <div>
+                        <label for="dashAte">Até</label>
+                        <input id="dashAte" type="date" />
+                    </div>
+                    <button id="dashFiltrar">Filtrar</button>
+                </div>
                 <div class="dash-cards">
-                    <div class="dash-card"><div class="rotulo">Hoje</div><div class="valor" id="dashHoje">-</div></div>
-                    <div class="dash-card"><div class="rotulo">Na semana</div><div class="valor" id="dashSemana">-</div></div>
-                    <div class="dash-card"><div class="rotulo">No mês</div><div class="valor" id="dashMes">-</div></div>
-                    <div class="dash-card"><div class="rotulo">No ano</div><div class="valor" id="dashAno">-</div></div>
+                    <div class="dash-card dash-card-full"><div class="rotulo">Total vendido no período</div><div class="valor" id="dashTotal">-</div></div>
                 </div>
                 <div class="dash-panel">
-                    <h3>Proporção de vendas</h3>
-                    <canvas id="chartDonut" height="200"></canvas>
-                </div>
-                <div class="dash-panel">
-                    <h3>Vendas por dia (este mês)</h3>
+                    <h3 id="dashDiarioTitulo">Vendas por dia</h3>
                     <canvas id="chartDiario" height="200"></canvas>
                 </div>
             </div>
@@ -326,9 +342,14 @@
         const elDashboardView = document.getElementById('dashboardView');
         const tabProdutos = document.getElementById('tabProdutos');
         const tabDashboard = document.getElementById('tabDashboard');
-        let dashboardCarregado = false;
-        let chartDonut = null;
         let chartDiario = null;
+        const elDashDe = document.getElementById('dashDe');
+        const elDashAte = document.getElementById('dashAte');
+        const elDashFiltrar = document.getElementById('dashFiltrar');
+
+        function hojeISO() {
+            return new Date().toISOString().slice(0, 10);
+        }
 
         function mostrarTab(tab) {
             tabProdutos.classList.toggle('ativo', tab === 'produtos');
@@ -341,9 +362,11 @@
                 elLista.style.display = 'none';
                 elDetalhe.style.display = 'none';
                 elSubtitulo.textContent = 'Dashboard de vendas';
-                if (!dashboardCarregado) {
-                    carregarDashboardMobile();
+                if (!elDashDe.value) {
+                    elDashDe.value = hojeISO();
+                    elDashAte.value = hojeISO();
                 }
+                carregarDashboardMobile(elDashDe.value, elDashAte.value);
             } else {
                 elBuscaWrap.style.display = 'block';
                 elLoja.style.display = 'block';
@@ -359,31 +382,21 @@
         }
         tabProdutos.addEventListener('click', () => mostrarTab('produtos'));
         tabDashboard.addEventListener('click', () => mostrarTab('dashboard'));
+        elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value));
 
-        async function carregarDashboardMobile() {
-            document.getElementById('dashHoje').textContent = 'carregando...';
+        async function carregarDashboardMobile(inicio, fim) {
+            const elTotal = document.getElementById('dashTotal');
+            const elTituloDiario = document.getElementById('dashDiarioTitulo');
+            elTotal.textContent = 'carregando...';
             try {
-                const res = await fetch('/api/produtos/dashboard-mobile');
+                const params = new URLSearchParams({ inicio, fim });
+                const res = await fetch(`/api/produtos/dashboard-mobile?${params}`);
                 const data = await res.json();
-                dashboardCarregado = true;
 
-                document.getElementById('dashHoje').textContent = fmtMoney(data.hoje);
-                document.getElementById('dashSemana').textContent = fmtMoney(data.semana);
-                document.getElementById('dashMes').textContent = fmtMoney(data.mes);
-                document.getElementById('dashAno').textContent = fmtMoney(data.ano);
-
-                if (chartDonut) chartDonut.destroy();
-                chartDonut = new Chart(document.getElementById('chartDonut'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Hoje', 'Na semana', 'No mês', 'No ano'],
-                        datasets: [{
-                            data: [data.hoje, data.semana, data.mes, data.ano],
-                            backgroundColor: ['#10ebff', '#38bdf8', '#0b3895', '#082a6e'],
-                        }],
-                    },
-                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
-                });
+                elTotal.textContent = fmtMoney(data.total);
+                elTituloDiario.textContent = inicio === fim
+                    ? `Vendas do dia ${inicio.split('-').reverse().join('/')}`
+                    : 'Vendas por dia no período';
 
                 if (chartDiario) chartDiario.destroy();
                 const dias = data.vendasPorDia || [];
@@ -396,7 +409,7 @@
                     options: { responsive: true, plugins: { legend: { display: false } } },
                 });
             } catch (err) {
-                document.getElementById('dashHoje').textContent = 'erro';
+                elTotal.textContent = 'erro';
             }
         }
 
