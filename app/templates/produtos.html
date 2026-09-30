@@ -463,6 +463,17 @@
         btnScan.addEventListener('click', abrirScanner);
         btnFecharScanner.addEventListener('click', fecharScanner);
 
+        // Caso mais comum no Android: o app não é realmente fechado, só fica em
+        // segundo plano, e ao voltar o navegador apenas "retoma" a página antiga
+        // da memória sem executar nada de novo (nem o controllerchange abaixo
+        // dispara, porque nenhum script roda de novo). O evento "pageshow" com
+        // persisted=true é o sinal correto pra esse caso — força um reload real.
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js').catch(() => {});
             // Quando o app é retomado da memória (não recarregado de verdade) e o
