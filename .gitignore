@@ -7,3 +7,7 @@ __pycache__/
 cookies.txt
 primesys.db
 Imagens App base/
+
+APK/
+*.keystore
+*.jks
