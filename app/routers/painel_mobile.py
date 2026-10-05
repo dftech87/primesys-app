@@ -41,20 +41,30 @@ def _periodo_comparacao(inicio: date, fim: date) -> tuple[date, date, str]:
     return comp_ini, comp_fim, f"vs período anterior ({comp_ini:%d/%m}–{comp_fim:%d/%m})"
 
 
+async def _opcional(nome: str, coro):
+    """Informação extra do dashboard: se falhar, some da tela, mas não derruba o resto."""
+    try:
+        return await coro
+    except Exception:
+        logger.exception("'%s' indisponível no dashboard", nome)
+        return None
+
+
 async def _montar_dashboard(client: MeuERPClient, inicio: date, fim: date) -> dict:
     comp_ini, comp_fim, rotulo = _periodo_comparacao(inicio, fim)
+    # O ERP deixa só 20 chamadas por minuto por cliente: cada consulta a menos deixa a tela mais rápida.
+    # Um dia só dispensa a série por dia (o gráfico é por hora e o total já vem do resumo).
+    um_dia = inicio == fim
     tarefas = [
-        vendas.resumo(client, inicio, fim),
-        vendas.resumo(client, comp_ini, comp_fim),
-        vendas.vendas_por_dia(client, inicio, fim),
+        vendas.resumo_comparado(client, inicio, fim, comp_ini, comp_fim),
         vendas.formas_pagamento(client, inicio, fim),
         vendas.cancelamentos(client, inicio, fim),
+        _opcional("margem", vendas.margem(client, inicio, fim)),
+        vendas.vendas_por_hora(client, inicio) if um_dia else vendas.vendas_por_dia(client, inicio, fim),
     ]
-    if inicio == fim:
-        tarefas.append(vendas.vendas_por_hora(client, inicio))
-    resultados = await asyncio.gather(*tarefas)
-    atual, anterior, por_dia, formas, cancel = resultados[:5]
-    por_hora = resultados[5] if inicio == fim else None
+    (atual, anterior), formas, cancel, margem, hora_ou_dia = await asyncio.gather(*tarefas)
+    por_hora = hora_ou_dia if um_dia else None
+    por_dia = {inicio.isoformat(): atual["total"]} if um_dia else hora_ou_dia
 
     serie_dias = []
     cursor = inicio
@@ -75,6 +85,7 @@ async def _montar_dashboard(client: MeuERPClient, inicio: date, fim: date) -> di
         "formasPagamento": formas,
         "semFormaPagamento": sem_pagamento if sem_pagamento > 1 else 0,
         "cancelamentos": cancel,
+        "margem": margem,
     }
 
 

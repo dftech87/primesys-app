@@ -280,6 +280,7 @@
                         <div class="rotulo">Total vendido no período</div>
                         <div class="valor" id="dashTotal">-</div>
                         <div class="delta" id="dashDelta"></div>
+                        <div class="delta" id="dashMargem"></div>
                     </div>
                     <div class="dash-card"><div class="rotulo">Vendas</div><div class="valor" id="dashVendas">-</div></div>
                     <div class="dash-card"><div class="rotulo">Ticket médio</div><div class="valor" id="dashTicket">-</div></div>
@@ -652,6 +653,17 @@
                 elDelta.textContent = `${pct >= 0 ? '▲' : '▼'} ${fmtPct(Math.abs(pct))}% ${comp.rotulo} (${fmtMoney(comp.total)})`;
             } else {
                 elDelta.textContent = comp ? `${comp.rotulo}: sem vendas` : '';
+            }
+
+            // Margem bruta estimada (custo gravado no momento da venda). Some se o ERP não trouxer custo.
+            const elMargem = document.getElementById('dashMargem');
+            const mg = data.margem;
+            if (mg) {
+                const parcial = mg.coberturaPct < 95
+                    ? ` · calculada sobre ${fmtPct(mg.coberturaPct)}% das vendas (as que têm custo)` : '';
+                elMargem.textContent = `Margem bruta estimada ${fmtPct(mg.margemPct)}% · lucro ${fmtMoney(mg.lucro)}${parcial}`;
+            } else {
+                elMargem.textContent = '';
             }
 
             const porHora = data.vendasPorHora;

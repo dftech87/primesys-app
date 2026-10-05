@@ -50,6 +50,29 @@ async def resumo(client: MeuERPClient, inicio: date, fim: date) -> dict:
     return {"vendas": vendas, "total": total, "ticket_medio": total / vendas if vendas else 0.0}
 
 
+async def resumo_comparado(
+    client: MeuERPClient, inicio: date, fim: date, comp_inicio: date, comp_fim: date
+) -> tuple[dict, dict]:
+    """Resumo do período e do período de comparação numa única consulta (o ERP limita 20 chamadas/min)."""
+    atual = f"d.datahora >= {d(inicio)} and d.datahora < {d(fim + timedelta(days=1))}"
+    comparacao = f"d.datahora >= {d(comp_inicio)} and d.datahora < {d(comp_fim + timedelta(days=1))}"
+    linhas = await executar(
+        client,
+        f"""select count(*) filter (where {atual}) as vendas,
+                   coalesce(round(sum(getvaltotal(d._iddocumento)) filter (where {atual}), 2), 0) as total,
+                   count(*) filter (where {comparacao}) as vendas_comp,
+                   coalesce(round(sum(getvaltotal(d._iddocumento)) filter (where {comparacao}), 2), 0) as total_comp
+            from documento d where {_VENDA} and (({atual}) or ({comparacao}))""",
+    )
+    base = linhas[0] if linhas else {}
+
+    def montar(vendas, total) -> dict:
+        vendas, total = int(vendas or 0), _num(total)
+        return {"vendas": vendas, "total": total, "ticket_medio": total / vendas if vendas else 0.0}
+
+    return montar(base.get("vendas"), base.get("total")), montar(base.get("vendas_comp"), base.get("total_comp"))
+
+
 async def vendas_por_dia(client: MeuERPClient, inicio: date, fim: date) -> dict[str, float]:
     linhas = await executar(
         client,
@@ -113,19 +136,51 @@ async def top_produtos(client: MeuERPClient, inicio: date, fim: date, limite: in
     return [{"descricao": l["descricao"], "quantidade": _num(l["qtd"]), "valor": _num(l["valor"])} for l in linhas]
 
 
+async def margem(client: MeuERPClient, inicio: date, fim: date) -> dict | None:
+    """Margem bruta estimada do período: venda dos itens menos o custo gravado no momento da venda.
+
+    Conferida contra o DRE do ERP (HIPER, set/2026): 29,4% a 30,6% aqui contra 31,0% no DRE; o DRE
+    também deixa de fora parte das vendas a prazo. Itens sem custo (0) ficam fora da conta, e a
+    `cobertura` diz quanto da venda tinha custo (uma NF-e sem custo derruba a cobertura).
+    """
+    linhas = await executar(
+        client,
+        f"""select sum(dm.valtotalliquido) as venda_itens,
+                   sum(dm.valtotalliquido) filter (where c.valcusto > 0) as venda_com_custo,
+                   sum(dm.qtd * c.valcusto) filter (where c.valcusto > 0) as custo
+            from documento d
+            join documento_mercadoria dm on dm._iddocumento = d._iddocumento
+            left join documento_mercadoria_custo c
+              on c._iddocumento = dm._iddocumento and c._idsequencia = dm._idsequencia
+            where {_VENDA} and {_janela(inicio, fim)}""",
+    )
+    base = linhas[0] if linhas else {}
+    venda_com_custo, custo, venda_itens = _num(base.get("venda_com_custo")), _num(base.get("custo")), _num(base.get("venda_itens"))
+    if venda_com_custo <= 0:
+        return None
+    lucro = venda_com_custo - custo
+    return {
+        "lucro": round(lucro, 2),
+        "margemPct": round(lucro / venda_com_custo * 100, 1),
+        "coberturaPct": round(venda_com_custo / venda_itens * 100, 1) if venda_itens else 0.0,
+    }
+
+
 async def cancelamentos(client: MeuERPClient, inicio: date, fim: date) -> dict:
     resumo_linhas = await executar(
         client,
         f"""select count(*) as quantidade, coalesce(round(sum(getvaltotal(d._iddocumento)), 2), 0) as valor
             from documento d where {_CANCELADA} and {_janela(inicio, fim)}""",
     )
-    motivos = await executar(
-        client,
-        f"""select coalesce(nullif(trim(h.motivo), ''), 'Sem motivo informado') as motivo, count(*) as n
-            from documento d join documento_cancelamento_historico h on h._iddocumento = d._iddocumento
-            where {_CANCELADA} and {_janela(inicio, fim)} group by 1 order by 2 desc limit 3""",
-    )
     base = resumo_linhas[0] if resumo_linhas else {}
+    motivos = []
+    if int(base.get("quantidade") or 0):  # sem cancelamento, não gasta uma chamada à toa
+        motivos = await executar(
+            client,
+            f"""select coalesce(nullif(trim(h.motivo), ''), 'Sem motivo informado') as motivo, count(*) as n
+                from documento d join documento_cancelamento_historico h on h._iddocumento = d._iddocumento
+                where {_CANCELADA} and {_janela(inicio, fim)} group by 1 order by 2 desc limit 3""",
+        )
     return {
         "quantidade": int(base.get("quantidade") or 0),
         "valor": _num(base.get("valor")),
