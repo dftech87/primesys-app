@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
@@ -10,6 +11,7 @@ from app.tenants import create_tenant
 
 app = FastAPI(title="PrimeSys Dashboard")
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.get("/static/sw.js")

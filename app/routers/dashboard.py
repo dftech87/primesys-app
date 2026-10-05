@@ -17,7 +17,9 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
-TTL_VENDAS = 60
+TTL_VENDAS = 60            # período que inclui hoje
+TTL_VENDAS_ENCERRADO = 900  # período já fechado
+TTL_CONTAS = 300
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -64,16 +66,28 @@ async def dashboard_summary(
 
     try:
         dados_vendas, receber, pagar = await asyncio.gather(
-            cached((tenant["cnpj"], "web-vendas", data_inicio, data_fim), TTL_VENDAS, vendas_do_periodo),
-            safe_get(
-                client,
-                "/api/conta-receber/pendentes/v1",
-                {"inicio": data_inicio.isoformat(), "fim": data_fim.isoformat(), "limit": 100},
+            cached(
+                (tenant["cnpj"], "web-vendas", data_inicio, data_fim),
+                TTL_VENDAS if data_fim >= hoje else TTL_VENDAS_ENCERRADO,
+                vendas_do_periodo,
             ),
-            safe_get(
-                client,
-                "/api/conta-pagar/pendentes/v1",
-                {"inicio": data_inicio.isoformat(), "fim": data_fim.isoformat(), "limit": 100},
+            cached(
+                (tenant["cnpj"], "web-receber", data_inicio, data_fim),
+                TTL_CONTAS,
+                lambda: safe_get(
+                    client,
+                    "/api/conta-receber/pendentes/v1",
+                    {"inicio": data_inicio.isoformat(), "fim": data_fim.isoformat(), "limit": 100},
+                ),
+            ),
+            cached(
+                (tenant["cnpj"], "web-pagar", data_inicio, data_fim),
+                TTL_CONTAS,
+                lambda: safe_get(
+                    client,
+                    "/api/conta-pagar/pendentes/v1",
+                    {"inicio": data_inicio.isoformat(), "fim": data_fim.isoformat(), "limit": 100},
+                ),
             ),
         )
     except ConsultaIndisponivel:

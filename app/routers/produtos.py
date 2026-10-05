@@ -5,13 +5,26 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.meuerp_client import MeuERPClient
+from app.cache import cached
 from app.deps import current_tenant
+from app.meuerp_client import MeuERPClient
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 MAX_RESULTADOS_LISTA = 20
+
+# Validade de cada informação (o ERP limita 20 chamadas/min por cliente). Nome e código do produto quase
+# não mudam; custo e preço mudam de vez em quando; o saldo muda a cada venda.
+TTL_LOJAS = 3600
+TTL_BUSCA = 120
+TTL_PRODUTO = 600
+TTL_CUSTO_PRECO = 300
+TTL_SALDO = 60
+
+
+def _nao_nulo(valor) -> bool:
+    return valor is not None  # falha (None) não deve ficar guardada
 
 
 async def _preco_venda(client: MeuERPClient, id_variacao: int) -> float | None:
@@ -56,7 +69,12 @@ async def api_lojas(request: Request):
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     client = MeuERPClient(tenant["api_token"])
     try:
-        resultado = await client.get("/api/local-estoque/v1", params={"limit": 100})
+        resultado = await cached(
+            (tenant["cnpj"], "lojas"),
+            TTL_LOJAS,
+            lambda: client.get("/api/local-estoque/v1", params={"limit": 100}),
+            obsoleto_ate=TTL_LOJAS,
+        )
     except httpx.HTTPStatusError:
         return JSONResponse({"detail": "erro ao consultar lojas"}, status_code=502)
     lojas = [
@@ -75,7 +93,12 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
 
     client = MeuERPClient(tenant["api_token"])
     try:
-        resultado = await client.get("/api/mercadoria/v1", params={"filtro": q, "limit": MAX_RESULTADOS_LISTA})
+        # A loja não entra na busca (só no saldo, no detalhe), então todas as lojas dividem o mesmo resultado.
+        resultado = await cached(
+            (tenant["cnpj"], "busca", q.strip().lower()),
+            TTL_BUSCA,
+            lambda: client.get("/api/mercadoria/v1", params={"filtro": q, "limit": MAX_RESULTADOS_LISTA}),
+        )
     except httpx.HTTPStatusError:
         return JSONResponse({"detail": "erro ao consultar produtos"}, status_code=502)
 
@@ -105,8 +128,11 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
 
     client = MeuERPClient(tenant["api_token"])
+    cnpj = tenant["cnpj"]
     try:
-        mercadoria = await client.get(f"/api/mercadoria/v1/{id_variacao}")
+        mercadoria = await cached(
+            (cnpj, "produto", id_variacao), TTL_PRODUTO, lambda: client.get(f"/api/mercadoria/v1/{id_variacao}")
+        )
     except httpx.HTTPStatusError:
         return JSONResponse({"detail": "produto não encontrado"}, status_code=404)
 
@@ -117,8 +143,11 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
         except httpx.HTTPStatusError:
             return None
 
+    # Cada informação com a sua validade: reabrir o mesmo produto não refaz as 4 chamadas.
     custo_valor, preco, estoque = await asyncio.gather(
-        custo(), _preco_venda(client, id_variacao), _estoque(client, id_variacao, loja)
+        cached((cnpj, "custo", id_variacao), TTL_CUSTO_PRECO, custo, guardar_se=_nao_nulo),
+        cached((cnpj, "preco", id_variacao), TTL_CUSTO_PRECO, lambda: _preco_venda(client, id_variacao), guardar_se=_nao_nulo),
+        cached((cnpj, "saldo", id_variacao, loja), TTL_SALDO, lambda: _estoque(client, id_variacao, loja), guardar_se=_nao_nulo),
     )
 
     return {

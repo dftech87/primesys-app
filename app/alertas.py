@@ -15,38 +15,33 @@ def _num(valor) -> float:
 
 
 async def estoque(client: MeuERPClient, loja: int) -> dict:
-    """Produtos com saldo negativo e abaixo do estoque mínimo no local de estoque escolhido."""
-    base = f"""from mercadoria_estoque e
-               join mercadoria_variacao_empresa ve
-                 on ve._idempresa = e._idempresa and ve._idmercadoriavariacao = e._idmercadoriavariacao
-               where e._idlocalestoque = {i(loja)} and {_ATIVO}"""
-    contagens = await executar(
-        client,
-        f"""select count(*) filter (where e.qtdsaldo < 0) as negativos,
-                   count(*) filter (where ve.qtdestoqueminimo > 0 and e.qtdsaldo < ve.qtdestoqueminimo) as abaixo_minimo
-            {base}""",
-    )
-    lista = await executar(
+    """Produtos com saldo negativo e abaixo do estoque mínimo no local de estoque escolhido (1 consulta)."""
+    linhas = await executar(
         client,
         f"""select coalesce(nullif(trim(v.descricao), ''), m.descricao) as descricao,
-                   e.qtdsaldo as saldo, ve.qtdestoqueminimo as minimo, v.embalagem as unidade
+                   e.qtdsaldo as saldo, ve.qtdestoqueminimo as minimo, v.embalagem as unidade,
+                   count(*) filter (where e.qtdsaldo < 0) over () as negativos,
+                   count(*) filter (where ve.qtdestoqueminimo > 0 and e.qtdsaldo < ve.qtdestoqueminimo) over () as abaixo_minimo
             from mercadoria_estoque e
             join mercadoria_variacao_empresa ve
               on ve._idempresa = e._idempresa and ve._idmercadoriavariacao = e._idmercadoriavariacao
             join mercadoria_variacao v on v._idmercadoriavariacao = e._idmercadoriavariacao
             join mercadoria m on m._idmercadoria = v.idmercadoria
             where e._idlocalestoque = {i(loja)} and {_ATIVO}
-              and ve.qtdestoqueminimo > 0 and e.qtdsaldo < ve.qtdestoqueminimo
-            order by (ve.qtdestoqueminimo - e.qtdsaldo) desc limit 8""",
+            order by case when ve.qtdestoqueminimo > 0 and e.qtdsaldo < ve.qtdestoqueminimo
+                          then ve.qtdestoqueminimo - e.qtdsaldo end desc nulls last
+            limit 8""",
     )
-    base_linha = contagens[0] if contagens else {}
+    base_linha = linhas[0] if linhas else {}
+    itens = [
+        {"descricao": l["descricao"], "saldo": _num(l["saldo"]), "minimo": _num(l["minimo"]), "unidade": l["unidade"]}
+        for l in linhas
+        if _num(l["minimo"]) > 0 and _num(l["saldo"]) < _num(l["minimo"])  # as demais linhas só trazem os totais
+    ]
     return {
         "negativos": int(base_linha.get("negativos") or 0),
         "abaixoMinimo": int(base_linha.get("abaixo_minimo") or 0),
-        "itens": [
-            {"descricao": l["descricao"], "saldo": _num(l["saldo"]), "minimo": _num(l["minimo"]), "unidade": l["unidade"]}
-            for l in lista
-        ],
+        "itens": itens,
     }
 
 
@@ -130,44 +125,6 @@ async def venda_tipica_dia(client: MeuERPClient, hoje: date, dias: int = 28) -> 
     teto = median(valores) * 10
     normais = [v for v in valores if v <= teto] or valores
     return round(sum(normais) / len(normais), 2)
-
-
-async def abaixo_do_custo(client: MeuERPClient, hoje: date, dias: int = 7) -> dict:
-    """Itens vendidos por menos que o custo (custo gravado no momento da venda), somados por produto.
-
-    Olha linha a linha: um produto vendido em promoção abaixo do custo aparece mesmo que, no total
-    do período, ele ainda dê lucro. Itens sem custo cadastrado (custo 0) ficam de fora.
-    """
-    linhas = await executar(
-        client,
-        f"""select max(dm.descricao) as descricao, count(*) as linhas, sum(dm.qtd) as qtd,
-                   sum(dm.valtotalliquido) as venda, sum(dm.qtd * c.valcusto) as custo,
-                   sum(dm.valtotalliquido - dm.qtd * c.valcusto) as resultado,
-                   count(*) over () as total_produtos,
-                   sum(sum(dm.valtotalliquido - dm.qtd * c.valcusto)) over () as perda_total
-            from documento d
-            join documento_mercadoria dm on dm._iddocumento = d._iddocumento
-            join documento_mercadoria_custo c on c._iddocumento = dm._iddocumento and c._idsequencia = dm._idsequencia
-            where {vendas._VENDA} and d.datahora >= {d(hoje - timedelta(days=dias))}
-              and d.datahora < {d(hoje + timedelta(days=1))}
-              and c.valcusto > 0 and dm.qtd > 0 and dm.valtotalliquido < dm.qtd * c.valcusto - 0.02
-            group by dm.idmercadoriavariacao order by resultado asc limit 30""",
-    )
-    primeira = linhas[0] if linhas else {}
-    return {
-        "dias": dias,
-        "totalProdutos": int(primeira.get("total_produtos") or 0),
-        "perda": round(-_num(primeira.get("perda_total")), 2),
-        "itens": [
-            {
-                "descricao": l["descricao"], "linhas": int(l["linhas"]),
-                "precoMedio": round(_num(l["venda"]) / _num(l["qtd"]), 2),
-                "custoMedio": round(_num(l["custo"]) / _num(l["qtd"]), 2),
-                "perda": round(-_num(l["resultado"]), 2),
-            }
-            for l in linhas[:5]
-        ],
-    }
 
 
 # Janela do "parou de vender": vendia em boa parte dos dias do mês e não vendeu nada nos últimos 3 dias.

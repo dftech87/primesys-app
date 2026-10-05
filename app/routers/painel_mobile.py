@@ -17,8 +17,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 MAX_DIAS = 366
-TTL_DASHBOARD = 60
-TTL_ALERTAS = 120
+TTL_DASHBOARD = 60            # período que inclui hoje: ainda está vendendo
+TTL_DASHBOARD_ENCERRADO = 900  # período já fechado: praticamente não muda
 _DIAS_SEMANA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 
 
@@ -27,6 +27,20 @@ def _data(texto: str | None, padrao: date) -> date:
         return date.fromisoformat(texto) if texto else padrao
     except ValueError:
         return padrao
+
+
+def _data_do_cliente(texto: str | None) -> date:
+    """A data do aparelho vale (o servidor pode estar em outro fuso), mas só ±1 dia da do servidor."""
+    servidor = date.today()
+    informada = _data(texto, servidor)
+    return informada if abs((informada - servidor).days) <= 1 else servidor
+
+
+def _comparacao_margem(inicio: date, fim: date, comp_ini: date, comp_fim: date):
+    """A margem só é comparada com o período anterior em períodos curtos (dobra o trabalho da consulta)."""
+    if (fim - inicio).days + 1 > vendas.MAX_DIAS_COMPARACAO_MARGEM:
+        return None, None
+    return comp_ini, comp_fim
 
 
 def _periodo_comparacao(inicio: date, fim: date) -> tuple[date, date, str]:
@@ -59,7 +73,7 @@ async def _montar_dashboard(client: MeuERPClient, inicio: date, fim: date) -> di
         vendas.resumo_comparado(client, inicio, fim, comp_ini, comp_fim),
         vendas.formas_pagamento(client, inicio, fim),
         vendas.cancelamentos(client, inicio, fim),
-        _opcional("margem", vendas.margem(client, inicio, fim)),
+        _opcional("margem", vendas.margem(client, inicio, fim, *_comparacao_margem(inicio, fim, comp_ini, comp_fim))),
         vendas.vendas_por_hora(client, inicio) if um_dia else vendas.vendas_por_dia(client, inicio, fim),
     ]
     (atual, anterior), formas, cancel, margem, hora_ou_dia = await asyncio.gather(*tarefas)
@@ -106,7 +120,7 @@ async def dashboard_mobile(request: Request, inicio: str | None = Query(None), f
     try:
         return await cached(
             (tenant["cnpj"], "dashboard", data_inicio, data_fim),
-            TTL_DASHBOARD,
+            TTL_DASHBOARD if data_fim >= hoje else TTL_DASHBOARD_ENCERRADO,
             lambda: _montar_dashboard(client, data_inicio, data_fim),
         )
     except ConsultaIndisponivel:
@@ -123,33 +137,47 @@ async def _secao(nome: str, cnpj: str, coro):
         return None
 
 
+# Validade de cada bloco dos alertas: o que muda devagar não precisa ser buscado a cada abertura da aba.
+# (pagar/receber são o mais caro: 2 a 5 páginas cada)
+TTL_ESTOQUE = 300
+TTL_FISCAL = 300
+TTL_CONTAS = 600
+TTL_RUPTURA = 600
+TTL_VENDA_TIPICA = 3600
+
+
+def _bloco(cnpj: str, nome: str, ttl: float, chave: tuple, produzir):
+    """Bloco dos alertas com cache próprio; se falhar, vira None (a tela mostra 'indisponível')."""
+    return _secao(nome, cnpj, cached((cnpj, "alerta", nome) + chave, ttl, produzir, obsoleto_ate=ttl))
+
+
 async def _montar_alertas(client: MeuERPClient, cnpj: str, loja: int, hoje: date) -> dict:
-    estoque, fiscal, pagar, receber, ruptura, venda_dia, abaixo_custo = await asyncio.gather(
-        _secao("estoque", cnpj, alertas.estoque(client, loja)),
-        _secao("fiscal", cnpj, alertas.notas_rejeitadas(client, hoje)),
-        _secao("pagar", cnpj, alertas.contas(client, "pagar", hoje)),
-        _secao("receber", cnpj, alertas.contas(client, "receber", hoje)),
-        _secao("ruptura", cnpj, alertas.ruptura(client, loja, hoje)),
-        _secao("venda típica", cnpj, alertas.venda_tipica_dia(client, hoje)),
-        _secao("abaixo do custo", cnpj, alertas.abaixo_do_custo(client, hoje)),
+    estoque, fiscal, pagar, receber, ruptura, venda_dia = await asyncio.gather(
+        _bloco(cnpj, "estoque", TTL_ESTOQUE, (loja,), lambda: alertas.estoque(client, loja)),
+        _bloco(cnpj, "fiscal", TTL_FISCAL, (hoje,), lambda: alertas.notas_rejeitadas(client, hoje)),
+        _bloco(cnpj, "pagar", TTL_CONTAS, (hoje,), lambda: alertas.contas(client, "pagar", hoje)),
+        _bloco(cnpj, "receber", TTL_CONTAS, (hoje,), lambda: alertas.contas(client, "receber", hoje)),
+        _bloco(cnpj, "ruptura", TTL_RUPTURA, (loja, hoje), lambda: alertas.ruptura(client, loja, hoje)),
+        _bloco(cnpj, "venda_tipica", TTL_VENDA_TIPICA, (hoje,), lambda: alertas.venda_tipica_dia(client, hoje)),
     )
     return {
         "estoque": estoque, "notasRejeitadas": fiscal, "contasPagar": pagar, "contasReceber": receber,
-        "ruptura": ruptura, "vendaTipicaDia": venda_dia, "abaixoDoCusto": abaixo_custo,
+        "ruptura": ruptura, "vendaTipicaDia": venda_dia,
     }
 
 
 @router.get("/api/produtos/alertas")
-async def alertas_mobile(request: Request, loja: int = Query(...), hoje: str | None = Query(None)):
+async def alertas_mobile(
+    request: Request,
+    loja: int = Query(...),
+    hoje: str | None = Query(None),
+    segundo_plano: int = Query(0),
+):
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
 
-    data_hoje = _data(hoje, date.today())
-    client = MeuERPClient(tenant["api_token"])
-    return await cached(
-        (tenant["cnpj"], "alertas", loja, data_hoje),
-        TTL_ALERTAS,
-        lambda: _montar_alertas(client, tenant["cnpj"], loja, data_hoje),
-        guardar_se=lambda resultado: all(secao is not None for secao in resultado.values()),
-    )
+    data_hoje = _data_do_cliente(hoje)
+    # segundo_plano=1 (selo da aba, carregado sem ninguém esperando) usa só a cota que sobra do ERP
+    client = MeuERPClient(tenant["api_token"], segundo_plano=bool(segundo_plano))
+    return await _montar_alertas(client, tenant["cnpj"], loja, data_hoje)

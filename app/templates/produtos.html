@@ -293,6 +293,12 @@
                     <h3>Resumo do período</h3>
                     <div id="dashInsights"></div>
                 </div>
+                <div class="dash-panel gestao" id="gestaoMargem" style="display:none">
+                    <details>
+                        <summary><div><div class="tit">Margem de vendas</div><div class="sub-resumo" id="margemResumo"></div></div></summary>
+                        <div id="margemDetalhe"></div>
+                    </details>
+                </div>
                 <div class="dash-panel">
                     <h3 id="dashDiarioTitulo">Vendas por dia</h3>
                     <canvas id="chartDiario" height="200"></canvas>
@@ -315,12 +321,6 @@
                     <details>
                         <summary><div><div class="tit">Caixa nos próximos 30 dias</div><div class="sub-resumo" id="caixaResumo"></div></div></summary>
                         <div id="caixaDetalhe"></div>
-                    </details>
-                </div>
-                <div class="dash-panel gestao" id="gestaoCusto" style="display:none">
-                    <details>
-                        <summary><div><div class="tit">Vendas abaixo do custo</div><div class="sub-resumo" id="custoResumo"></div></div></summary>
-                        <div id="custoDetalhe"></div>
                     </details>
                 </div>
                 <div class="dash-panel"><h3>Contas a pagar <span class="pill" id="pillPagar"></span></h3><div id="alertaPagar"></div></div>
@@ -639,6 +639,45 @@
             return lista.join('');
         }
 
+        // Margem por produto (custo gravado no momento da venda). Lista só o que merece atenção.
+        function renderMargemPainel(mg) {
+            const painel = document.getElementById('gestaoMargem');
+            if (!mg) { painel.style.display = 'none'; return; }
+            painel.style.display = 'block';
+
+            const ab = mg.abaixoDoCusto;
+            const partes = [];
+            if (mg.margemAnteriorPct != null) {
+                const dif = mg.margemPct - mg.margemAnteriorPct;
+                partes.push(`${dif >= 0 ? '▲' : '▼'} ${fmtPct(Math.abs(dif))} pt vs período anterior (${fmtPct(mg.margemAnteriorPct)}%)`);
+            }
+            partes.push(ab.produtos
+                ? `${ab.produtos} ${ab.produtos === 1 ? 'produto' : 'produtos'} abaixo do custo`
+                : 'nenhum produto abaixo do custo');
+            document.getElementById('margemResumo').textContent = partes.join(' · ');
+
+            const linha = (i, sub, valor, classe) => `<div class="linha-info">
+                <span class="desc">${esc(i.descricao)}<span class="sub">${sub}</span></span>
+                <span class="val ${classe}">${valor}</span></div>`;
+            let html = '';
+            if (ab.produtos) {
+                html += `<div class="sub-titulo">VENDIDOS ABAIXO DO CUSTO · perda de ${fmtMoney(ab.perda)}</div>`
+                    + ab.itens.map((i) => linha(i, '', `− ${fmtMoney(i.perda)}`, 'ruim')).join('')
+                    + (ab.produtos > ab.itens.length ? `<div class="nota">e mais ${ab.produtos - ab.itens.length}.</div>` : '');
+            }
+            if (mg.menorMargem.length) {
+                html += '<div class="sub-titulo">MENOR MARGEM · produtos com venda relevante</div>'
+                    + mg.menorMargem.map((i) => linha(i, `vendeu ${fmtMoney(i.venda)}`,
+                        `${fmtPct(i.margemPct)}%`, i.margemPct < 0 ? 'ruim' : i.margemPct < 10 ? 'aviso' : '')).join('');
+            }
+            if (mg.maiorLucro.length) {
+                html += '<div class="sub-titulo">MAIOR LUCRO</div>'
+                    + mg.maiorLucro.map((i) => linha(i, `margem ${fmtPct(i.margemPct)}%`, fmtMoney(i.lucro), 'ok')).join('');
+            }
+            html += '<div class="nota">Margem estimada com o custo registrado no ERP no momento da venda. Itens sem custo ficam de fora.</div>';
+            document.getElementById('margemDetalhe').innerHTML = html;
+        }
+
         function renderDashboard(data, inicio, fim) {
             document.getElementById('dashTotal').textContent = fmtMoney(data.total);
             document.getElementById('dashVendas').textContent = Number(data.vendas).toLocaleString('pt-BR');
@@ -665,6 +704,8 @@
             } else {
                 elMargem.textContent = '';
             }
+
+            renderMargemPainel(mg);
 
             const porHora = data.vendasPorHora;
             document.getElementById('dashDiarioTitulo').textContent = porHora
@@ -881,27 +922,10 @@
                     ? `<div class="nota">Já vencido, fora desta conta: pagar ${fmtMoney(p.atrasadas.valor)} · receber ${fmtMoney(c.atrasadas.valor)}. Detalhes nos blocos de contas abaixo.</div>` : '');
         }
 
-        const PERDA_MINIMA_CUSTO = 20; // abaixo disso (R$ na semana) é ruído: o bloco não aparece
-
-        function renderCusto(a) {
-            const painel = document.getElementById('gestaoCusto');
-            if (!a || !a.totalProdutos || a.perda < PERDA_MINIMA_CUSTO) { painel.style.display = 'none'; return; }
-            painel.style.display = 'block';
-            document.getElementById('custoResumo').textContent =
-                `${a.totalProdutos} ${a.totalProdutos === 1 ? 'produto' : 'produtos'} · perda de ${fmtMoney(a.perda)} em ${a.dias} dias`;
-            document.getElementById('custoDetalhe').innerHTML =
-                '<div class="nota" style="margin-top:0">Itens vendidos por menos que o custo. Confira se o preço de venda ou o custo está desatualizado.</div>'
-                + a.itens.map((i) => `<div class="linha-info">
-                    <span class="desc">${esc(i.descricao)}<span class="sub">vende a ${fmtMoney(i.precoMedio)} · custo ${fmtMoney(i.custoMedio)} · ${i.linhas} venda(s)</span></span>
-                    <span class="val ruim">− ${fmtMoney(i.perda)}</span></div>`).join('')
-                + (a.totalProdutos > a.itens.length ? `<div class="nota">e mais ${a.totalProdutos - a.itens.length}.</div>` : '');
-        }
-
         function renderAlertas(data) {
             const status = statusAlertas(data);
             renderResumo(status);
             renderRuptura(data.ruptura);
-            renderCusto(data.abaixoDoCusto);
             renderCaixa(data);
             document.getElementById('estoqueResumo').textContent = data.estoque
                 ? `${data.estoque.abaixoMinimo} abaixo do mínimo · ${data.estoque.negativos} negativos` : '';
