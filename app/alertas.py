@@ -132,6 +132,44 @@ async def venda_tipica_dia(client: MeuERPClient, hoje: date, dias: int = 28) -> 
     return round(sum(normais) / len(normais), 2)
 
 
+async def abaixo_do_custo(client: MeuERPClient, hoje: date, dias: int = 7) -> dict:
+    """Itens vendidos por menos que o custo (custo gravado no momento da venda), somados por produto.
+
+    Olha linha a linha: um produto vendido em promoção abaixo do custo aparece mesmo que, no total
+    do período, ele ainda dê lucro. Itens sem custo cadastrado (custo 0) ficam de fora.
+    """
+    linhas = await executar(
+        client,
+        f"""select max(dm.descricao) as descricao, count(*) as linhas, sum(dm.qtd) as qtd,
+                   sum(dm.valtotalliquido) as venda, sum(dm.qtd * c.valcusto) as custo,
+                   sum(dm.valtotalliquido - dm.qtd * c.valcusto) as resultado,
+                   count(*) over () as total_produtos,
+                   sum(sum(dm.valtotalliquido - dm.qtd * c.valcusto)) over () as perda_total
+            from documento d
+            join documento_mercadoria dm on dm._iddocumento = d._iddocumento
+            join documento_mercadoria_custo c on c._iddocumento = dm._iddocumento and c._idsequencia = dm._idsequencia
+            where {vendas._VENDA} and d.datahora >= {d(hoje - timedelta(days=dias))}
+              and d.datahora < {d(hoje + timedelta(days=1))}
+              and c.valcusto > 0 and dm.qtd > 0 and dm.valtotalliquido < dm.qtd * c.valcusto - 0.02
+            group by dm.idmercadoriavariacao order by resultado asc limit 30""",
+    )
+    primeira = linhas[0] if linhas else {}
+    return {
+        "dias": dias,
+        "totalProdutos": int(primeira.get("total_produtos") or 0),
+        "perda": round(-_num(primeira.get("perda_total")), 2),
+        "itens": [
+            {
+                "descricao": l["descricao"], "linhas": int(l["linhas"]),
+                "precoMedio": round(_num(l["venda"]) / _num(l["qtd"]), 2),
+                "custoMedio": round(_num(l["custo"]) / _num(l["qtd"]), 2),
+                "perda": round(-_num(l["resultado"]), 2),
+            }
+            for l in linhas[:5]
+        ],
+    }
+
+
 # Janela do "parou de vender": vendia em boa parte dos dias do mês e não vendeu nada nos últimos 3 dias.
 _DIAS_RECENTES = 3
 _JANELA_BASE = 30

@@ -113,17 +113,18 @@ async def _secao(nome: str, cnpj: str, coro):
 
 
 async def _montar_alertas(client: MeuERPClient, cnpj: str, loja: int, hoje: date) -> dict:
-    estoque, fiscal, pagar, receber, ruptura, venda_dia = await asyncio.gather(
+    estoque, fiscal, pagar, receber, ruptura, venda_dia, abaixo_custo = await asyncio.gather(
         _secao("estoque", cnpj, alertas.estoque(client, loja)),
         _secao("fiscal", cnpj, alertas.notas_rejeitadas(client, hoje)),
         _secao("pagar", cnpj, alertas.contas(client, "pagar", hoje)),
         _secao("receber", cnpj, alertas.contas(client, "receber", hoje)),
         _secao("ruptura", cnpj, alertas.ruptura(client, loja, hoje)),
         _secao("venda típica", cnpj, alertas.venda_tipica_dia(client, hoje)),
+        _secao("abaixo do custo", cnpj, alertas.abaixo_do_custo(client, hoje)),
     )
     return {
         "estoque": estoque, "notasRejeitadas": fiscal, "contasPagar": pagar, "contasReceber": receber,
-        "ruptura": ruptura, "vendaTipicaDia": venda_dia,
+        "ruptura": ruptura, "vendaTipicaDia": venda_dia, "abaixoDoCusto": abaixo_custo,
     }
 
 

@@ -316,6 +316,12 @@
                         <div id="caixaDetalhe"></div>
                     </details>
                 </div>
+                <div class="dash-panel gestao" id="gestaoCusto" style="display:none">
+                    <details>
+                        <summary><div><div class="tit">Vendas abaixo do custo</div><div class="sub-resumo" id="custoResumo"></div></div></summary>
+                        <div id="custoDetalhe"></div>
+                    </details>
+                </div>
                 <div class="dash-panel"><h3>Contas a pagar <span class="pill" id="pillPagar"></span></h3><div id="alertaPagar"></div></div>
                 <div class="dash-panel"><h3>Contas a receber (fiado) <span class="pill" id="pillReceber"></span></h3><div id="alertaReceber"></div></div>
                 <div class="dash-panel"><h3>Notas fiscais rejeitadas <span class="pill" id="pillNotas"></span></h3><div id="alertaNotas"></div></div>
@@ -396,6 +402,10 @@
                         <div class="campo"><span class="rotulo">Unidade</span><span class="valor">${esc(p.unidade || '-')}</span></div>
                         <div class="campo"><span class="rotulo">Preço de custo</span><span class="valor">${fmtMoney(p.precoCusto)}</span></div>
                         <div class="campo"><span class="rotulo">Preço de venda</span><span class="valor">${fmtMoney(p.precoVenda)}</span></div>
+                        ${p.precoCusto > 0 && p.precoVenda > 0 ? (() => {
+                            const m = (p.precoVenda - p.precoCusto) / p.precoVenda * 100;
+                            return `<div class="campo"><span class="rotulo">Margem</span><span class="valor ${m < 0 ? 'nao' : ''}">${m.toFixed(1).replace('.', ',')}%${m < 0 ? ' (abaixo do custo)' : ''}</span></div>`;
+                        })() : ''}
                         <div class="secao-titulo">Estoque na loja selecionada</div>
                         <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
                     `;
@@ -859,10 +869,27 @@
                     ? `<div class="nota">Já vencido, fora desta conta: pagar ${fmtMoney(p.atrasadas.valor)} · receber ${fmtMoney(c.atrasadas.valor)}. Detalhes nos blocos de contas abaixo.</div>` : '');
         }
 
+        const PERDA_MINIMA_CUSTO = 20; // abaixo disso (R$ na semana) é ruído: o bloco não aparece
+
+        function renderCusto(a) {
+            const painel = document.getElementById('gestaoCusto');
+            if (!a || !a.totalProdutos || a.perda < PERDA_MINIMA_CUSTO) { painel.style.display = 'none'; return; }
+            painel.style.display = 'block';
+            document.getElementById('custoResumo').textContent =
+                `${a.totalProdutos} ${a.totalProdutos === 1 ? 'produto' : 'produtos'} · perda de ${fmtMoney(a.perda)} em ${a.dias} dias`;
+            document.getElementById('custoDetalhe').innerHTML =
+                '<div class="nota" style="margin-top:0">Itens vendidos por menos que o custo. Confira se o preço de venda ou o custo está desatualizado.</div>'
+                + a.itens.map((i) => `<div class="linha-info">
+                    <span class="desc">${esc(i.descricao)}<span class="sub">vende a ${fmtMoney(i.precoMedio)} · custo ${fmtMoney(i.custoMedio)} · ${i.linhas} venda(s)</span></span>
+                    <span class="val ruim">− ${fmtMoney(i.perda)}</span></div>`).join('')
+                + (a.totalProdutos > a.itens.length ? `<div class="nota">e mais ${a.totalProdutos - a.itens.length}.</div>` : '');
+        }
+
         function renderAlertas(data) {
             const status = statusAlertas(data);
             renderResumo(status);
             renderRuptura(data.ruptura);
+            renderCusto(data.abaixoDoCusto);
             renderCaixa(data);
             document.getElementById('estoqueResumo').textContent = data.estoque
                 ? `${data.estoque.abaixoMinimo} abaixo do mínimo · ${data.estoque.negativos} negativos` : '';
