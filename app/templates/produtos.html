@@ -128,6 +128,24 @@
             margin-bottom: 16px;
         }
         .dash-panel h3 { margin: 0 0 12px; font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; }
+        .dash-card .delta { font-size: 12px; margin-top: 4px; color: #64748b; }
+        .dash-card .delta.up { color: #15803d; }
+        .dash-card .delta.down { color: #b91c1c; }
+        .forma { margin-bottom: 12px; }
+        .forma .topo { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+        .forma .barra { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
+        .forma .barra span { display: block; height: 100%; background: var(--azul); border-radius: 4px; }
+        .nota { font-size: 12px; color: #64748b; line-height: 1.4; margin-top: 8px; }
+        .linha-info { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+            padding: 9px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+        .linha-info:last-child { border-bottom: 0; }
+        .linha-info .desc { color: #334155; min-width: 0; }
+        .linha-info .val { font-weight: 700; white-space: nowrap; }
+        .val.ruim { color: #b91c1c; }
+        .val.ok { color: #15803d; }
+        .val.aviso { color: #b45309; }
+        .indisponivel { color: #94a3b8; font-size: 13px; }
+        #alertasView { display: none; padding: 16px; }
 
         #vazio { padding: 60px 32px; text-align: center; color: #475569; }
         #vazio .emoji { font-size: 48px; margin-bottom: 16px; }
@@ -201,13 +219,35 @@
                     </div>
                     <button id="dashFiltrar">Filtrar</button>
                 </div>
+                <div id="dashErro" class="erro" style="display:none;"></div>
                 <div class="dash-cards">
-                    <div class="dash-card dash-card-full"><div class="rotulo">Total vendido no período</div><div class="valor" id="dashTotal">-</div></div>
+                    <div class="dash-card dash-card-full">
+                        <div class="rotulo">Total vendido no período</div>
+                        <div class="valor" id="dashTotal">-</div>
+                        <div class="delta" id="dashDelta"></div>
+                    </div>
+                    <div class="dash-card"><div class="rotulo">Vendas</div><div class="valor" id="dashVendas">-</div></div>
+                    <div class="dash-card"><div class="rotulo">Ticket médio</div><div class="valor" id="dashTicket">-</div></div>
                 </div>
                 <div class="dash-panel">
                     <h3 id="dashDiarioTitulo">Vendas por dia</h3>
                     <canvas id="chartDiario" height="200"></canvas>
                 </div>
+                <div class="dash-panel">
+                    <h3>Formas de pagamento</h3>
+                    <div id="dashFormas"></div>
+                </div>
+                <div class="dash-panel">
+                    <h3>Cancelamentos</h3>
+                    <div id="dashCancelamentos"></div>
+                </div>
+            </div>
+
+            <div id="alertasView">
+                <div class="dash-panel"><h3>Estoque</h3><div id="alertaEstoque"></div></div>
+                <div class="dash-panel"><h3>Contas a pagar</h3><div id="alertaPagar"></div></div>
+                <div class="dash-panel"><h3>Contas a receber (fiado)</h3><div id="alertaReceber"></div></div>
+                <div class="dash-panel"><h3>Notas fiscais rejeitadas</h3><div id="alertaNotas"></div></div>
             </div>
         </main>
 
@@ -219,6 +259,10 @@
             <button id="tabDashboard">
                 <span class="tab-icone">&#128202;</span>
                 Dashboard
+            </button>
+            <button id="tabAlertas">
+                <span class="tab-icone">&#9888;&#65039;</span>
+                Alertas
             </button>
         </nav>
     </div>
@@ -235,6 +279,8 @@
     <script>
         const fmtMoney = (v) => v == null ? '-' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const fmtQtd = (v) => v == null ? '-' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 3 });
+        // Tudo que vem do ERP (nomes de produto etc.) é digitado por pessoas: trate sempre como texto.
+        const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         const elVazio = document.getElementById('vazio');
         const elLista = document.getElementById('lista');
@@ -266,15 +312,15 @@
                 .then((r) => r.ok ? r.json() : Promise.reject(r))
                 .then((p) => {
                     elDetalhe.innerHTML = `
-                        <h2>${p.descricao ?? ''}</h2>
-                        <div class="campo"><span class="rotulo">Código de barras</span><span class="valor">${p.codigoBarras || '-'}</span></div>
-                        <div class="campo"><span class="rotulo">Código interno</span><span class="valor">${p.codigoInterno ?? '-'}</span></div>
+                        <h2>${esc(p.descricao)}</h2>
+                        <div class="campo"><span class="rotulo">Código de barras</span><span class="valor">${esc(p.codigoBarras || '-')}</span></div>
+                        <div class="campo"><span class="rotulo">Código interno</span><span class="valor">${esc(p.codigoInterno ?? '-')}</span></div>
                         <div class="campo"><span class="rotulo">Ativo</span><span class="valor ${p.ativo ? 'sim' : 'nao'}">${p.ativo ? 'Sim' : 'Não'}</span></div>
-                        <div class="campo"><span class="rotulo">Unidade</span><span class="valor">${p.unidade || '-'}</span></div>
+                        <div class="campo"><span class="rotulo">Unidade</span><span class="valor">${esc(p.unidade || '-')}</span></div>
                         <div class="campo"><span class="rotulo">Preço de custo</span><span class="valor">${fmtMoney(p.precoCusto)}</span></div>
                         <div class="campo"><span class="rotulo">Preço de venda</span><span class="valor">${fmtMoney(p.precoVenda)}</span></div>
                         <div class="secao-titulo">Estoque na loja selecionada</div>
-                        <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${p.unidade || ''}</span></div>
+                        <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
                     `;
                 })
                 .catch(() => {
@@ -302,10 +348,10 @@
                 return;
             }
             elLista.innerHTML = produtos.map((p) => `
-                <div class="card" data-id="${p.idVariacao}" data-desc="${(p.descricao||'').replace(/"/g,'&quot;')}">
-                    <div class="descricao">${p.descricao ?? ''}</div>
-                    <div class="linha"><span class="rotulo">Código de barras:</span> ${p.codigoBarras || '-'}</div>
-                    <div class="linha"><span class="rotulo">Código interno:</span> ${p.codigoInterno ?? '-'}</div>
+                <div class="card" data-id="${p.idVariacao}" data-desc="${esc(p.descricao)}">
+                    <div class="descricao">${esc(p.descricao)}</div>
+                    <div class="linha"><span class="rotulo">Código de barras:</span> ${esc(p.codigoBarras || '-')}</div>
+                    <div class="linha"><span class="rotulo">Código interno:</span> ${esc(p.codigoInterno ?? '-')}</div>
                     <div class="rodape">
                         <span class="estoque">Toque para ver preço e estoque</span>
                     </div>
@@ -338,35 +384,65 @@
             const res = await fetch('/api/produtos/lojas');
             const data = await res.json();
             elLoja.innerHTML = (data.lojas || [])
-                .map((l) => `<option value="${l.codigo}">${l.descricao}</option>`)
+                .map((l) => `<option value="${esc(l.codigo)}">${esc(l.descricao)}</option>`)
                 .join('');
+            // Se a pessoa já abriu "Alertas" antes da lista de lojas chegar, carrega agora.
+            if (abaAtual === 'alertas') carregarAlertas();
         }
 
         carregarLojas();
 
-        // Alternância entre as abas "Produtos" e "Dashboard" (barra inferior)
+        // Abas da barra inferior: Produtos | Dashboard | Alertas
         const elDashboardView = document.getElementById('dashboardView');
-        const tabProdutos = document.getElementById('tabProdutos');
-        const tabDashboard = document.getElementById('tabDashboard');
+        const elAlertasView = document.getElementById('alertasView');
+        const tabs = {
+            produtos: document.getElementById('tabProdutos'),
+            dashboard: document.getElementById('tabDashboard'),
+            alertas: document.getElementById('tabAlertas'),
+        };
+        let abaAtual = 'produtos';
         let chartDiario = null;
+        let dashSeq = 0;
+        let alertasSeq = 0;
         const elDashDe = document.getElementById('dashDe');
         const elDashAte = document.getElementById('dashAte');
         const elDashFiltrar = document.getElementById('dashFiltrar');
 
+        // Data local do aparelho (toISOString usaria UTC e viraria "amanhã" à noite no Brasil).
         function hojeISO() {
-            return new Date().toISOString().slice(0, 10);
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
+        const fmtNum = (v) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+        const fmtPct = (v) => Number(v).toFixed(1).replace('.', ',');
+        const fmtDataBR = (iso) => iso.split('-').reverse().join('/');
 
         function mostrarTab(tab) {
-            tabProdutos.classList.toggle('ativo', tab === 'produtos');
-            tabDashboard.classList.toggle('ativo', tab === 'dashboard');
+            abaAtual = tab;
+            Object.entries(tabs).forEach(([nome, el]) => el.classList.toggle('ativo', nome === tab));
             elDashboardView.style.display = tab === 'dashboard' ? 'block' : 'none';
+            elAlertasView.style.display = tab === 'alertas' ? 'block' : 'none';
+
+            if (tab === 'produtos') {
+                elBuscaWrap.style.display = 'block';
+                elLoja.style.display = 'block';
+                elBtnVoltar.classList.remove('mostrar');
+                elTitulo.textContent = tituloOriginal;
+                elSubtitulo.textContent = 'Consulta de produtos';
+                mostrarView(elBusca.value.trim().length >= 2 ? 'lista' : 'vazio');
+                return;
+            }
+
+            elBuscaWrap.style.display = 'none';
+            elVazio.style.display = 'none';
+            elLista.style.display = 'none';
+            elDetalhe.style.display = 'none';
+            elBtnVoltar.classList.remove('mostrar');
+            elTitulo.textContent = tituloOriginal;
+            // A loja só importa para o estoque (Alertas); as vendas são da empresa toda.
+            elLoja.style.display = tab === 'alertas' ? 'block' : 'none';
 
             if (tab === 'dashboard') {
-                elBuscaWrap.style.display = 'none';
-                elVazio.style.display = 'none';
-                elLista.style.display = 'none';
-                elDetalhe.style.display = 'none';
                 elSubtitulo.textContent = 'Dashboard de vendas';
                 if (!elDashDe.value) {
                     elDashDe.value = hojeISO();
@@ -374,49 +450,139 @@
                 }
                 carregarDashboardMobile(elDashDe.value, elDashAte.value);
             } else {
-                elBuscaWrap.style.display = 'block';
-                elLoja.style.display = 'block';
-                elBtnVoltar.classList.remove('mostrar');
-                elTitulo.textContent = tituloOriginal;
-                elSubtitulo.textContent = 'Consulta de produtos';
-                if (elBusca.value.trim().length >= 2) {
-                    mostrarView('lista');
-                } else {
-                    mostrarView('vazio');
-                }
+                elSubtitulo.textContent = 'Alertas';
+                carregarAlertas();
             }
         }
-        tabProdutos.addEventListener('click', () => mostrarTab('produtos'));
-        tabDashboard.addEventListener('click', () => mostrarTab('dashboard'));
+        tabs.produtos.addEventListener('click', () => mostrarTab('produtos'));
+        tabs.dashboard.addEventListener('click', () => mostrarTab('dashboard'));
+        tabs.alertas.addEventListener('click', () => mostrarTab('alertas'));
         elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value));
+        elLoja.addEventListener('change', () => { if (abaAtual === 'alertas') carregarAlertas(); });
 
         async function carregarDashboardMobile(inicio, fim) {
-            const elTotal = document.getElementById('dashTotal');
-            const elTituloDiario = document.getElementById('dashDiarioTitulo');
-            elTotal.textContent = 'carregando...';
+            const seq = ++dashSeq;
+            const elErro = document.getElementById('dashErro');
+            elErro.style.display = 'none';
+            document.getElementById('dashTotal').textContent = 'carregando...';
             try {
-                const params = new URLSearchParams({ inicio, fim });
-                const res = await fetch(`/api/produtos/dashboard-mobile?${params}`);
+                const res = await fetch(`/api/produtos/dashboard-mobile?${new URLSearchParams({ inicio, fim })}`);
+                if (!res.ok) {
+                    const corpo = await res.json().catch(() => ({}));
+                    throw new Error(corpo.detail || 'Não foi possível carregar o dashboard.');
+                }
                 const data = await res.json();
-
-                elTotal.textContent = fmtMoney(data.total);
-                elTituloDiario.textContent = inicio === fim
-                    ? `Vendas do dia ${inicio.split('-').reverse().join('/')}`
-                    : 'Vendas por dia no período';
-
-                if (chartDiario) chartDiario.destroy();
-                const dias = data.vendasPorDia || [];
-                chartDiario = new Chart(document.getElementById('chartDiario'), {
-                    type: 'bar',
-                    data: {
-                        labels: dias.map((d) => d.dia),
-                        datasets: [{ label: 'Vendas', data: dias.map((d) => d.valor), backgroundColor: '#0b3895' }],
-                    },
-                    options: { responsive: true, plugins: { legend: { display: false } } },
-                });
+                if (seq === dashSeq) renderDashboard(data, inicio, fim);
             } catch (err) {
-                elTotal.textContent = 'erro';
+                if (seq !== dashSeq) return;
+                document.getElementById('dashTotal').textContent = '-';
+                elErro.textContent = err.message;
+                elErro.style.display = 'block';
             }
+        }
+
+        function renderDashboard(data, inicio, fim) {
+            document.getElementById('dashTotal').textContent = fmtMoney(data.total);
+            document.getElementById('dashVendas').textContent = Number(data.vendas).toLocaleString('pt-BR');
+            document.getElementById('dashTicket').textContent = fmtMoney(data.ticketMedio);
+
+            const elDelta = document.getElementById('dashDelta');
+            const comp = data.comparativo;
+            elDelta.className = 'delta';
+            if (comp && comp.total > 0) {
+                const pct = (data.total - comp.total) / comp.total * 100;
+                elDelta.classList.add(pct >= 0 ? 'up' : 'down');
+                elDelta.textContent = `${pct >= 0 ? '▲' : '▼'} ${fmtPct(Math.abs(pct))}% ${comp.rotulo} (${fmtMoney(comp.total)})`;
+            } else {
+                elDelta.textContent = comp ? `${comp.rotulo}: sem vendas` : '';
+            }
+
+            const porHora = data.vendasPorHora;
+            document.getElementById('dashDiarioTitulo').textContent = porHora
+                ? `Vendas por hora — ${fmtDataBR(inicio)}`
+                : 'Vendas por dia no período';
+            const rotulos = porHora ? porHora.map((h) => `${h.hora}h`) : data.vendasPorDia.map((d) => d.dia);
+            const valores = porHora ? porHora.map((h) => h.valor) : data.vendasPorDia.map((d) => d.valor);
+            if (chartDiario) chartDiario.destroy();
+            chartDiario = new Chart(document.getElementById('chartDiario'), {
+                type: 'bar',
+                data: { labels: rotulos, datasets: [{ label: 'Vendas', data: valores, backgroundColor: '#0b3895' }] },
+                options: { responsive: true, plugins: { legend: { display: false } } },
+            });
+
+            const elFormas = document.getElementById('dashFormas');
+            elFormas.innerHTML = data.formasPagamento.length
+                ? data.formasPagamento.map((f) => `
+                    <div class="forma">
+                        <div class="topo"><span>${esc(f.forma)}</span><span>${fmtMoney(f.valor)} · ${fmtPct(f.percentual)}%</span></div>
+                        <div class="barra"><span style="width:${Math.min(100, Number(f.percentual))}%"></span></div>
+                    </div>`).join('')
+                : '<div class="indisponivel">Sem pagamentos no período.</div>';
+            if (data.semFormaPagamento > 0) {
+                elFormas.innerHTML += `<div class="nota">${fmtMoney(data.semFormaPagamento)} em vendas sem forma de pagamento lançada (por exemplo, nota fiscal a prazo ou por boleto).</div>`;
+            }
+
+            const c = data.cancelamentos;
+            document.getElementById('dashCancelamentos').innerHTML = c.quantidade
+                ? `<div class="linha-info"><span class="desc">${c.quantidade} cancelamento(s)</span><span class="val ruim">${fmtMoney(c.valor)}</span></div>`
+                  + c.motivos.map((m) => `<div class="linha-info"><span class="desc">${esc(m.motivo)}</span><span class="val">${m.quantidade}</span></div>`).join('')
+                : '<div class="indisponivel">Nenhum cancelamento no período.</div>';
+        }
+
+        const SECAO_INDISPONIVEL = '<div class="indisponivel">Indisponível no momento.</div>';
+
+        function linhaConta(rotulo, grupo, ruimSeHouver) {
+            const classe = grupo.quantidade && ruimSeHouver ? 'ruim' : '';
+            return `<div class="linha-info"><span class="desc">${rotulo}</span><span class="val ${classe}">${grupo.quantidade} · ${fmtMoney(grupo.valor)}</span></div>`;
+        }
+
+        function renderContas(idElemento, contas) {
+            const el = document.getElementById(idElemento);
+            if (!contas) { el.innerHTML = SECAO_INDISPONIVEL; return; }
+            el.innerHTML = linhaConta('Atrasadas', contas.atrasadas, true)
+                + linhaConta('Vencem hoje', contas.hoje, false)
+                + linhaConta('Próximos 7 dias', contas.proximos7, false)
+                + (contas.parcial ? '<div class="nota">Mostrando apenas as primeiras 500 contas.</div>' : '');
+        }
+
+        async function carregarAlertas() {
+            const seq = ++alertasSeq;
+            const loja = elLoja.value;
+            const ids = ['alertaEstoque', 'alertaPagar', 'alertaReceber', 'alertaNotas'];
+            ids.forEach((id) => { document.getElementById(id).innerHTML = '<div class="loading">Carregando...</div>'; });
+            if (!loja) {
+                ids.forEach((id) => { document.getElementById(id).innerHTML = '<div class="indisponivel">Selecione a loja.</div>'; });
+                return;
+            }
+            try {
+                const params = new URLSearchParams({ loja, hoje: hojeISO() });
+                const res = await fetch(`/api/produtos/alertas?${params}`);
+                if (!res.ok) throw new Error('falha');
+                const data = await res.json();
+                if (seq !== alertasSeq) return;
+                renderAlertas(data);
+            } catch (err) {
+                if (seq !== alertasSeq) return;
+                ids.forEach((id) => { document.getElementById(id).innerHTML = SECAO_INDISPONIVEL; });
+            }
+        }
+
+        function renderAlertas(data) {
+            const e = data.estoque;
+            document.getElementById('alertaEstoque').innerHTML = !e ? SECAO_INDISPONIVEL
+                : `<div class="linha-info"><span class="desc">Saldo negativo</span><span class="val ${e.negativos ? 'ruim' : 'ok'}">${e.negativos} produto(s)</span></div>`
+                + `<div class="linha-info"><span class="desc">Abaixo do mínimo</span><span class="val ${e.abaixoMinimo ? 'aviso' : 'ok'}">${e.abaixoMinimo} produto(s)</span></div>`
+                + e.itens.map((i) => `<div class="linha-info"><span class="desc">${esc(i.descricao)}</span><span class="val ruim">${fmtNum(i.saldo)} / mín. ${fmtNum(i.minimo)}</span></div>`).join('')
+                + (e.abaixoMinimo > e.itens.length ? `<div class="nota">Mostrando os ${e.itens.length} com maior falta.</div>` : '');
+
+            renderContas('alertaPagar', data.contasPagar);
+            renderContas('alertaReceber', data.contasReceber);
+
+            const n = data.notasRejeitadas;
+            document.getElementById('alertaNotas').innerHTML = !n ? SECAO_INDISPONIVEL
+                : n.total === 0 ? `<div class="linha-info"><span class="desc">Nenhuma nota rejeitada nos últimos ${n.dias} dias</span><span class="val ok">OK</span></div>`
+                : `<div class="linha-info"><span class="desc">${n.total} rejeitada(s) nos últimos ${n.dias} dias</span><span class="val ruim">atenção</span></div>`
+                  + n.itens.map((i) => `<div class="linha-info"><span class="desc">${i.modelo === '65' ? 'NFC-e' : 'NF-e'} nº ${esc(i.numero)} · ${esc(i.quando)}</span><span class="val">${fmtMoney(i.valor)}</span></div>`).join('');
         }
 
         // Leitura de código de barras pela câmera, usando a API nativa do Chrome/Android

@@ -1,6 +1,4 @@
 import asyncio
-import sqlite3
-from datetime import date, timedelta
 
 import httpx
 from fastapi import APIRouter, Query, Request
@@ -8,20 +6,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.meuerp_client import MeuERPClient
-from app.tenants import get_tenant_by_cnpj
-from app.vendas import vendas_por_dia
+from app.deps import current_tenant
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 MAX_RESULTADOS_LISTA = 20
-
-
-def _current_tenant(request: Request) -> sqlite3.Row | None:
-    cnpj = request.session.get("cnpj")
-    if not cnpj:
-        return None
-    return get_tenant_by_cnpj(cnpj)
 
 
 async def _preco_venda(client: MeuERPClient, id_variacao: int) -> float | None:
@@ -48,7 +38,7 @@ async def _estoque(client: MeuERPClient, id_variacao: int, id_loja: int) -> floa
 
 @router.get("/produtos", response_class=HTMLResponse)
 async def produtos_page(request: Request):
-    tenant = _current_tenant(request)
+    tenant = current_tenant(request)
     if tenant is None:
         return RedirectResponse("/login?next=/produtos", status_code=303)
     return templates.TemplateResponse(
@@ -61,7 +51,7 @@ async def produtos_page(request: Request):
 
 @router.get("/api/produtos/lojas")
 async def api_lojas(request: Request):
-    tenant = _current_tenant(request)
+    tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     client = MeuERPClient(tenant["api_token"])
@@ -79,7 +69,7 @@ async def api_lojas(request: Request):
 
 @router.get("/api/produtos/buscar")
 async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int = Query(...)):
-    tenant = _current_tenant(request)
+    tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
 
@@ -110,7 +100,7 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
 
 @router.get("/api/produtos/{id_variacao}/detalhe")
 async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)):
-    tenant = _current_tenant(request)
+    tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
 
@@ -140,45 +130,4 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
         "precoCusto": custo_valor,
         "precoVenda": preco,
         "estoque": estoque,
-    }
-
-
-@router.get("/api/produtos/dashboard-mobile")
-async def api_dashboard_mobile(
-    request: Request,
-    inicio: str | None = Query(default=None),
-    fim: str | None = Query(default=None),
-):
-    tenant = _current_tenant(request)
-    if tenant is None:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
-
-    hoje = date.today()
-    try:
-        data_fim = date.fromisoformat(fim) if fim else hoje
-    except ValueError:
-        data_fim = hoje
-    try:
-        data_inicio = date.fromisoformat(inicio) if inicio else hoje
-    except ValueError:
-        data_inicio = hoje
-
-    # DataFim sem horário é tratado pela API como 00:00:00 daquele dia (exclui o
-    # dia inteiro); por isso usamos o início do dia seguinte como limite superior.
-    fim_exclusivo = data_fim + timedelta(days=1)
-
-    client = MeuERPClient(tenant["api_token"])
-    por_dia = await vendas_por_dia(client, data_inicio.isoformat(), fim_exclusivo.isoformat())
-
-    vendas_por_dia_lista = []
-    cursor = data_inicio
-    while cursor <= data_fim:
-        chave = cursor.isoformat()
-        vendas_por_dia_lista.append({"dia": cursor.strftime("%d/%m"), "valor": por_dia.get(chave, 0)})
-        cursor += timedelta(days=1)
-
-    return {
-        "periodo": {"inicio": data_inicio.isoformat(), "fim": data_fim.isoformat()},
-        "total": sum(por_dia.values()),
-        "vendasPorDia": vendas_por_dia_lista,
     }

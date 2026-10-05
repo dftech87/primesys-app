@@ -1,70 +1,133 @@
-"""Consultas de vendas compartilhadas entre o dashboard web e o dashboard mobile.
+"""Consultas de vendas (SQL no banco do cliente), usadas pelo dashboard web e mobile.
 
-A empresa pode vender por NF-e (55), NFC-e (65) e/ou Pré-Venda (PV, venda de
-balcão ainda não fiscalizada); somamos os três para bater com o valor que o
-próprio Meu ERP Online mostra no painel de Vendas dele.
+O que conta como "venda" (validado contra o endpoint mercadorias-vendidas do ERP em
+três lojas — o total bate centavo a centavo):
+  - modelo 55 / 65 / PV  (PV = pré-venda, como muitos supermercados vendem)
+  - tipomovimento = 'S'  (saída; modelo 55 com 'E' é COMPRA de mercadoria)
+  - status = 'E'         (emitido; 'C' cancelado, 'R' rejeitado, 'X' teste/rascunho)
+Filtrar só por modelo infla o total (notas de compra e testes entram como venda).
+O valor de cada venda é getvaltotal(): igual à soma dos itens e dos pagamentos.
 """
 
-import httpx
+from datetime import date, timedelta
 
 from app.meuerp_client import MeuERPClient
+from app.sqlquery import d, executar, i
 
 MODELOS_VENDA = ("55", "65", "PV")
+_MODELOS = ",".join(f"'{m}'" for m in MODELOS_VENDA)
+_VENDA = f"d.modelo in ({_MODELOS}) and d.tipomovimento = 'S' and d.status = 'E'"
+_CANCELADA = f"d.modelo in ({_MODELOS}) and d.tipomovimento = 'S' and d.status = 'C'"
+
+_ROTULO_PAGAMENTO = {
+    "DINHEIRO": "Dinheiro",
+    "PIX": "Pix",
+    "CARTAO DEBITO": "Cartão de débito",
+    "CARTAO CREDITO": "Cartão de crédito",
+    "A PRAZO": "A prazo (fiado)",
+    "VALE REFEICAO": "Vale refeição",
+    "VALE ALIMENTACAO": "Vale alimentação",
+}
 
 
-async def safe_get(client: MeuERPClient, path: str, params: dict) -> dict:
-    try:
-        return await client.get(path, params=params)
-    except httpx.HTTPStatusError:
-        return {"items": []}
+def _janela(inicio: date, fim: date) -> str:
+    """Intervalo [inicio, fim] inclusivo nos dois lados, como limite superior exclusivo."""
+    return f"d.datahora >= {d(inicio)} and d.datahora < {d(fim + timedelta(days=1))}"
 
 
-async def safe_get_all_pages(client: MeuERPClient, path: str, params: dict, max_pages: int = 5) -> list[dict]:
-    """Percorre as páginas da API (limite máximo real é 100/página) até acabar
-    ou até max_pages, para não estourar o rate limit em contas com muito volume."""
-    items: list[dict] = []
-    page = 1
-    while page <= max_pages:
-        resultado = await safe_get(client, path, {**params, "page": page, "limit": 100})
-        page_items = resultado.get("items") or []
-        items.extend(page_items)
-        if not resultado.get("hasNext"):
-            break
-        page += 1
-    return items
+def _num(valor) -> float:
+    return float(valor or 0)
 
 
-async def total_vendido(client: MeuERPClient, data_inicio: str, data_fim_exclusivo: str) -> float:
-    """Soma o valor líquido vendido no intervalo [data_inicio, data_fim_exclusivo)."""
-    total = 0.0
-    for modelo in MODELOS_VENDA:
-        itens = await safe_get_all_pages(
-            client,
-            "/api/documento/mercadorias-vendidas/v1",
-            {"Modelo": modelo, "DataInicio": data_inicio, "DataFim": data_fim_exclusivo},
-        )
-        total += sum(item.get("valTotalLiquido") or 0 for item in itens)
-    return total
+async def resumo(client: MeuERPClient, inicio: date, fim: date) -> dict:
+    linhas = await executar(
+        client,
+        f"""select count(*) as vendas, coalesce(round(sum(getvaltotal(d._iddocumento)), 2), 0) as total
+            from documento d where {_VENDA} and {_janela(inicio, fim)}""",
+    )
+    vendas = int(linhas[0]["vendas"]) if linhas else 0
+    total = _num(linhas[0]["total"]) if linhas else 0.0
+    return {"vendas": vendas, "total": total, "ticket_medio": total / vendas if vendas else 0.0}
 
 
-async def vendas_por_dia(client: MeuERPClient, data_inicio: str, data_fim_exclusivo: str) -> dict[str, float]:
-    """Soma o valor total de documentos de venda por dia (YYYY-MM-DD) no intervalo.
+async def vendas_por_dia(client: MeuERPClient, inicio: date, fim: date) -> dict[str, float]:
+    linhas = await executar(
+        client,
+        f"""select to_char(d.datahora, 'YYYY-MM-DD') as dia,
+                   round(sum(getvaltotal(d._iddocumento)), 2) as total
+            from documento d where {_VENDA} and {_janela(inicio, fim)}
+            group by 1 order by 1""",
+        max_paginas=6,
+    )
+    return {linha["dia"]: _num(linha["total"]) for linha in linhas}
 
-    Usa /api/documento/v1 (não mercadorias-vendidas) porque precisamos da data de
-    cada documento — o endpoint de mercadorias vendidas só devolve totais já
-    agregados por produto, sem granularidade diária.
-    """
-    por_dia: dict[str, float] = {}
-    for modelo in MODELOS_VENDA:
-        itens = await safe_get_all_pages(
-            client,
-            "/api/documento/v1",
-            {"Modelo": modelo, "DataInicio": data_inicio, "DataFim": data_fim_exclusivo},
-        )
-        for item in itens:
-            data_hora = item.get("dataHora") or ""
-            dia = data_hora[:10]
-            if not dia:
-                continue
-            por_dia[dia] = por_dia.get(dia, 0) + (item.get("valTotal") or 0)
-    return por_dia
+
+async def vendas_por_hora(client: MeuERPClient, dia: date) -> list[dict]:
+    linhas = await executar(
+        client,
+        f"""select extract(hour from d.datahora)::int as hora, count(*) as vendas,
+                   round(sum(getvaltotal(d._iddocumento)), 2) as total
+            from documento d where {_VENDA} and {_janela(dia, dia)}
+            group by 1 order by 1""",
+    )
+    return [{"hora": int(l["hora"]), "vendas": int(l["vendas"]), "valor": _num(l["total"])} for l in linhas]
+
+
+async def formas_pagamento(client: MeuERPClient, inicio: date, fim: date) -> list[dict]:
+    """Soma por forma de pagamento, com o troco (lançado como valor negativo) abatido do dinheiro
+    e rótulos iguais agrupados (o ERP grava 'Pix' e 'PIX', 'A Prazo' e 'A PRAZO' separados)."""
+    linhas = await executar(
+        client,
+        f"""select translate(upper(trim(coalesce(p.descricao, ''))), 'ÁÀÂÃÉÊÍÓÔÕÚÇ', 'AAAAEEIOOOUC') as forma,
+                   round(sum(p.valor), 2) as total
+            from documento_pagamento p join documento d on d._iddocumento = p._iddocumento
+            where {_VENDA} and {_janela(inicio, fim)} group by 1""",
+    )
+    somas: dict[str, float] = {}
+    for linha in linhas:
+        forma = linha["forma"] or "OUTROS"
+        if forma.startswith("TROCO"):
+            forma = "DINHEIRO"
+        somas[forma] = somas.get(forma, 0.0) + _num(linha["total"])
+    positivas = {f: v for f, v in somas.items() if v > 0}
+    total = sum(positivas.values())
+    resultado = [
+        {
+            "forma": _ROTULO_PAGAMENTO.get(f, f.title()),
+            "valor": round(v, 2),
+            "percentual": round(v / total * 100, 1) if total else 0.0,
+        }
+        for f, v in positivas.items()
+    ]
+    return sorted(resultado, key=lambda x: x["valor"], reverse=True)
+
+
+async def top_produtos(client: MeuERPClient, inicio: date, fim: date, limite: int = 10) -> list[dict]:
+    linhas = await executar(
+        client,
+        f"""select max(dm.descricao) as descricao, sum(dm.qtd) as qtd, round(sum(dm.valtotalliquido), 2) as valor
+            from documento d join documento_mercadoria dm on dm._iddocumento = d._iddocumento
+            where {_VENDA} and {_janela(inicio, fim)}
+            group by dm.idmercadoriavariacao order by qtd desc, valor desc limit {i(limite)}""",
+    )
+    return [{"descricao": l["descricao"], "quantidade": _num(l["qtd"]), "valor": _num(l["valor"])} for l in linhas]
+
+
+async def cancelamentos(client: MeuERPClient, inicio: date, fim: date) -> dict:
+    resumo_linhas = await executar(
+        client,
+        f"""select count(*) as quantidade, coalesce(round(sum(getvaltotal(d._iddocumento)), 2), 0) as valor
+            from documento d where {_CANCELADA} and {_janela(inicio, fim)}""",
+    )
+    motivos = await executar(
+        client,
+        f"""select coalesce(nullif(trim(h.motivo), ''), 'Sem motivo informado') as motivo, count(*) as n
+            from documento d join documento_cancelamento_historico h on h._iddocumento = d._iddocumento
+            where {_CANCELADA} and {_janela(inicio, fim)} group by 1 order by 2 desc limit 3""",
+    )
+    base = resumo_linhas[0] if resumo_linhas else {}
+    return {
+        "quantidade": int(base.get("quantidade") or 0),
+        "valor": _num(base.get("valor")),
+        "motivos": [{"motivo": m["motivo"], "quantidade": int(m["n"])} for m in motivos],
+    }

@@ -5,7 +5,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import admin, auth, dashboard, produtos
+from app.routers import admin, auth, dashboard, painel_mobile, produtos
 from app.tenants import create_tenant
 
 app = FastAPI(title="PrimeSys Dashboard")
@@ -43,3 +43,4 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(dashboard.router)
 app.include_router(produtos.router)
+app.include_router(painel_mobile.router)
