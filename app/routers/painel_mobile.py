@@ -113,13 +113,18 @@ async def _secao(nome: str, cnpj: str, coro):
 
 
 async def _montar_alertas(client: MeuERPClient, cnpj: str, loja: int, hoje: date) -> dict:
-    estoque, fiscal, pagar, receber = await asyncio.gather(
+    estoque, fiscal, pagar, receber, ruptura, venda_dia = await asyncio.gather(
         _secao("estoque", cnpj, alertas.estoque(client, loja)),
         _secao("fiscal", cnpj, alertas.notas_rejeitadas(client, hoje)),
         _secao("pagar", cnpj, alertas.contas(client, "pagar", hoje)),
         _secao("receber", cnpj, alertas.contas(client, "receber", hoje)),
+        _secao("ruptura", cnpj, alertas.ruptura(client, loja, hoje)),
+        _secao("venda típica", cnpj, alertas.venda_tipica_dia(client, hoje)),
     )
-    return {"estoque": estoque, "notasRejeitadas": fiscal, "contasPagar": pagar, "contasReceber": receber}
+    return {
+        "estoque": estoque, "notasRejeitadas": fiscal, "contasPagar": pagar, "contasReceber": receber,
+        "ruptura": ruptura, "vendaTipicaDia": venda_dia,
+    }
 
 
 @router.get("/api/produtos/alertas")

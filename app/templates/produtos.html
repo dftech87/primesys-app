@@ -145,7 +145,7 @@
         .linha-info { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
             padding: 9px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
         .linha-info:last-child { border-bottom: 0; }
-        .linha-info .desc { color: #334155; min-width: 0; }
+        .linha-info .desc { color: #334155; min-width: 0; overflow-wrap: anywhere; }
         .linha-info .val { font-weight: 700; white-space: nowrap; }
         .val.ruim { color: #b91c1c; }
         .val.ok { color: #15803d; }
@@ -176,6 +176,17 @@
         .ponto.ok { background: #16a34a; }
         .ponto.aviso { background: #d97706; }
         .ponto.ruim { background: #dc2626; }
+        .gestao summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .gestao summary::-webkit-details-marker { display: none; }
+        .gestao summary::after { content: '\25BE'; color: #94a3b8; font-size: 14px; }
+        .gestao details[open] > summary::after { content: '\25B4'; }
+        .gestao .tit { font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; }
+        .gestao .pill { float: none; margin-left: 6px; text-transform: none; }
+        .sub-resumo { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: #475569; }
+        .gestao details > div { margin-top: 10px; }
+        .sub-titulo { font-size: 11px; font-weight: 700; color: #64748b; margin: 10px 0 2px; }
+        .sub { display: block; font-size: 11px; color: #64748b; margin-top: 2px; }
+        .val small { display: block; font-weight: 400; color: #15803d; }
         details.grupo { border-bottom: 1px solid #f1f5f9; }
         details.grupo:last-child { border-bottom: 0; }
         details.grupo > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
@@ -293,10 +304,27 @@
 
             <div id="alertasView">
                 <div id="alertaResumo" class="resumo-alertas"></div>
+                <div class="dash-panel gestao" id="gestaoRuptura" style="display:none">
+                    <details>
+                        <summary><div><div class="tit">Vendas escapando</div><div class="sub-resumo" id="rupturaResumo"></div></div></summary>
+                        <div id="rupturaDetalhe"></div>
+                    </details>
+                </div>
+                <div class="dash-panel gestao" id="gestaoCaixa" style="display:none">
+                    <details>
+                        <summary><div><div class="tit">Caixa nos próximos 30 dias</div><div class="sub-resumo" id="caixaResumo"></div></div></summary>
+                        <div id="caixaDetalhe"></div>
+                    </details>
+                </div>
                 <div class="dash-panel"><h3>Contas a pagar <span class="pill" id="pillPagar"></span></h3><div id="alertaPagar"></div></div>
                 <div class="dash-panel"><h3>Contas a receber (fiado) <span class="pill" id="pillReceber"></span></h3><div id="alertaReceber"></div></div>
                 <div class="dash-panel"><h3>Notas fiscais rejeitadas <span class="pill" id="pillNotas"></span></h3><div id="alertaNotas"></div></div>
-                <div class="dash-panel"><h3>Estoque <span class="pill" id="pillEstoque"></span></h3><div id="alertaEstoque"></div></div>
+                <div class="dash-panel gestao">
+                    <details>
+                        <summary><div><div class="tit">Estoque <span class="pill" id="pillEstoque"></span></div><div class="sub-resumo" id="estoqueResumo"></div></div></summary>
+                        <div id="alertaEstoque"></div>
+                    </details>
+                </div>
             </div>
         </main>
 
@@ -767,9 +795,77 @@
             }
         }
 
+        function linhaRuptura(item, classe) {
+            return `<div class="linha-info">
+                <span class="desc">${esc(item.descricao)}<span class="sub">${fmtMoney(item.valorDia)}/dia · vendeu em ${item.diasComVenda} dias · última venda ${esc(item.ultimaVenda)}</span></span>
+                <span class="val ${classe}">${fmtNum(item.saldo)}</span></div>`;
+        }
+
+        // Só aparece quando há o que dizer: sem produto parado, o bloco some.
+        function renderRuptura(r) {
+            const painel = document.getElementById('gestaoRuptura');
+            if (!r || !r.total) { painel.style.display = 'none'; return; }
+            painel.style.display = 'block';
+            document.getElementById('rupturaResumo').textContent =
+                `${r.total} ${r.total === 1 ? 'produto parou' : 'produtos pararam'} de vender · ~${fmtMoney(r.valorDia)}/dia`;
+
+            const outros = (n) => n > 0 ? `<div class="nota">e mais ${n}.</div>` : '';
+            let html = '<div class="nota">Vendiam quase todo dia e não vendem há 3 dias. Valores por dia são estimativas.</div>';
+            if (r.repor.length) {
+                html += '<div class="sub-titulo">REPOR · saldo zerado ou negativo</div>'
+                    + r.repor.map((i) => linhaRuptura(i, 'ruim')).join('') + outros(r.totalRepor - r.repor.length);
+            }
+            if (r.conferir.length) {
+                html += '<div class="sub-titulo">CONFERIR · tem saldo, mas parou de vender (gôndola ou preço)</div>'
+                    + r.conferir.map((i) => linhaRuptura(i, 'aviso')).join('') + outros(r.total - r.totalRepor - r.conferir.length);
+            }
+            document.getElementById('rupturaDetalhe').innerHTML = html;
+        }
+
+        // Caixa: quanto vence nos próximos 30 dias contra quantos dias de venda isso representa.
+        function renderCaixa(data) {
+            const painel = document.getElementById('gestaoCaixa');
+            const p = data.contasPagar, c = data.contasReceber, venda = data.vendaTipicaDia;
+            if (!p || !c) { painel.style.display = 'none'; return; }
+            painel.style.display = 'block';
+
+            const soma = (t, chaves) => chaves.reduce((s, k) => s + t[k].valor, 0);
+            const pagar7 = soma(p, ['hoje', 'proximos7']), receber7 = soma(c, ['hoje', 'proximos7']);
+            const pagar30 = soma(p, ['hoje', 'proximos7', 'dias8a15', 'dias16a30']);
+            const receber30 = soma(c, ['hoje', 'proximos7', 'dias8a15', 'dias16a30']);
+
+            let nivel = 'nd', texto = 'Sem vendas recentes para comparar';
+            if (venda > 0) {
+                const dias7 = pagar7 / venda;
+                nivel = dias7 <= 2 ? 'ok' : dias7 <= 5 ? 'aviso' : 'ruim';
+                const veredito = { ok: 'Semana tranquila', aviso: 'Semana de atenção', ruim: 'Semana apertada' }[nivel];
+                texto = `${veredito} · ${fmtPct(pagar30 / venda)} dias de venda`;
+            }
+            document.getElementById('caixaResumo').innerHTML = `<span class="ponto ${nivel}"></span><span>${esc(texto)}</span>`;
+
+            const faixa = (rotulo, chaves) => {
+                const pagar = soma(p, chaves), receber = soma(c, chaves);
+                return `<div class="linha-info"><span class="desc">${rotulo}</span>
+                    <span class="val ruim">− ${fmtMoney(pagar)}<small>+ ${fmtMoney(receber)}</small></span></div>`;
+            };
+            document.getElementById('caixaDetalhe').innerHTML =
+                '<div class="nota" style="margin-top:0">Em vermelho, o que você paga; em verde, o que recebe.</div>'
+                + faixa('Hoje e próximos 7 dias', ['hoje', 'proximos7'])
+                + faixa('De 8 a 15 dias', ['dias8a15'])
+                + faixa('De 16 a 30 dias', ['dias16a30'])
+                + `<div class="linha-info"><span class="desc"><b>Total em 30 dias</b></span><span class="val ruim">− ${fmtMoney(pagar30)}<small>+ ${fmtMoney(receber30)}</small></span></div>`
+                + (venda > 0 ? `<div class="nota">Venda média por dia: ${fmtMoney(venda)} (últimos 28 dias, sem dias fora do padrão).</div>` : '')
+                + ((p.atrasadas.quantidade || c.atrasadas.quantidade)
+                    ? `<div class="nota">Já vencido, fora desta conta: pagar ${fmtMoney(p.atrasadas.valor)} · receber ${fmtMoney(c.atrasadas.valor)}. Detalhes nos blocos de contas abaixo.</div>` : '');
+        }
+
         function renderAlertas(data) {
             const status = statusAlertas(data);
             renderResumo(status);
+            renderRuptura(data.ruptura);
+            renderCaixa(data);
+            document.getElementById('estoqueResumo').textContent = data.estoque
+                ? `${data.estoque.abaixoMinimo} abaixo do mínimo · ${data.estoque.negativos} negativos` : '';
             pintarPill('pillPagar', status.pagar);
             pintarPill('pillReceber', status.receber);
             pintarPill('pillNotas', status.notas);
