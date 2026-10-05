@@ -101,7 +101,13 @@
             display: flex; flex-direction: column; align-items: center; gap: 2px;
             color: #94a3b8; font-size: 11px;
         }
-        .tabbar button .tab-icone { font-size: 20px; line-height: 1; }
+        .tabbar button .tab-icone { font-size: 20px; line-height: 1; position: relative; }
+        .selo {
+            display: none; position: absolute; top: -5px; right: -10px; min-width: 16px; height: 16px;
+            padding: 0 4px; border-radius: 8px; background: #dc2626; color: #fff;
+            font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+        }
+        .selo.mostrar { display: block; }
         .tabbar button.ativo { color: var(--azul); font-weight: 700; }
 
         #dashboardView { display: none; padding: 16px; }
@@ -154,6 +160,36 @@
         .insight:last-child { border-bottom: 0; }
         .insight .ico { font-size: 20px; flex-shrink: 0; }
         #alertasView { display: none; padding: 16px; }
+        .pill { float: right; font-size: 10px; font-weight: 700; text-transform: none; padding: 2px 9px; border-radius: 10px; }
+        .pill.ok { background: #dcfce7; color: #166534; }
+        .pill.aviso { background: #fef3c7; color: #92400e; }
+        .pill.ruim { background: #fee2e2; color: #991b1b; }
+        .pill.nd { background: #e2e8f0; color: #475569; }
+        .resumo-alertas { border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 5px solid #94a3b8; }
+        .resumo-alertas.ok { border-left-color: #16a34a; }
+        .resumo-alertas.aviso { border-left-color: #d97706; }
+        .resumo-alertas.ruim { border-left-color: #dc2626; }
+        .resumo-alertas .titulo { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+        .resumo-alertas .item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; color: #334155; }
+        .ponto { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #94a3b8; }
+        .ponto.ok { background: #16a34a; }
+        .ponto.aviso { background: #d97706; }
+        .ponto.ruim { background: #dc2626; }
+        details.grupo { border-bottom: 1px solid #f1f5f9; }
+        details.grupo:last-child { border-bottom: 0; }
+        details.grupo > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
+            align-items: baseline; gap: 12px; padding: 10px 0; font-size: 13px; color: #334155; }
+        details.grupo > summary::-webkit-details-marker { display: none; }
+        details.grupo > summary .desc::after { content: ' \25BE'; color: #94a3b8; }
+        details.grupo[open] > summary .desc::after { content: ' \25B4'; }
+        details.grupo > summary.vazio { cursor: default; }
+        details.grupo > summary.vazio .desc::after { content: ''; }
+        .titulo-conta { padding: 8px 0 8px 10px; border-top: 1px dashed #e2e8f0; font-size: 12px; color: #475569; }
+        .titulo-conta .linha1 { display: flex; justify-content: space-between; gap: 10px; }
+        .titulo-conta .nome { color: #0f172a; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+        .titulo-conta .quando { color: #64748b; font-size: 11px; margin-top: 2px; }
+        .titulo-conta .quando.atraso { color: #b91c1c; }
 
         #vazio { padding: 60px 32px; text-align: center; color: #475569; }
         #vazio .emoji { font-size: 48px; margin-bottom: 16px; }
@@ -256,10 +292,11 @@
             </div>
 
             <div id="alertasView">
-                <div class="dash-panel"><h3>Estoque</h3><div id="alertaEstoque"></div></div>
-                <div class="dash-panel"><h3>Contas a pagar</h3><div id="alertaPagar"></div></div>
-                <div class="dash-panel"><h3>Contas a receber (fiado)</h3><div id="alertaReceber"></div></div>
-                <div class="dash-panel"><h3>Notas fiscais rejeitadas</h3><div id="alertaNotas"></div></div>
+                <div id="alertaResumo" class="resumo-alertas"></div>
+                <div class="dash-panel"><h3>Contas a pagar <span class="pill" id="pillPagar"></span></h3><div id="alertaPagar"></div></div>
+                <div class="dash-panel"><h3>Contas a receber (fiado) <span class="pill" id="pillReceber"></span></h3><div id="alertaReceber"></div></div>
+                <div class="dash-panel"><h3>Notas fiscais rejeitadas <span class="pill" id="pillNotas"></span></h3><div id="alertaNotas"></div></div>
+                <div class="dash-panel"><h3>Estoque <span class="pill" id="pillEstoque"></span></h3><div id="alertaEstoque"></div></div>
             </div>
         </main>
 
@@ -273,7 +310,7 @@
                 Dashboard
             </button>
             <button id="tabAlertas">
-                <span class="tab-icone">&#9888;&#65039;</span>
+                <span class="tab-icone">&#9888;&#65039;<span class="selo" id="seloAlertas"></span></span>
                 Alertas
             </button>
         </nav>
@@ -400,6 +437,7 @@
                 .join('');
             // Se a pessoa já abriu "Alertas" antes da lista de lojas chegar, carrega agora.
             if (abaAtual === 'alertas') carregarAlertas();
+            else setTimeout(() => carregarAlertas(true), 2500);
         }
 
         carregarLojas();
@@ -610,28 +648,111 @@
 
         const SECAO_INDISPONIVEL = '<div class="indisponivel">Indisponível no momento.</div>';
 
-        function linhaConta(rotulo, grupo, ruimSeHouver) {
+        const NIVEL_TEXTO = { ok: 'OK', aviso: 'Atenção', ruim: 'Urgente', nd: 'Indisponível' };
+
+        function diasAte(iso) {
+            const [a, m, d] = iso.split('-').map(Number);
+            const [ha, hm, hd] = hojeISO().split('-').map(Number);
+            return Math.round((Date.UTC(a, m - 1, d) - Date.UTC(ha, hm - 1, hd)) / 86400000);
+        }
+
+        // Cada área vira um nível (ok / aviso / ruim) e uma frase curta; o resumo do topo e o selo da aba usam isso.
+        function statusAlertas(data) {
+            const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+            const r = {};
+
+            const p = data.contasPagar;
+            r.pagar = !p ? { nivel: 'nd', texto: 'Contas a pagar indisponíveis' }
+                : p.atrasadas.quantidade ? { nivel: 'ruim', texto: `Contas a pagar: ${plural(p.atrasadas.quantidade, 'atrasada', 'atrasadas')} · ${fmtMoney(p.atrasadas.valor)}` }
+                : p.hoje.quantidade ? { nivel: 'aviso', texto: `Contas a pagar: ${plural(p.hoje.quantidade, 'vence hoje', 'vencem hoje')} · ${fmtMoney(p.hoje.valor)}` }
+                : { nivel: 'ok', texto: 'Contas a pagar em dia' };
+
+            const c = data.contasReceber;
+            r.receber = !c ? { nivel: 'nd', texto: 'Contas a receber indisponíveis' }
+                : c.atrasadas.quantidade ? { nivel: 'aviso', texto: `A receber: ${plural(c.atrasadas.quantidade, 'atrasada', 'atrasadas')} · ${fmtMoney(c.atrasadas.valor)}` }
+                : { nivel: 'ok', texto: 'Nada atrasado a receber' };
+
+            const n = data.notasRejeitadas;
+            r.notas = !n ? { nivel: 'nd', texto: 'Notas fiscais indisponíveis' }
+                : n.total ? { nivel: 'ruim', texto: `${plural(n.total, 'nota rejeitada', 'notas rejeitadas')} nos últimos ${n.dias} dias` }
+                : { nivel: 'ok', texto: 'Nenhuma nota rejeitada' };
+
+            const e = data.estoque;
+            r.estoque = !e ? { nivel: 'nd', texto: 'Estoque indisponível' }
+                : (e.abaixoMinimo || e.negativos)
+                    ? { nivel: 'aviso', texto: `Estoque: ${e.abaixoMinimo} abaixo do mínimo · ${e.negativos} negativos` }
+                    : { nivel: 'ok', texto: 'Estoque sem problemas' };
+            return r;
+        }
+
+        function pintarPill(id, st) {
+            const el = document.getElementById(id);
+            el.className = `pill ${st.nivel}`;
+            el.textContent = NIVEL_TEXTO[st.nivel];
+        }
+
+        function renderResumo(status) {
+            const lista = ['pagar', 'notas', 'receber', 'estoque'].map((k) => status[k]);
+            const ruins = lista.filter((s) => s.nivel === 'ruim').length;
+            const avisos = lista.filter((s) => s.nivel === 'aviso').length;
+            const problemas = ruins + avisos;
+            const nivel = ruins ? 'ruim' : avisos ? 'aviso' : 'ok';
+            const titulo = problemas
+                ? `${problemas} ${problemas === 1 ? 'ponto pede' : 'pontos pedem'} atenção`
+                : 'Tudo em ordem';
+            const el = document.getElementById('alertaResumo');
+            el.className = `resumo-alertas ${nivel}`;
+            el.innerHTML = `<div class="titulo">${titulo}</div>`
+                + lista.map((s) => `<div class="item"><span class="ponto ${s.nivel}"></span><span>${esc(s.texto)}</span></div>`).join('');
+
+            const selo = document.getElementById('seloAlertas');
+            selo.textContent = problemas;
+            selo.classList.toggle('mostrar', problemas > 0);
+        }
+
+        function linhaConta(rotulo, grupo, ruimSeHouver, tipoGrupo) {
             const classe = grupo.quantidade && ruimSeHouver ? 'ruim' : '';
-            return `<div class="linha-info"><span class="desc">${rotulo}</span><span class="val ${classe}">${grupo.quantidade} · ${fmtMoney(grupo.valor)}</span></div>`;
+            const resumo = `<span class="desc">${rotulo}</span><span class="val ${classe}">${grupo.quantidade} · ${fmtMoney(grupo.valor)}</span>`;
+            if (!grupo.quantidade) return `<div class="linha-info">${resumo}</div>`;
+
+            const titulos = grupo.titulos.map((t) => {
+                const dias = diasAte(t.vencimento);
+                const quando = tipoGrupo === 'atrasadas' ? `venceu ${fmtDataBR(t.vencimento)} · ${-dias} dia(s) de atraso`
+                    : tipoGrupo === 'hoje' ? 'vence hoje'
+                    : `vence ${fmtDataBR(t.vencimento)} · em ${dias} dia(s)`;
+                return `<div class="titulo-conta">
+                    <div class="linha1"><span class="nome">${esc(t.nome || 'Sem nome')}</span><b>${fmtMoney(t.valor)}</b></div>
+                    <div class="quando ${tipoGrupo === 'atrasadas' ? 'atraso' : ''}">nº ${esc(t.numero ?? '-')} · ${quando}</div>
+                </div>`;
+            }).join('');
+            const resto = grupo.quantidade > grupo.titulos.length
+                ? `<div class="nota">Mostrando os ${grupo.titulos.length} mais antigos de ${grupo.quantidade}.</div>` : '';
+            return `<details class="grupo"><summary>${resumo}</summary>${titulos}${resto}</details>`;
         }
 
         function renderContas(idElemento, contas) {
             const el = document.getElementById(idElemento);
             if (!contas) { el.innerHTML = SECAO_INDISPONIVEL; return; }
-            el.innerHTML = linhaConta('Atrasadas', contas.atrasadas, true)
-                + linhaConta('Vencem hoje', contas.hoje, false)
-                + linhaConta('Próximos 7 dias', contas.proximos7, false)
+            el.innerHTML = linhaConta('Atrasadas', contas.atrasadas, true, 'atrasadas')
+                + linhaConta('Vencem hoje', contas.hoje, false, 'hoje')
+                + linhaConta('Próximos 7 dias', contas.proximos7, false, 'proximos7')
                 + (contas.parcial ? '<div class="nota">Mostrando apenas as primeiras 500 contas.</div>' : '');
         }
 
-        async function carregarAlertas() {
+        // silencioso = atualiza o selo da aba sem apagar o que a pessoa está vendo.
+        async function carregarAlertas(silencioso = false) {
             const seq = ++alertasSeq;
             const loja = elLoja.value;
-            const ids = ['alertaEstoque', 'alertaPagar', 'alertaReceber', 'alertaNotas'];
-            ids.forEach((id) => { document.getElementById(id).innerHTML = '<div class="loading">Carregando...</div>'; });
+            const ids = ['alertaResumo', 'alertaEstoque', 'alertaPagar', 'alertaReceber', 'alertaNotas'];
+            const pills = ['pillPagar', 'pillReceber', 'pillNotas', 'pillEstoque'];
             if (!loja) {
-                ids.forEach((id) => { document.getElementById(id).innerHTML = '<div class="indisponivel">Selecione a loja.</div>'; });
+                if (!silencioso) ids.forEach((id) => { document.getElementById(id).innerHTML = '<div class="indisponivel">Selecione a loja.</div>'; });
                 return;
+            }
+            if (!silencioso) {
+                ids.forEach((id) => { document.getElementById(id).innerHTML = '<div class="loading">Carregando...</div>'; });
+                document.getElementById('alertaResumo').className = 'resumo-alertas';
+                pills.forEach((id) => { document.getElementById(id).className = 'pill'; document.getElementById(id).textContent = ''; });
             }
             try {
                 const params = new URLSearchParams({ loja, hoje: hojeISO() });
@@ -641,12 +762,19 @@
                 if (seq !== alertasSeq) return;
                 renderAlertas(data);
             } catch (err) {
-                if (seq !== alertasSeq) return;
+                if (silencioso || seq !== alertasSeq) return;
                 ids.forEach((id) => { document.getElementById(id).innerHTML = SECAO_INDISPONIVEL; });
             }
         }
 
         function renderAlertas(data) {
+            const status = statusAlertas(data);
+            renderResumo(status);
+            pintarPill('pillPagar', status.pagar);
+            pintarPill('pillReceber', status.receber);
+            pintarPill('pillNotas', status.notas);
+            pintarPill('pillEstoque', status.estoque);
+
             const e = data.estoque;
             document.getElementById('alertaEstoque').innerHTML = !e ? SECAO_INDISPONIVEL
                 : `<div class="linha-info"><span class="desc">Saldo negativo</span><span class="val ${e.negativos ? 'ruim' : 'ok'}">${e.negativos} produto(s)</span></div>`

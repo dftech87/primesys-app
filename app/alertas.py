@@ -70,16 +70,28 @@ async def notas_rejeitadas(client: MeuERPClient, hoje: date, dias: int = 7) -> d
     }
 
 
+TITULOS_POR_GRUPO = 10
+
+
 def _agrupar_vencimentos(itens: list[dict], hoje: date, parcial: bool) -> dict:
-    grupos = {"atrasadas": [0, 0.0], "hoje": [0, 0.0], "proximos7": [0, 0.0]}
+    grupos = {"atrasadas": [0, 0.0, []], "hoje": [0, 0.0, []], "proximos7": [0, 0.0, []]}
     for item in itens:
         vencimento = (item.get("dtVencimento") or "")[:10]
         if not vencimento:
             continue
         chave = "atrasadas" if vencimento < hoje.isoformat() else "hoje" if vencimento == hoje.isoformat() else "proximos7"
+        saldo = _num(item.get("valSaldo"))
         grupos[chave][0] += 1
-        grupos[chave][1] += _num(item.get("valSaldo"))
-    resultado = {k: {"quantidade": q, "valor": round(v, 2)} for k, (q, v) in grupos.items()}
+        grupos[chave][1] += saldo
+        grupos[chave][2].append(
+            {"nome": item.get("nome") or "", "numero": item.get("numero"), "vencimento": vencimento, "valor": saldo}
+        )
+
+    resultado = {}
+    for chave, (quantidade, valor, titulos) in grupos.items():
+        # Mais antigos primeiro (em atraso, é o que mais pede atenção); só os primeiros vão para o celular.
+        titulos.sort(key=lambda t: (t["vencimento"], -t["valor"]))
+        resultado[chave] = {"quantidade": quantidade, "valor": round(valor, 2), "titulos": titulos[:TITULOS_POR_GRUPO]}
     resultado["parcial"] = parcial
     return resultado
 
