@@ -145,6 +145,14 @@
         .val.ok { color: #15803d; }
         .val.aviso { color: #b45309; }
         .indisponivel { color: #94a3b8; font-size: 13px; }
+        .rosca { text-align: center; margin-bottom: 8px; }
+        .rosca svg { max-width: 190px; width: 100%; height: auto; }
+        .legenda .cor { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
+        .legenda .linha-info .desc { display: flex; align-items: center; }
+        .insight { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9;
+            font-size: 13px; line-height: 1.45; color: #334155; }
+        .insight:last-child { border-bottom: 0; }
+        .insight .ico { font-size: 20px; flex-shrink: 0; }
         #alertasView { display: none; padding: 16px; }
 
         #vazio { padding: 60px 32px; text-align: center; color: #475569; }
@@ -230,12 +238,16 @@
                     <div class="dash-card"><div class="rotulo">Ticket médio</div><div class="valor" id="dashTicket">-</div></div>
                 </div>
                 <div class="dash-panel">
-                    <h3 id="dashDiarioTitulo">Vendas por dia</h3>
-                    <canvas id="chartDiario" height="200"></canvas>
-                </div>
-                <div class="dash-panel">
                     <h3>Formas de pagamento</h3>
                     <div id="dashFormas"></div>
+                </div>
+                <div class="dash-panel">
+                    <h3>Resumo do período</h3>
+                    <div id="dashInsights"></div>
+                </div>
+                <div class="dash-panel">
+                    <h3 id="dashDiarioTitulo">Vendas por dia</h3>
+                    <canvas id="chartDiario" height="200"></canvas>
                 </div>
                 <div class="dash-panel">
                     <h3>Cancelamentos</h3>
@@ -481,6 +493,75 @@
             }
         }
 
+        const CORES_ROSCA = ['#0b3895', '#10b5d9', '#0f766e', '#b45309', '#7c3aed', '#94a3b8', '#db2777', '#65a30d'];
+
+        function valorCurto(v) {
+            if (v >= 1e6) return `${(v / 1e6).toFixed(1).replace('.', ',')} mi`;
+            if (v >= 1e3) return `${(v / 1e3).toFixed(1).replace('.', ',')} mil`;
+            return fmtMoney(v);
+        }
+
+        // Rosca (SVG) das formas de pagamento + legenda. Texto do ERP sempre passa por esc().
+        function rosca(formas) {
+            const soma = formas.reduce((s, f) => s + Number(f.valor), 0) || 1;
+            const r = 50, circ = 2 * Math.PI * r;
+            let acumulado = 0;
+            const arcos = formas.map((f, i) => {
+                const parte = circ * Number(f.valor) / soma;
+                const arco = `<circle cx="75" cy="75" r="${r}" fill="none" stroke="${CORES_ROSCA[i % CORES_ROSCA.length]}" stroke-width="22"
+                    stroke-dasharray="${parte} ${circ}" stroke-dashoffset="${-acumulado}" transform="rotate(-90 75 75)"/>`;
+                acumulado += parte;
+                return arco;
+            }).join('');
+            const legenda = formas.map((f, i) => `
+                <div class="linha-info">
+                    <span class="desc"><span class="cor" style="background:${CORES_ROSCA[i % CORES_ROSCA.length]}"></span>${esc(f.forma)}</span>
+                    <span class="val">${fmtMoney(f.valor)} · ${fmtPct(f.percentual)}%</span>
+                </div>`).join('');
+            return `<div class="rosca"><svg viewBox="0 0 150 150" role="img" aria-label="Formas de pagamento">${arcos}
+                    <text x="75" y="70" text-anchor="middle" font-size="10" fill="#64748b">Total</text>
+                    <text x="75" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">${valorCurto(soma)}</text>
+                </svg></div><div class="legenda">${legenda}</div>`;
+        }
+
+        // Frases que explicam os números. Só usa o que o endpoint já devolve; nada novo é consultado.
+        function insights(data, inicio) {
+            const item = (ico, html) => `<div class="insight"><span class="ico">${ico}</span><div>${html}</div></div>`;
+            if (!data.vendas) return item('🛒', 'Sem vendas no período.');
+            const lista = [];
+
+            const comp = data.comparativo;
+            if (comp && comp.total > 0) {
+                const pct = (data.total - comp.total) / comp.total * 100;
+                const sobe = pct >= 0;
+                lista.push(item(sobe ? '📈' : '📉',
+                    `Vendas <b>${fmtPct(Math.abs(pct))}% ${sobe ? 'acima' : 'abaixo'}</b> ${esc(comp.rotulo)} (${fmtMoney(comp.total)}).`));
+            }
+
+            if (data.vendasPorHora && data.vendasPorHora.length) {
+                const pico = data.vendasPorHora.reduce((a, b) => (b.valor > a.valor ? b : a));
+                lista.push(item('🕒', `Pico às <b>${pico.hora}h</b>, com ${fmtMoney(pico.valor)} em ${Number(pico.vendas).toLocaleString('pt-BR')} vendas.`));
+            } else if (data.vendasPorDia && data.vendasPorDia.length > 1) {
+                const melhor = data.vendasPorDia.reduce((a, b) => (b.valor > a.valor ? b : a));
+                lista.push(item('📅', `Melhor dia: <b>${esc(melhor.dia)}</b>, com ${fmtMoney(melhor.valor)}.`));
+            }
+
+            const formas = data.formasPagamento;
+            if (formas.length) {
+                const segunda = formas[1] ? `; ${esc(formas[1].forma)} vem em 2º (${fmtPct(formas[1].percentual)}%)` : '';
+                lista.push(item('💵', `<b>${esc(formas[0].forma)}</b> lidera com ${fmtPct(formas[0].percentual)}%${segunda}.`));
+            }
+
+            const c = data.cancelamentos;
+            const parteCancelada = data.total > 0 ? ` (${fmtPct(c.valor / data.total * 100)}% do vendido)` : '';
+            lista.push(c.quantidade
+                ? item('⚠️', `<b>${c.quantidade} cancelamento(s)</b> somando ${fmtMoney(c.valor)}${parteCancelada}.`)
+                : item('✅', '<b>Nenhum cancelamento</b> no período.'));
+
+            lista.push(item('🧾', `Ticket médio de <b>${fmtMoney(data.ticketMedio)}</b> em ${Number(data.vendas).toLocaleString('pt-BR')} vendas.`));
+            return lista.join('');
+        }
+
         function renderDashboard(data, inicio, fim) {
             document.getElementById('dashTotal').textContent = fmtMoney(data.total);
             document.getElementById('dashVendas').textContent = Number(data.vendas).toLocaleString('pt-BR');
@@ -512,15 +593,13 @@
 
             const elFormas = document.getElementById('dashFormas');
             elFormas.innerHTML = data.formasPagamento.length
-                ? data.formasPagamento.map((f) => `
-                    <div class="forma">
-                        <div class="topo"><span>${esc(f.forma)}</span><span>${fmtMoney(f.valor)} · ${fmtPct(f.percentual)}%</span></div>
-                        <div class="barra"><span style="width:${Math.min(100, Number(f.percentual))}%"></span></div>
-                    </div>`).join('')
+                ? rosca(data.formasPagamento)
                 : '<div class="indisponivel">Sem pagamentos no período.</div>';
             if (data.semFormaPagamento > 0) {
                 elFormas.innerHTML += `<div class="nota">${fmtMoney(data.semFormaPagamento)} em vendas sem forma de pagamento lançada (por exemplo, nota fiscal a prazo ou por boleto).</div>`;
             }
+
+            document.getElementById('dashInsights').innerHTML = insights(data, inicio);
 
             const c = data.cancelamentos;
             document.getElementById('dashCancelamentos').innerHTML = c.quantidade
