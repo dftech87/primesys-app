@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 
 import httpx
 from fastapi import APIRouter, Query, Request
@@ -189,3 +190,41 @@ async def api_entradas(request: Request, id_variacao: int, limite: int = Query(1
     except ConsultaIndisponivel:
         return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
     return {"entradas": itens, "limite": limite, "precoVenda": preco or 0}
+
+
+@router.get("/api/produtos/{id_variacao}/fornecedores")
+async def api_fornecedores(request: Request, id_variacao: int):
+    """Custo por fornecedor (últimos 12 meses) para comparar quem vende mais barato."""
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+
+    client = MeuERPClient(tenant["api_token"])
+    hoje = date.today()
+    try:
+        return await cached(
+            (tenant["cnpj"], "fornecedores", id_variacao, hoje),
+            TTL_ENTRADAS,
+            lambda: compras.fornecedores_produto(client, id_variacao, hoje),
+        )
+    except ConsultaIndisponivel:
+        return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
+
+
+@router.get("/api/produtos/{id_variacao}/historico-preco")
+async def api_historico_preco(request: Request, id_variacao: int):
+    """Mudanças do preço de venda, com o primeiro nome de quem alterou (nunca o e-mail)."""
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+
+    client = MeuERPClient(tenant["api_token"])
+    try:
+        mudancas = await cached(
+            (tenant["cnpj"], "historico-preco", id_variacao),
+            TTL_ENTRADAS,
+            lambda: compras.historico_preco(client, id_variacao),
+        )
+    except ConsultaIndisponivel:
+        return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
+    return {"mudancas": mudancas}

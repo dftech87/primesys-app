@@ -168,7 +168,31 @@
         .tab-ent .mg-aviso { color: #b45309; }
         .tab-ent .det { padding: 4px 6px 12px; font-size: 12px; color: #475569; line-height: 1.55; }
         .tab-ent .det .forn { font-weight: 700; color: #0f172a; }
-        .tab-ent .legenda { font-size: 11px; color: #64748b; margin: 2px 0 8px; }
+        .forn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .forn-grid.um { grid-template-columns: 1fr; }
+        .forn { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; min-width: 0; }
+        .forn.barato { border: 2px solid #16a34a; background: #f0fdf4; }
+        .etq-barato { display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: .3px; background: #dcfce7;
+            color: #166534; padding: 2px 7px; border-radius: 8px; }
+        .etq-vazia { display: inline-block; font-size: 9.5px; padding: 2px 0; }
+        .forn-nome { font-weight: 700; font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; line-height: 1.3; }
+        .forn-custo { font-size: 19px; font-weight: 800; color: #0b3895; margin-top: 3px; }
+        .forn-custo small { font-size: 10px; font-weight: 400; color: #64748b; }
+        .forn-sub { font-size: 10.5px; color: #64748b; margin-top: 2px; }
+        .forn-aviso { font-size: 10.5px; color: #92400e; margin-top: 5px; line-height: 1.35; }
+        .forn-conclusao { margin-top: 10px; padding: 10px 12px; background: #fffbeb; border-radius: 10px; font-size: 12px; line-height: 1.5; color: #475569; }
+        .linha-preco { display: grid; grid-template-columns: 56px 1fr 1fr 82px; gap: 4px; align-items: center; padding: 8px 6px;
+            border-bottom: 1px solid #eef2f7; font-size: 12px; }
+        .linha-preco.cab { font-size: 10px; color: #64748b; padding: 4px 6px; border: 0; }
+        .linha-preco .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .linha-preco .lp-quem { padding-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .linha-preco .lp-nota { grid-column: 1 / -1; font-size: 11px; line-height: 1.4; }
+        .linha-preco.atual { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-weight: 800; color: #0b3895; }
+        .aviso-preco { color: #92400e; }
+        .corrigiu-preco { color: #64748b; }
+        .linha-preco .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
+        .linha-preco .sobe { color: #b91c1c; } .linha-preco .desce { color: #15803d; } .linha-preco .sem { color: #94a3b8; }
+        .tab-ent .legenda, #destinoPreco .legenda { font-size: 11px; color: #64748b; margin: 2px 0 8px; }
         .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid #cbd5e1;
             border-radius: 8px; background: #fff; color: var(--azul); font-size: 13px; font-weight: 700; cursor: pointer; }
 
@@ -509,15 +533,107 @@
             }
         }
 
+        // Fornecedores (cartões lado a lado) e histórico do preço de venda: blocos recolhidos que só
+        // consultam o ERP quando a pessoa os abre.
+        function renderFornecedores(data) {
+            const lista = data.fornecedores;
+            if (!lista.length) return '<div class="indisponivel">Sem entradas deste produto nos últimos 12 meses.</div>';
+            const maisBarato = lista[0];
+            // Custo muito acima do mais barato quase sempre é embalagem lançada errada (ex.: caixa como unidade).
+            const fora = (f) => lista.length > 1 && f.ultimoCusto > 5 * maisBarato.ultimoCusto;
+            const cartoes = lista.map((f, i) => `
+                <div class="forn ${i === 0 && lista.length > 1 ? 'barato' : ''}">
+                    ${i === 0 && lista.length > 1 ? '<span class="etq-barato">MAIS BARATO</span>' : '<span class="etq-vazia">&nbsp;</span>'}
+                    <div class="forn-nome">${esc(f.fornecedor)}</div>
+                    <div class="forn-custo">${fmtMoney(f.ultimoCusto)}<small>/un</small></div>
+                    <div class="forn-sub">menor ${fmtMoney(f.menor)} · maior ${fmtMoney(f.maior)}</div>
+                    <div class="forn-sub">${f.entradas} ${f.entradas === 1 ? 'entrada' : 'entradas'} · ${esc(f.ultimaCompra)}</div>
+                    ${fora(f) ? '<div class="forn-aviso">⚠ custo muito acima dos demais: confira a embalagem</div>' : ''}
+                </div>`).join('');
+
+            let conclusao;
+            if (lista.length < 2) {
+                conclusao = 'Só há um fornecedor nas entradas dos últimos 12 meses.';
+            } else {
+                const ultimo = lista.find((f) => f.fornecedor === data.fornecedorUltimaCompra) || lista[lista.length - 1];
+                const dif = ultimo.ultimoCusto - maisBarato.ultimoCusto;
+                conclusao = fora(ultimo)
+                    ? `A última compra (${esc(ultimo.fornecedor)}, ${fmtMoney(ultimo.ultimoCusto)}/un) tem custo muito acima dos outros fornecedores. Confira se a embalagem foi lançada certa na nota.`
+                    : dif > 0.004
+                    ? `Na última compra você pagou ${fmtMoney(ultimo.ultimoCusto)}/un (${esc(ultimo.fornecedor)}). O mais barato é ${esc(maisBarato.fornecedor)}: economia de ${fmtMoney(dif)} por unidade (${fmtPct(dif / ultimo.ultimoCusto * 100)}%).`
+                    : 'Na última compra você já comprou do fornecedor mais barato.';
+            }
+            return `<div class="forn-grid ${lista.length === 1 ? 'um' : ''}">${cartoes}</div>
+                <div class="forn-conclusao">${conclusao}</div>
+                <div class="nota">Comparação pelo custo por unidade da última entrada de cada fornecedor, nos últimos 12 meses.</div>`;
+        }
+
+        function renderHistoricoPreco(mudancas) {
+            if (!mudancas.length) return '<div class="indisponivel">Este produto não tem mudanças de preço registradas.</div>';
+            const n3 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+            const temErro = mudancas.some((m) => m.possivelErro);
+            const linhas = mudancas.map((m, i) => {
+                const sobe = m.para > m.de;
+                const seta = Math.abs(m.variacaoPct ?? 0) >= 1
+                    ? `<span class="seta ${sobe ? 'desce' : 'sobe'}">${sobe ? '▲' : '▼'}</span>` : '<span class="seta sem">–</span>';
+                const nota = m.possivelErro
+                    ? `<br><span class="aviso-preco">⚠ possível erro: o preço voltou ao anterior em ${m.voltouEmDias === 0 ? 'poucas horas' : m.voltouEmDias + ' dia(s)'}</span>`
+                    : m.corrigiu ? '<br><span class="corrigiu-preco">corrigiu o preço anterior</span>' : '';
+                return `<div class="linha-preco ${i === 0 ? 'atual' : ''}">
+                    <div class="lp-data">${esc(m.data.slice(0, 6) + m.data.slice(8))}</div>
+                    <div class="n">${n3(m.de)}</div>
+                    <div class="n">${n3(m.para)} ${seta}</div>
+                    <div class="lp-quem">${esc(m.quem)}</div>
+                    ${nota ? `<div class="lp-nota">${nota}</div>` : ''}
+                </div>`;
+            }).join('');
+            return `<div class="legenda">A linha em destaque é a mudança mais recente: o preço de venda atual.${temErro ? ' Mudanças marcadas com ⚠ voltaram ao valor anterior em poucos dias.' : ''}</div>
+                <div class="linha-preco cab"><div>Data</div><div class="n">De</div><div class="n">Para</div><div>Quem</div></div>
+                ${linhas}`;
+        }
+
+        function prepararBloco(idCaixa, idDestino, url, render) {
+            const caixa = document.getElementById(idCaixa);
+            const destino = document.getElementById(idDestino);
+            let carregou = false;
+            caixa.addEventListener('toggle', async () => {
+                if (!caixa.open || carregou) return;
+                carregou = true;
+                destino.innerHTML = '<div class="loading">Carregando...</div>';
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('falha');
+                    destino.innerHTML = render(await res.json());
+                } catch (err) {
+                    carregou = false;
+                    destino.innerHTML = '<div class="indisponivel">Não foi possível carregar agora. Feche e abra de novo para tentar outra vez.</div>';
+                }
+            });
+        }
+
         function abrirEntradas(idVariacao, descricao) {
             mostrarViewCompras('detalhe');
             elComprasDetalhe.innerHTML = `<button class="voltar-compras" id="comprasVoltar">&larr; Voltar à lista</button>
-                <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>`;
+                <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>
+                <div class="dash-panel gestao" style="margin-top:16px">
+                    <details id="blocoFornecedores">
+                        <summary><div><div class="tit">Fornecedores</div><div class="sub-resumo">comparar custos entre quem vende este produto</div></div></summary>
+                        <div id="destinoFornecedores"></div>
+                    </details>
+                </div>
+                <div class="dash-panel gestao">
+                    <details id="blocoPreco">
+                        <summary><div><div class="tit">Histórico de preço de venda</div><div class="sub-resumo">mudanças de preço e quem alterou</div></div></summary>
+                        <div id="destinoPreco"></div>
+                    </details>
+                </div>`;
             document.getElementById('comprasVoltar').addEventListener('click', () => {
                 entradasSeq++;
                 mostrarViewCompras(elBuscaCompras.value.trim().length >= 2 ? 'lista' : 'vazio');
             });
             carregarEntradas(document.getElementById('comprasEntradas'), idVariacao, 10);
+            prepararBloco('blocoFornecedores', 'destinoFornecedores', `/api/produtos/${idVariacao}/fornecedores`, renderFornecedores);
+            prepararBloco('blocoPreco', 'destinoPreco', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
         }
 
         function renderListaCompras(produtos) {
