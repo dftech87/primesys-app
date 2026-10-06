@@ -116,7 +116,9 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
             "idVariacao": item["codigoMercadoriaVariacao"],
             "descricao": item.get("descricao"),
             "codigoBarras": item.get("codigoBarras"),
-            "codigoInterno": item.get("codigoMercadoria"),
+            # O "código interno" que a pessoa vê no ERP e digita na busca é o da variação do produto
+            # (o `codigoMercadoria` é o do cadastro-pai e, em outra busca, aponta para OUTRO produto).
+            "codigoInterno": item["codigoMercadoriaVariacao"],
             "unidade": item.get("embalagem"),
         }
         for item in itens
@@ -156,7 +158,7 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
     return {
         "descricao": mercadoria.get("descricao"),
         "codigoBarras": mercadoria.get("codigoBarras"),
-        "codigoInterno": mercadoria.get("codigoMercadoria"),
+        "codigoInterno": id_variacao,  # mesmo código da busca (variação do produto), não o do cadastro-pai
         "unidade": mercadoria.get("embalagem"),
         "ativo": mercadoria.get("ativo") == "S",
         "precoCusto": custo_valor,
