@@ -154,12 +154,14 @@
         .tab-ent .cab, .tab-ent summary { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
         .tab-ent .cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
         .tab-ent details { border-bottom: 1px solid #eef2f7; }
-        .tab-ent summary { list-style: none; cursor: pointer; padding: 9px 6px; font-size: 12px; }
+        .tab-ent summary { list-style: none; cursor: pointer; padding: 9px 6px; font-size: 12px; border: 1px solid transparent; }
         .tab-ent summary::-webkit-details-marker { display: none; }
         .tab-ent .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .tab-ent details.ultima { border-bottom: 0; margin-bottom: 4px; }
         .tab-ent details.ultima > summary { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
             font-weight: 800; color: #0b3895; }
+        .tab-ent .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
+        .tab-ent .sem { color: #94a3b8; }
         .tab-ent .sobe { color: #b91c1c; font-size: 10px; }
         .tab-ent .desce { color: #15803d; font-size: 10px; }
         .tab-ent .mg-ruim { color: #b91c1c; }
@@ -436,11 +438,12 @@
             const linhas = entradas.map((e, i) => {
                 // Seta ao lado do custo: sobe (vermelho) ou desce (verde) em relação à entrada anterior.
                 const anterior = entradas[i + 1];
-                let seta = '', variacao = '';
+                // Sempre há um espaço fixo ao lado do custo (seta ou traço) para as linhas ficarem alinhadas.
+                let seta = ' <span class="seta sem">–</span>', variacao = '';
                 if (anterior && anterior.custoUnit > 0 && e.custoUnit > 0) {
                     const v = (e.custoUnit - anterior.custoUnit) / anterior.custoUnit * 100;
                     if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) {  // abaixo disso é só arredondamento da nota
-                        seta = ` <span class="${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'}</span>`;
+                        seta = ` <span class="seta ${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'}</span>`;
                         variacao = `<br>Custo ${v > 0 ? 'subiu' : 'caiu'} ${fmtPct(Math.abs(v))}% em relação à entrada anterior.`;
                     }
                 }
