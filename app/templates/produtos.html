@@ -151,14 +151,11 @@
         .val.ok { color: #15803d; }
         .val.aviso { color: #b45309; }
         .indisponivel { color: #94a3b8; font-size: 13px; }
-        .tab-ent .cab, .tab-ent summary { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
+        .tab-ent .cab, .tab-ent .ent-linha { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
         .tab-ent .cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
-        .tab-ent details { border-bottom: 1px solid #eef2f7; }
-        .tab-ent summary { list-style: none; cursor: pointer; padding: 9px 6px; font-size: 12px; border: 1px solid transparent; }
-        .tab-ent summary::-webkit-details-marker { display: none; }
+        .tab-ent .ent-linha { padding: 9px 6px; font-size: 12px; border: 1px solid transparent; border-bottom: 1px solid #eef2f7; }
         .tab-ent .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .tab-ent details.ultima { border-bottom: 0; margin-bottom: 4px; }
-        .tab-ent details.ultima > summary { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+        .tab-ent .ent-linha.ultima { margin-bottom: 4px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
             font-weight: 800; color: #0b3895; }
         .tab-ent .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
         .tab-ent .sem { color: #94a3b8; }
@@ -166,8 +163,6 @@
         .tab-ent .desce { color: #15803d; font-size: 10px; }
         .tab-ent .mg-ruim { color: #b91c1c; }
         .tab-ent .mg-aviso { color: #b45309; }
-        .tab-ent .det { padding: 4px 6px 12px; font-size: 12px; color: #475569; line-height: 1.55; }
-        .tab-ent .det .forn { font-weight: 700; color: #0f172a; }
         .forn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .forn-grid.um { grid-template-columns: 1fr; }
         .forn { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; min-width: 0; }
@@ -463,12 +458,11 @@
                 // Seta ao lado do custo: sobe (vermelho) ou desce (verde) em relação à entrada anterior.
                 const anterior = entradas[i + 1];
                 // Sempre há um espaço fixo ao lado do custo (seta ou traço) para as linhas ficarem alinhadas.
-                let seta = ' <span class="seta sem">–</span>', variacao = '';
+                let seta = ' <span class="seta sem">–</span>';
                 if (anterior && anterior.custoUnit > 0 && e.custoUnit > 0) {
                     const v = (e.custoUnit - anterior.custoUnit) / anterior.custoUnit * 100;
                     if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) {  // abaixo disso é só arredondamento da nota
                         seta = ` <span class="seta ${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'}</span>`;
-                        variacao = `<br>Custo ${v > 0 ? 'subiu' : 'caiu'} ${fmtPct(Math.abs(v))}% em relação à entrada anterior.`;
                     }
                 }
                 const preco = e.precoVenda > 0 ? e.precoVenda : p.precoVenda;
@@ -477,19 +471,13 @@
                 const classeMargem = margemPct == null ? '' : margemPct < 0 ? 'mg-ruim' : margemPct < 10 ? 'mg-aviso' : '';
                 const margem = margemPct == null ? '-' : `${fmtPct(margemPct)}%${e.precoVenda > 0 ? '' : '*'}`;
                 const dataCurta = e.data.slice(0, 6) + e.data.slice(8);
-                const qtdTexto = e.fator > 1
-                    ? `${fmtNum(e.qtd)} ${esc(e.unidade || '')} × ${fmtNum(e.fator)} = ${fmtNum(e.qtdUnidades)} un · NF ${fmtMoney(e.valorNF)} por embalagem`
-                    : `${fmtNum(e.qtd)} ${esc(e.unidade || 'un')}`;
-                return `<details class="${i === 0 ? 'ultima' : ''}">
-                    <summary><span>${esc(dataCurta)}</span><span>${esc(e.numero)}</span><span class="n">${fmtNum(e.qtdUnidades)}</span>
-                        <span class="n">${n2(e.custoUnit)}${seta}</span><span class="n ${classeMargem}">${margem}</span></summary>
-                    <div class="det"><span class="forn">${esc(e.fornecedor)}</span><br>
-                        NF ${esc(e.numero)}${e.serie ? '/' + esc(e.serie) : ''} · ${esc(e.data)}<br>${qtdTexto}${variacao}
-                        ${e.desconto > 0 ? `<br>Desconto: ${fmtMoney(e.desconto)}` : ''}</div>
-                </details>`;
+                return `<div class="ent-linha ${i === 0 ? 'ultima' : ''}">
+                    <span>${esc(dataCurta)}</span><span>${esc(e.numero)}</span><span class="n">${fmtNum(e.qtdUnidades)}</span>
+                    <span class="n">${n2(e.custoUnit)}${seta}</span><span class="n ${classeMargem}">${margem}</span>
+                </div>`;
             }).join('');
             return `<div class="tab-ent">
-                <div class="legenda">A linha em destaque é a última entrada: o custo atual do produto. Toque numa linha para ver o fornecedor e os detalhes.</div>
+                <div class="legenda">A linha em destaque é a última entrada: o custo atual do produto.</div>
                 <div class="cab"><span>Data</span><span>NF</span><span class="n">Qtd</span><span class="n">Custo R$</span><span class="n">Mg.</span></div>
                 ${linhas}
                 ${usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual. Custo e margem por unidade.</div>' : ''}
