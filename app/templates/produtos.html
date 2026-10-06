@@ -590,20 +590,34 @@
             });
         }
 
-        let buscaComprasTimeout = null;
-        elBuscaCompras.addEventListener('input', () => {
-            clearTimeout(buscaComprasTimeout);
-            const termo = elBuscaCompras.value.trim();
-            if (termo.length < 2) { mostrarViewCompras('vazio'); return; }
-            buscaComprasTimeout = setTimeout(() => {
-                elComprasLista.innerHTML = '<div class="loading">Buscando...</div>';
-                mostrarViewCompras('lista');
-                fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${elLoja.value || 0}`)
-                    .then((r) => r.ok ? r.json() : Promise.reject(r))
-                    .then((data) => renderListaCompras(data.produtos || []))
-                    .catch(() => { elComprasLista.innerHTML = '<div class="erro">Erro ao buscar produtos.</div>'; });
-            }, 400);
-        });
+        // Busca com proteção contra resposta atrasada: se a pessoa digita outro termo (ou o ERP demora),
+        // a resposta de uma busca antiga nunca pode sobrescrever a lista do termo atual.
+        function criarBuscaProtegida(renderizar, elLista, mostrar) {
+            let temporizador = null;
+            let numero = 0;
+            let anterior = null;
+            return function buscar(termo, loja) {
+                clearTimeout(temporizador);
+                const meu = ++numero;
+                if (anterior) anterior.abort();
+                if (termo.length < 2) { mostrar('vazio'); return; }
+                temporizador = setTimeout(() => {
+                    elLista.innerHTML = '<div class="loading">Buscando...</div>';
+                    mostrar('lista');
+                    anterior = new AbortController();
+                    fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${loja || 0}`, { signal: anterior.signal })
+                        .then((r) => r.ok ? r.json() : Promise.reject(r))
+                        .then((data) => { if (meu === numero) renderizar(data.produtos || []); })
+                        .catch((err) => {
+                            if (err && err.name === 'AbortError') return;
+                            if (meu === numero) elLista.innerHTML = '<div class="erro">Erro ao buscar produtos.</div>';
+                        });
+                }, 400);
+            };
+        }
+
+        const buscarCompras = criarBuscaProtegida(renderListaCompras, elComprasLista, mostrarViewCompras);
+        elBuscaCompras.addEventListener('input', () => buscarCompras(elBuscaCompras.value.trim(), elLoja.value));
 
         function abrirDetalhe(idVariacao, descricaoResumo) {
             elBtnVoltar.classList.add('mostrar');
@@ -672,23 +686,8 @@
             });
         }
 
-        let buscaTimeout = null;
-        elBusca.addEventListener('input', () => {
-            clearTimeout(buscaTimeout);
-            const termo = elBusca.value.trim();
-            if (termo.length < 2) {
-                mostrarView('vazio');
-                return;
-            }
-            buscaTimeout = setTimeout(() => {
-                elLista.innerHTML = '<div class="loading">Buscando...</div>';
-                mostrarView('lista');
-                fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${elLoja.value}`)
-                    .then((r) => r.ok ? r.json() : Promise.reject(r))
-                    .then((data) => renderLista(data.produtos || []))
-                    .catch(() => { elLista.innerHTML = '<div class="erro">Erro ao buscar produtos.</div>'; });
-            }, 400);
-        });
+        const buscarProdutos = criarBuscaProtegida(renderLista, elLista, mostrarView);
+        elBusca.addEventListener('input', () => buscarProdutos(elBusca.value.trim(), elLoja.value));
 
         async function carregarLojas() {
             const res = await fetch('/api/produtos/lojas');
