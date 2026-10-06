@@ -5,9 +5,11 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app import compras
 from app.cache import cached
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
+from app.sqlquery import ConsultaIndisponivel
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -21,6 +23,7 @@ TTL_BUSCA = 120
 TTL_PRODUTO = 600
 TTL_CUSTO_PRECO = 300
 TTL_SALDO = 60
+TTL_ENTRADAS = 600
 
 
 def _nao_nulo(valor) -> bool:
@@ -160,3 +163,22 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
         "precoVenda": preco,
         "estoque": estoque,
     }
+
+
+@router.get("/api/produtos/{id_variacao}/entradas")
+async def api_entradas(request: Request, id_variacao: int, limite: int = Query(10, ge=1, le=compras.MAX_ENTRADAS)):
+    """Últimas notas de entrada (compras) do produto: fornecedor, nota, quantidade, custo e desconto."""
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+
+    client = MeuERPClient(tenant["api_token"])
+    try:
+        itens = await cached(
+            (tenant["cnpj"], "entradas", id_variacao, limite),
+            TTL_ENTRADAS,
+            lambda: compras.entradas_produto(client, id_variacao, limite),
+        )
+    except ConsultaIndisponivel:
+        return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
+    return {"entradas": itens, "limite": limite}

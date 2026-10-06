@@ -151,6 +151,17 @@
         .val.ok { color: #15803d; }
         .val.aviso { color: #b45309; }
         .indisponivel { color: #94a3b8; font-size: 13px; }
+        .entradas { margin-top: 14px; border-top: 1px solid #e2e8f0; }
+        .entradas > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
+            align-items: center; padding: 12px 0; font-size: 14px; font-weight: 700; color: var(--azul); }
+        .entradas > summary::-webkit-details-marker { display: none; }
+        .entradas > summary::after { content: '▾'; color: #94a3b8; }
+        .entradas[open] > summary::after { content: '▴'; }
+        .entradas .quando .sobe { color: #b91c1c; }
+        .entradas .quando .desce { color: #15803d; }
+        .entradas .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid #cbd5e1;
+            border-radius: 8px; background: #fff; color: var(--azul); font-size: 13px; font-weight: 700; cursor: pointer; }
+
         .rosca { text-align: center; margin-bottom: 8px; }
         .rosca svg { max-width: 190px; width: 100%; height: auto; }
         .legenda .cor { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
@@ -383,6 +394,61 @@
             elDetalhe.style.display = view === 'detalhe' ? 'block' : 'none';
         }
 
+        // Últimas notas de entrada do produto. Só consulta o ERP quando a pessoa abre o bloco.
+        function renderEntradas(entradas, p) {
+            if (!entradas.length) return '<div class="indisponivel">Nenhuma nota de entrada encontrada para este produto.</div>';
+            let usouPrecoAtual = false;
+            const linhas = entradas.map((e, i) => {
+                const anterior = entradas[i + 1];
+                let variacao = '';
+                if (anterior && anterior.custoUnit > 0 && e.custoUnit > 0) {
+                    const v = (e.custoUnit - anterior.custoUnit) / anterior.custoUnit * 100;
+                    if (Math.abs(v) >= 0.05) {
+                        variacao = ` · <span class="${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}% no custo</span>`;
+                    }
+                }
+                const preco = e.precoVenda > 0 ? e.precoVenda : p.precoVenda;
+                if (!(e.precoVenda > 0) && preco > 0) usouPrecoAtual = true;
+                const margem = preco > 0 && e.custoUnit > 0
+                    ? ` · margem ${fmtPct((preco - e.custoUnit) / preco * 100)}%${e.precoVenda > 0 ? '' : '*'}` : '';
+                const desconto = e.desconto > 0 ? ` · desc. ${fmtMoney(e.desconto)}` : '';
+                return `<div class="titulo-conta">
+                    <div class="linha1"><span class="nome">${esc(e.fornecedor)}</span><b>${fmtMoney(e.custoUnit)}</b></div>
+                    <div class="quando">NF ${esc(e.numero)}${e.serie ? '/' + esc(e.serie) : ''} · ${esc(e.data)} · ${fmtNum(e.qtd)} ${esc(e.unidade || '')}${variacao}${margem}${desconto}</div>
+                </div>`;
+            }).join('');
+            return linhas + (usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual.</div>' : '');
+        }
+
+        function prepararEntradas(idVariacao, produto) {
+            const caixa = document.getElementById('entradasBox');
+            const lista = document.getElementById('entradasLista');
+            let carregou = false;
+
+            async function carregar(limite) {
+                lista.innerHTML = '<div class="loading">Carregando...</div>';
+                try {
+                    const res = await fetch(`/api/produtos/${idVariacao}/entradas?limite=${limite}`);
+                    if (!res.ok) throw new Error('falha');
+                    const data = await res.json();
+                    lista.innerHTML = renderEntradas(data.entradas, produto);
+                    if (limite < 30 && data.entradas.length >= limite) {
+                        const botao = document.createElement('button');
+                        botao.className = 'mais';
+                        botao.textContent = 'Ver mais entradas';
+                        botao.addEventListener('click', () => carregar(30));
+                        lista.appendChild(botao);
+                    }
+                } catch (err) {
+                    lista.innerHTML = '<div class="indisponivel">Não foi possível carregar as entradas agora.</div>';
+                    carregou = false;
+                }
+            }
+            caixa.addEventListener('toggle', () => {
+                if (caixa.open && !carregou) { carregou = true; carregar(10); }
+            });
+        }
+
         function abrirDetalhe(idVariacao, descricaoResumo) {
             elBtnVoltar.classList.add('mostrar');
             elBuscaWrap.style.display = 'none';
@@ -409,7 +475,12 @@
                         })() : ''}
                         <div class="secao-titulo">Estoque na loja selecionada</div>
                         <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
+                        <details class="entradas" id="entradasBox">
+                            <summary>Últimas entradas (compras)</summary>
+                            <div id="entradasLista"></div>
+                        </details>
                     `;
+                    prepararEntradas(idVariacao, p);
                 })
                 .catch(() => {
                     elDetalhe.innerHTML = '<div class="erro">Não foi possível carregar este produto.</div>';
