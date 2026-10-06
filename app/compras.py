@@ -1,10 +1,10 @@
 """Entradas (compras) de um produto: as últimas notas fiscais em que ele chegou na loja."""
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import d, executar, i
+from app.sqlquery import executar, i
 
 # NF-e de entrada (55) e nota modelo 1A. Os modelos AS/AC do ERP são acertos internos de estoque, não compras.
 _MODELOS_ENTRADA = "('55', '1A')"
@@ -70,56 +70,12 @@ async def entradas_produto(client: MeuERPClient, id_variacao: int, limite: int =
 
 
 # ---------------------------------------------------------------------------------------------
-# Fornecedores do produto (comparação de custo) e histórico do preço de venda
+# Histórico do preço de venda
 # ---------------------------------------------------------------------------------------------
 
-MESES_FORNECEDORES = 12
 # Mudança de preço que passa deste percentual e volta ao valor anterior em poucos dias: provável erro.
 _LIMITE_ERRO_PRECO = 0.30
 _DIAS_PARA_VOLTAR = 15
-
-
-async def fornecedores_produto(client: MeuERPClient, id_variacao: int, hoje: date) -> dict:
-    """Custo por fornecedor nas entradas dos últimos 12 meses, do mais barato (último custo) ao mais caro."""
-    desde = hoje - timedelta(days=30 * MESES_FORNECEDORES)
-    linhas = await executar(
-        client,
-        f"""with e as (
-              select d.idpessoa, trim(coalesce(p.nome, '')) as fornecedor,
-                     coalesce(d.datahoramovimento, d.datahora) as dt,
-                     case when c.valcusto > 0 then c.valcusto
-                          else dm.valunitarioliquido / nullif(dm.qtdfator, 0) end as custo
-              from documento d
-              join documento_mercadoria dm on dm._iddocumento = d._iddocumento
-              left join documento_mercadoria_custo c
-                on c._iddocumento = dm._iddocumento and c._idsequencia = dm._idsequencia
-              left join pessoa p on p._idpessoa = d.idpessoa
-              where d.tipomovimento = 'E' and d.status = 'E' and d.modelo in {_MODELOS_ENTRADA}
-                and dm.idmercadoriavariacao = {i(id_variacao)}
-                and coalesce(d.datahoramovimento, d.datahora) >= {d(desde)}
-            )
-            select max(fornecedor) as fornecedor, count(*) as entradas,
-                   round(min(custo), 4) as menor, round(max(custo), 4) as maior,
-                   round((array_agg(custo order by dt desc))[1], 4) as ultimo,
-                   to_char(max(dt), 'DD/MM/YYYY') as ultima, to_char(max(dt), 'YYYY-MM-DD') as ultima_iso
-            from e where custo > 0 group by idpessoa order by 5 asc limit 8""",
-    )
-    fornecedores = [
-        {
-            "fornecedor": l["fornecedor"] or "Fornecedor não informado",
-            "entradas": int(l["entradas"]),
-            "menor": _num(l["menor"]),
-            "maior": _num(l["maior"]),
-            "ultimoCusto": _num(l["ultimo"]),
-            "ultimaCompra": l["ultima"],
-            "_iso": l["ultima_iso"],
-        }
-        for l in linhas
-    ]
-    ultimo = max(fornecedores, key=lambda f: f["_iso"])["fornecedor"] if fornecedores else None
-    for f in fornecedores:
-        f.pop("_iso")
-    return {"meses": MESES_FORNECEDORES, "fornecedores": fornecedores, "fornecedorUltimaCompra": ultimo}
 
 
 def nome_publico(bruto: str | None) -> str:

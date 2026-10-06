@@ -166,19 +166,6 @@
         .tab-ent .desce { color: #15803d; font-size: 10px; }
         .tab-ent .mg-ruim { color: #b91c1c; }
         .tab-ent .mg-aviso { color: #b45309; }
-        .forn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .forn-grid.um { grid-template-columns: 1fr; }
-        .forn { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; min-width: 0; }
-        .forn.barato { border: 2px solid #16a34a; background: #f0fdf4; }
-        .etq-barato { display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: .3px; background: #dcfce7;
-            color: #166534; padding: 2px 7px; border-radius: 8px; }
-        .etq-vazia { display: inline-block; font-size: 9.5px; padding: 2px 0; }
-        .forn-nome { font-weight: 700; font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; line-height: 1.3; }
-        .forn-custo { font-size: 19px; font-weight: 800; color: #0b3895; margin-top: 3px; }
-        .forn-custo small { font-size: 10px; font-weight: 400; color: #64748b; }
-        .forn-sub { font-size: 10.5px; color: #64748b; margin-top: 2px; }
-        .forn-aviso { font-size: 10.5px; color: #92400e; margin-top: 5px; line-height: 1.35; }
-        .forn-conclusao { margin-top: 10px; padding: 10px 12px; background: #fffbeb; border-radius: 10px; font-size: 12px; line-height: 1.5; color: #475569; }
         .linha-preco { display: grid; grid-template-columns: 56px 1fr 1fr 82px; gap: 4px; align-items: center; padding: 8px 6px;
             border-bottom: 1px solid #eef2f7; font-size: 12px; }
         .linha-preco.cab { font-size: 10px; color: #64748b; padding: 4px 6px; border: 0; }
@@ -525,41 +512,7 @@
             }
         }
 
-        // Fornecedores (cartões lado a lado) e histórico do preço de venda: blocos recolhidos que só
-        // consultam o ERP quando a pessoa os abre.
-        function renderFornecedores(data) {
-            const lista = data.fornecedores;
-            if (!lista.length) return '<div class="indisponivel">Sem entradas deste produto nos últimos 12 meses.</div>';
-            const maisBarato = lista[0];
-            // Custo muito acima do mais barato quase sempre é embalagem lançada errada (ex.: caixa como unidade).
-            const fora = (f) => lista.length > 1 && f.ultimoCusto > 5 * maisBarato.ultimoCusto;
-            const cartoes = lista.map((f, i) => `
-                <div class="forn ${i === 0 && lista.length > 1 ? 'barato' : ''}">
-                    ${i === 0 && lista.length > 1 ? '<span class="etq-barato">MAIS BARATO</span>' : '<span class="etq-vazia">&nbsp;</span>'}
-                    <div class="forn-nome">${esc(f.fornecedor)}</div>
-                    <div class="forn-custo">${fmtMoney(f.ultimoCusto)}<small>/un</small></div>
-                    <div class="forn-sub">menor ${fmtMoney(f.menor)} · maior ${fmtMoney(f.maior)}</div>
-                    <div class="forn-sub">${f.entradas} ${f.entradas === 1 ? 'entrada' : 'entradas'} · ${esc(f.ultimaCompra)}</div>
-                    ${fora(f) ? '<div class="forn-aviso">⚠ custo muito acima dos demais: confira a embalagem</div>' : ''}
-                </div>`).join('');
-
-            let conclusao;
-            if (lista.length < 2) {
-                conclusao = 'Só há um fornecedor nas entradas dos últimos 12 meses.';
-            } else {
-                const ultimo = lista.find((f) => f.fornecedor === data.fornecedorUltimaCompra) || lista[lista.length - 1];
-                const dif = ultimo.ultimoCusto - maisBarato.ultimoCusto;
-                conclusao = fora(ultimo)
-                    ? `A última compra (${esc(ultimo.fornecedor)}, ${fmtMoney(ultimo.ultimoCusto)}/un) tem custo muito acima dos outros fornecedores. Confira se a embalagem foi lançada certa na nota.`
-                    : dif > 0.004
-                    ? `Na última compra você pagou ${fmtMoney(ultimo.ultimoCusto)}/un (${esc(ultimo.fornecedor)}). O mais barato é ${esc(maisBarato.fornecedor)}: economia de ${fmtMoney(dif)} por unidade (${fmtPct(dif / ultimo.ultimoCusto * 100)}%).`
-                    : 'Na última compra você já comprou do fornecedor mais barato.';
-            }
-            return `<div class="forn-grid ${lista.length === 1 ? 'um' : ''}">${cartoes}</div>
-                <div class="forn-conclusao">${conclusao}</div>
-                <div class="nota">Comparação pelo custo por unidade da última entrada de cada fornecedor, nos últimos 12 meses.</div>`;
-        }
-
+        // Histórico do preço de venda: bloco recolhido que só consulta o ERP quando a pessoa o abre.
         function renderHistoricoPreco(mudancas) {
             if (!mudancas.length) return '<div class="indisponivel">Este produto não tem mudanças de preço registradas.</div>';
             const n3 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
@@ -608,12 +561,6 @@
             elComprasDetalhe.innerHTML = `<button class="voltar-compras" id="comprasVoltar">&larr; Voltar à lista</button>
                 <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>
                 <div class="dash-panel gestao" style="margin-top:16px">
-                    <details id="blocoFornecedores">
-                        <summary><div><div class="tit">Fornecedores</div><div class="sub-resumo">comparar custos entre quem vende este produto</div></div></summary>
-                        <div id="destinoFornecedores"></div>
-                    </details>
-                </div>
-                <div class="dash-panel gestao">
                     <details id="blocoPreco">
                         <summary><div><div class="tit">Histórico de preço de venda</div><div class="sub-resumo">mudanças de preço e quem alterou</div></div></summary>
                         <div id="destinoPreco"></div>
@@ -624,7 +571,6 @@
                 mostrarViewCompras(elBuscaCompras.value.trim().length >= 2 ? 'lista' : 'vazio');
             });
             carregarEntradas(document.getElementById('comprasEntradas'), idVariacao, 10);
-            prepararBloco('blocoFornecedores', 'destinoFornecedores', `/api/produtos/${idVariacao}/fornecedores`, renderFornecedores);
             prepararBloco('blocoPreco', 'destinoPreco', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
         }
 
