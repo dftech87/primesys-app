@@ -154,6 +154,9 @@
         .tab-ent .cab, .tab-ent .ent-linha { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
         .tab-ent .cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
         .tab-ent .ent-linha { padding: 9px 6px; font-size: 12px; border: 1px solid transparent; border-bottom: 1px solid #eef2f7; }
+        .tab-ent .ent-forn { grid-column: 1 / -1; font-size: 11px; font-weight: 400; color: #64748b; line-height: 1.3;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .tab-ent .ent-linha.ultima .ent-forn { font-weight: 700; color: #1d4fd8; }
         .tab-ent .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .tab-ent .ent-linha.ultima { margin-bottom: 4px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
             font-weight: 800; color: #0b3895; }
@@ -474,6 +477,7 @@
                 return `<div class="ent-linha ${i === 0 ? 'ultima' : ''}">
                     <span>${esc(dataCurta)}</span><span>${esc(e.numero)}</span><span class="n">${fmtNum(e.qtdUnidades)}</span>
                     <span class="n">${n2(e.custoUnit)}${seta}</span><span class="n ${classeMargem}">${margem}</span>
+                    <div class="ent-forn">${esc(e.fornecedor)}</div>
                 </div>`;
             }).join('');
             return `<div class="tab-ent">
