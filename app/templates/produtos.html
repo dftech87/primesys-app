@@ -151,21 +151,23 @@
         .val.ok { color: #15803d; }
         .val.aviso { color: #b45309; }
         .indisponivel { color: #94a3b8; font-size: 13px; }
-        .entradas { margin-top: 14px; border-top: 1px solid #e2e8f0; }
-        .entradas > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
-            align-items: center; padding: 12px 0; font-size: 14px; font-weight: 700; color: var(--azul); }
-        .entradas > summary::-webkit-details-marker { display: none; }
-        .entradas > summary::after { content: '▾'; color: #94a3b8; }
-        .entradas[open] > summary::after { content: '▴'; }
-        .entradas .titulo-conta.ultima { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
-            padding: 10px 12px; margin: 4px 0 8px; }
-        .entradas .titulo-conta.ultima .nome, .entradas .titulo-conta.ultima b { font-weight: 800; color: #0b3895; }
-        .entradas .titulo-conta.ultima b { font-size: 16px; }
-        .entradas .etiqueta { font-size: 10px; font-weight: 800; letter-spacing: .4px; color: #1d4fd8; margin-bottom: 4px; }
-        .entradas b small { font-size: 10px; font-weight: 400; color: #64748b; }
-        .entradas .quando .sobe { color: #b91c1c; }
-        .entradas .quando .desce { color: #15803d; }
-        .entradas .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid #cbd5e1;
+        .tab-ent .cab, .tab-ent summary { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
+        .tab-ent .cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
+        .tab-ent details { border-bottom: 1px solid #eef2f7; }
+        .tab-ent summary { list-style: none; cursor: pointer; padding: 9px 6px; font-size: 12px; }
+        .tab-ent summary::-webkit-details-marker { display: none; }
+        .tab-ent .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .tab-ent details.ultima { border-bottom: 0; margin-bottom: 4px; }
+        .tab-ent details.ultima > summary { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+            font-weight: 800; color: #0b3895; }
+        .tab-ent .sobe { color: #b91c1c; font-size: 10px; }
+        .tab-ent .desce { color: #15803d; font-size: 10px; }
+        .tab-ent .mg-ruim { color: #b91c1c; }
+        .tab-ent .mg-aviso { color: #b45309; }
+        .tab-ent .det { padding: 4px 6px 12px; font-size: 12px; color: #475569; line-height: 1.55; }
+        .tab-ent .det .forn { font-weight: 700; color: #0f172a; }
+        .tab-ent .legenda { font-size: 11px; color: #64748b; margin: 2px 0 8px; }
+        .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid #cbd5e1;
             border-radius: 8px; background: #fff; color: var(--azul); font-size: 13px; font-weight: 700; cursor: pointer; }
 
         .rosca { text-align: center; margin-bottom: 8px; }
@@ -219,11 +221,16 @@
         .titulo-conta .quando { color: #64748b; font-size: 11px; margin-top: 2px; }
         .titulo-conta .quando.atraso { color: #b91c1c; }
 
-        #vazio { padding: 60px 32px; text-align: center; color: #475569; }
-        #vazio .emoji { font-size: 48px; margin-bottom: 16px; }
-        #vazio .aviso { color: var(--azul); font-size: 13px; margin-top: 10px; }
+        #comprasView { display: none; }
+        #comprasDetalhe { padding: 16px; }
+        .voltar-compras { border: 0; background: none; color: var(--azul); font-size: 14px; font-weight: 700;
+            padding: 0 0 10px; cursor: pointer; }
+        .cab-produto { margin: 0 0 10px; font-size: 17px; line-height: 1.3; }
+        #vazio, #comprasVazio { padding: 60px 32px; text-align: center; color: #475569; }
+        #vazio .emoji, #comprasVazio .emoji { font-size: 48px; margin-bottom: 16px; }
+        #vazio .aviso, #comprasVazio .aviso { color: var(--azul); font-size: 13px; margin-top: 10px; }
 
-        #lista { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+        #lista, #comprasLista { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
         .card {
             background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             cursor: pointer;
@@ -263,6 +270,11 @@
                 <a href="/logout" class="btn-sair">Sair</a>
             </div>
             <select id="loja"></select>
+            <div class="busca-wrap" id="buscaComprasWrap" style="display:none;">
+                <span class="icone-busca">&#128269;</span>
+                <input id="buscaCompras" type="search" inputmode="search" placeholder="Produto: código de barras ou descrição" autocomplete="off" />
+                <button class="btn-scan" id="btnScanCompras" title="Ler código de barras">&#128247;</button>
+            </div>
             <div class="busca-wrap" id="buscaWrap">
                 <span class="icone-busca">&#128269;</span>
                 <input id="busca" type="search" inputmode="search" placeholder="Procure pelo código de barras ou descrição" autocomplete="off" />
@@ -278,6 +290,16 @@
             </div>
             <div id="lista" style="display:none;"></div>
             <div id="detalhe" style="display:none;"></div>
+
+            <div id="comprasView">
+                <div id="comprasVazio">
+                    <div class="emoji">🛒</div>
+                    <div>Pesquise um produto para ver as últimas notas fiscais de entrada: fornecedor, quantidade, custo e margem.</div>
+                    <div class="aviso">A primeira linha é a última entrada, que define o custo atual.</div>
+                </div>
+                <div id="comprasLista" style="display:none;"></div>
+                <div id="comprasDetalhe" style="display:none;"></div>
+            </div>
 
             <div id="dashboardView">
                 <div class="dash-filtro">
@@ -357,6 +379,10 @@
                 <span class="tab-icone">&#128269;</span>
                 Produtos
             </button>
+            <button id="tabCompras">
+                <span class="tab-icone">&#128722;</span>
+                Compras
+            </button>
             <button id="tabDashboard">
                 <span class="tab-icone">&#128202;</span>
                 Dashboard
@@ -401,66 +427,126 @@
         }
 
         // Últimas notas de entrada do produto. Só consulta o ERP quando a pessoa abre o bloco.
+        const LIMITE_VARIACAO_CUSTO = 1; // % mínima para mostrar a seta de aumento/queda do custo
+
         function renderEntradas(entradas, p) {
             if (!entradas.length) return '<div class="indisponivel">Nenhuma nota de entrada encontrada para este produto.</div>';
+            const n2 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             let usouPrecoAtual = false;
             const linhas = entradas.map((e, i) => {
+                // Seta ao lado do custo: sobe (vermelho) ou desce (verde) em relação à entrada anterior.
                 const anterior = entradas[i + 1];
-                let variacao = '';
+                let seta = '', variacao = '';
                 if (anterior && anterior.custoUnit > 0 && e.custoUnit > 0) {
                     const v = (e.custoUnit - anterior.custoUnit) / anterior.custoUnit * 100;
-                    if (Math.abs(v) >= 0.05) {
-                        variacao = ` · <span class="${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}% no custo</span>`;
+                    if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) {  // abaixo disso é só arredondamento da nota
+                        seta = ` <span class="${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'}</span>`;
+                        variacao = `<br>Custo ${v > 0 ? 'subiu' : 'caiu'} ${fmtPct(Math.abs(v))}% em relação à entrada anterior.`;
                     }
                 }
                 const preco = e.precoVenda > 0 ? e.precoVenda : p.precoVenda;
                 if (!(e.precoVenda > 0) && preco > 0) usouPrecoAtual = true;
-                const margem = preco > 0 && e.custoUnit > 0
-                    ? ` · margem ${fmtPct((preco - e.custoUnit) / preco * 100)}%${e.precoVenda > 0 ? '' : '*'}` : '';
-                const desconto = e.desconto > 0 ? ` · desc. ${fmtMoney(e.desconto)}` : '';
-                // A nota vem com o preço da embalagem; o custo e a margem são por unidade.
+                const margemPct = preco > 0 && e.custoUnit > 0 ? (preco - e.custoUnit) / preco * 100 : null;
+                const classeMargem = margemPct == null ? '' : margemPct < 0 ? 'mg-ruim' : margemPct < 10 ? 'mg-aviso' : '';
+                const margem = margemPct == null ? '-' : `${fmtPct(margemPct)}%${e.precoVenda > 0 ? '' : '*'}`;
+                const dataCurta = e.data.slice(0, 6) + e.data.slice(8);
                 const qtdTexto = e.fator > 1
-                    ? `${fmtNum(e.qtd)} ${esc(e.unidade || '')} × ${fmtNum(e.fator)} = ${fmtNum(e.qtdUnidades)} un`
+                    ? `${fmtNum(e.qtd)} ${esc(e.unidade || '')} × ${fmtNum(e.fator)} = ${fmtNum(e.qtdUnidades)} un · NF ${fmtMoney(e.valorNF)} por embalagem`
                     : `${fmtNum(e.qtd)} ${esc(e.unidade || 'un')}`;
-                const valorNF = e.fator > 1 ? ` · NF ${fmtMoney(e.valorNF)}/emb.` : '';
-                const ultima = i === 0;
-                return `<div class="titulo-conta${ultima ? ' ultima' : ''}">
-                    ${ultima ? '<div class="etiqueta">ÚLTIMA ENTRADA · custo atual</div>' : ''}
-                    <div class="linha1"><span class="nome">${esc(e.fornecedor)}</span><b>${fmtMoney(e.custoUnit)}<small>/un</small></b></div>
-                    <div class="quando">NF ${esc(e.numero)}${e.serie ? '/' + esc(e.serie) : ''} · ${esc(e.data)} · ${qtdTexto}${valorNF}${variacao}${margem}${desconto}</div>
-                </div>`;
+                return `<details class="${i === 0 ? 'ultima' : ''}">
+                    <summary><span>${esc(dataCurta)}</span><span>${esc(e.numero)}</span><span class="n">${fmtNum(e.qtdUnidades)}</span>
+                        <span class="n">${n2(e.custoUnit)}${seta}</span><span class="n ${classeMargem}">${margem}</span></summary>
+                    <div class="det"><span class="forn">${esc(e.fornecedor)}</span><br>
+                        NF ${esc(e.numero)}${e.serie ? '/' + esc(e.serie) : ''} · ${esc(e.data)}<br>${qtdTexto}${variacao}
+                        ${e.desconto > 0 ? `<br>Desconto: ${fmtMoney(e.desconto)}` : ''}</div>
+                </details>`;
             }).join('');
-            return linhas + (usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual.</div>' : '');
+            return `<div class="tab-ent">
+                <div class="legenda">A linha em destaque é a última entrada: o custo atual do produto. Toque numa linha para ver o fornecedor e os detalhes.</div>
+                <div class="cab"><span>Data</span><span>NF</span><span class="n">Qtd</span><span class="n">Custo R$</span><span class="n">Mg.</span></div>
+                ${linhas}
+                ${usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual. Custo e margem por unidade.</div>' : ''}
+            </div>`;
         }
 
-        function prepararEntradas(idVariacao, produto) {
-            const caixa = document.getElementById('entradasBox');
-            const lista = document.getElementById('entradasLista');
-            let carregou = false;
+        // Aba Compras: busca de produto + últimas notas de entrada dele.
+        const elComprasView = document.getElementById('comprasView');
+        const elBuscaComprasWrap = document.getElementById('buscaComprasWrap');
+        const elBuscaCompras = document.getElementById('buscaCompras');
+        const elComprasVazio = document.getElementById('comprasVazio');
+        const elComprasLista = document.getElementById('comprasLista');
+        const elComprasDetalhe = document.getElementById('comprasDetalhe');
+        let entradasSeq = 0;
 
-            async function carregar(limite) {
-                lista.innerHTML = '<div class="loading">Carregando...</div>';
-                try {
-                    const res = await fetch(`/api/produtos/${idVariacao}/entradas?limite=${limite}`);
-                    if (!res.ok) throw new Error('falha');
-                    const data = await res.json();
-                    lista.innerHTML = renderEntradas(data.entradas, produto);
-                    if (limite < 30 && data.entradas.length >= limite) {
-                        const botao = document.createElement('button');
-                        botao.className = 'mais';
-                        botao.textContent = 'Ver mais entradas';
-                        botao.addEventListener('click', () => carregar(30));
-                        lista.appendChild(botao);
-                    }
-                } catch (err) {
-                    lista.innerHTML = '<div class="indisponivel">Não foi possível carregar as entradas agora.</div>';
-                    carregou = false;
+        function mostrarViewCompras(view) {
+            elComprasVazio.style.display = view === 'vazio' ? 'block' : 'none';
+            elComprasLista.style.display = view === 'lista' ? 'flex' : 'none';
+            elComprasDetalhe.style.display = view === 'detalhe' ? 'block' : 'none';
+        }
+
+        async function carregarEntradas(container, idVariacao, limite) {
+            const seq = ++entradasSeq;
+            container.innerHTML = '<div class="loading">Carregando...</div>';
+            try {
+                const res = await fetch(`/api/produtos/${idVariacao}/entradas?limite=${limite}`);
+                if (!res.ok) throw new Error('falha');
+                const data = await res.json();
+                if (seq !== entradasSeq) return;
+                container.innerHTML = renderEntradas(data.entradas, { precoVenda: data.precoVenda });
+                if (limite < 30 && data.entradas.length >= limite) {
+                    const botao = document.createElement('button');
+                    botao.className = 'mais';
+                    botao.textContent = 'Ver mais entradas';
+                    botao.addEventListener('click', () => carregarEntradas(container, idVariacao, 30));
+                    container.appendChild(botao);
                 }
+            } catch (err) {
+                if (seq !== entradasSeq) return;
+                container.innerHTML = '<div class="indisponivel">Não foi possível carregar as entradas agora.</div>';
             }
-            caixa.addEventListener('toggle', () => {
-                if (caixa.open && !carregou) { carregou = true; carregar(10); }
+        }
+
+        function abrirEntradas(idVariacao, descricao) {
+            mostrarViewCompras('detalhe');
+            elComprasDetalhe.innerHTML = `<button class="voltar-compras" id="comprasVoltar">&larr; Voltar à lista</button>
+                <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>`;
+            document.getElementById('comprasVoltar').addEventListener('click', () => {
+                entradasSeq++;
+                mostrarViewCompras(elBuscaCompras.value.trim().length >= 2 ? 'lista' : 'vazio');
+            });
+            carregarEntradas(document.getElementById('comprasEntradas'), idVariacao, 10);
+        }
+
+        function renderListaCompras(produtos) {
+            if (!produtos.length) {
+                elComprasLista.innerHTML = '<div class="erro">Nenhum produto encontrado.</div>';
+                return;
+            }
+            elComprasLista.innerHTML = produtos.map((p) => `
+                <div class="card" data-id="${p.idVariacao}" data-desc="${esc(p.descricao)}">
+                    <div class="descricao">${esc(p.descricao)}</div>
+                    <div class="linha"><span class="rotulo">Código de barras:</span> ${esc(p.codigoBarras || '-')}</div>
+                    <div class="rodape"><span class="estoque">Toque para ver as notas de entrada</span></div>
+                </div>`).join('');
+            elComprasLista.querySelectorAll('.card').forEach((card) => {
+                card.addEventListener('click', () => abrirEntradas(card.dataset.id, card.dataset.desc));
             });
         }
+
+        let buscaComprasTimeout = null;
+        elBuscaCompras.addEventListener('input', () => {
+            clearTimeout(buscaComprasTimeout);
+            const termo = elBuscaCompras.value.trim();
+            if (termo.length < 2) { mostrarViewCompras('vazio'); return; }
+            buscaComprasTimeout = setTimeout(() => {
+                elComprasLista.innerHTML = '<div class="loading">Buscando...</div>';
+                mostrarViewCompras('lista');
+                fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${elLoja.value || 0}`)
+                    .then((r) => r.ok ? r.json() : Promise.reject(r))
+                    .then((data) => renderListaCompras(data.produtos || []))
+                    .catch(() => { elComprasLista.innerHTML = '<div class="erro">Erro ao buscar produtos.</div>'; });
+            }, 400);
+        });
 
         function abrirDetalhe(idVariacao, descricaoResumo) {
             elBtnVoltar.classList.add('mostrar');
@@ -488,12 +574,7 @@
                         })() : ''}
                         <div class="secao-titulo">Estoque na loja selecionada</div>
                         <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
-                        <details class="entradas" id="entradasBox">
-                            <summary>Últimas entradas (compras)</summary>
-                            <div id="entradasLista"></div>
-                        </details>
                     `;
-                    prepararEntradas(idVariacao, p);
                 })
                 .catch(() => {
                     elDetalhe.innerHTML = '<div class="erro">Não foi possível carregar este produto.</div>';
@@ -570,6 +651,7 @@
         const elAlertasView = document.getElementById('alertasView');
         const tabs = {
             produtos: document.getElementById('tabProdutos'),
+            compras: document.getElementById('tabCompras'),
             dashboard: document.getElementById('tabDashboard'),
             alertas: document.getElementById('tabAlertas'),
         };
@@ -595,6 +677,8 @@
             Object.entries(tabs).forEach(([nome, el]) => el.classList.toggle('ativo', nome === tab));
             elDashboardView.style.display = tab === 'dashboard' ? 'block' : 'none';
             elAlertasView.style.display = tab === 'alertas' ? 'block' : 'none';
+            elComprasView.style.display = tab === 'compras' ? 'block' : 'none';
+            elBuscaComprasWrap.style.display = tab === 'compras' ? 'block' : 'none';
 
             if (tab === 'produtos') {
                 elBuscaWrap.style.display = 'block';
@@ -615,6 +699,11 @@
             // A loja só importa para o estoque (Alertas); as vendas são da empresa toda.
             elLoja.style.display = tab === 'alertas' ? 'block' : 'none';
 
+            if (tab === 'compras') {
+                elSubtitulo.textContent = 'Compras · notas de entrada';
+                return;
+            }
+
             if (tab === 'dashboard') {
                 elSubtitulo.textContent = 'Dashboard de vendas';
                 if (!elDashDe.value) {
@@ -628,6 +717,7 @@
             }
         }
         tabs.produtos.addEventListener('click', () => mostrarTab('produtos'));
+        tabs.compras.addEventListener('click', () => mostrarTab('compras'));
         tabs.dashboard.addEventListener('click', () => mostrarTab('dashboard'));
         tabs.alertas.addEventListener('click', () => mostrarTab('alertas'));
         elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value));
@@ -1044,6 +1134,7 @@
         const btnFecharScanner = document.getElementById('btnFecharScanner');
         let scanStream = null;
         let scanAtivo = false;
+        let alvoScanner = elBusca; // campo que recebe o código lido (Produtos ou Compras)
 
         async function abrirScanner() {
             if (!('BarcodeDetector' in window)) {
@@ -1074,8 +1165,8 @@
                     if (codigos.length > 0) {
                         const valor = codigos[0].rawValue;
                         fecharScanner();
-                        elBusca.value = valor;
-                        elBusca.dispatchEvent(new Event('input'));
+                        alvoScanner.value = valor;
+                        alvoScanner.dispatchEvent(new Event('input'));
                         return;
                     }
                 } catch (err) {
@@ -1095,7 +1186,8 @@
             }
         }
 
-        btnScan.addEventListener('click', abrirScanner);
+        btnScan.addEventListener('click', () => { alvoScanner = elBusca; abrirScanner(); });
+        document.getElementById('btnScanCompras').addEventListener('click', () => { alvoScanner = elBuscaCompras; abrirScanner(); });
         btnFecharScanner.addEventListener('click', fecharScanner);
 
         // Caso mais comum no Android: o app não é realmente fechado, só fica em

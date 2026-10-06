@@ -173,12 +173,17 @@ async def api_entradas(request: Request, id_variacao: int, limite: int = Query(1
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
 
     client = MeuERPClient(tenant["api_token"])
+    cnpj = tenant["cnpj"]
     try:
-        itens = await cached(
-            (tenant["cnpj"], "entradas", id_variacao, limite),
-            TTL_ENTRADAS,
-            lambda: compras.entradas_produto(client, id_variacao, limite),
+        # O preço de venda atual serve para calcular a margem de cada entrada (compartilha o cache da ficha).
+        itens, preco = await asyncio.gather(
+            cached(
+                (cnpj, "entradas", id_variacao, limite),
+                TTL_ENTRADAS,
+                lambda: compras.entradas_produto(client, id_variacao, limite),
+            ),
+            cached((cnpj, "preco", id_variacao), TTL_CUSTO_PRECO, lambda: _preco_venda(client, id_variacao), guardar_se=_nao_nulo),
         )
     except ConsultaIndisponivel:
         return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
-    return {"entradas": itens, "limite": limite}
+    return {"entradas": itens, "limite": limite, "precoVenda": preco or 0}
