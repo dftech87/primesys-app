@@ -157,6 +157,12 @@
         .entradas > summary::-webkit-details-marker { display: none; }
         .entradas > summary::after { content: '▾'; color: #94a3b8; }
         .entradas[open] > summary::after { content: '▴'; }
+        .entradas .titulo-conta.ultima { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
+            padding: 10px 12px; margin: 4px 0 8px; }
+        .entradas .titulo-conta.ultima .nome, .entradas .titulo-conta.ultima b { font-weight: 800; color: #0b3895; }
+        .entradas .titulo-conta.ultima b { font-size: 16px; }
+        .entradas .etiqueta { font-size: 10px; font-weight: 800; letter-spacing: .4px; color: #1d4fd8; margin-bottom: 4px; }
+        .entradas b small { font-size: 10px; font-weight: 400; color: #64748b; }
         .entradas .quando .sobe { color: #b91c1c; }
         .entradas .quando .desce { color: #15803d; }
         .entradas .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid #cbd5e1;
@@ -412,9 +418,16 @@
                 const margem = preco > 0 && e.custoUnit > 0
                     ? ` · margem ${fmtPct((preco - e.custoUnit) / preco * 100)}%${e.precoVenda > 0 ? '' : '*'}` : '';
                 const desconto = e.desconto > 0 ? ` · desc. ${fmtMoney(e.desconto)}` : '';
-                return `<div class="titulo-conta">
-                    <div class="linha1"><span class="nome">${esc(e.fornecedor)}</span><b>${fmtMoney(e.custoUnit)}</b></div>
-                    <div class="quando">NF ${esc(e.numero)}${e.serie ? '/' + esc(e.serie) : ''} · ${esc(e.data)} · ${fmtNum(e.qtd)} ${esc(e.unidade || '')}${variacao}${margem}${desconto}</div>
+                // A nota vem com o preço da embalagem; o custo e a margem são por unidade.
+                const qtdTexto = e.fator > 1
+                    ? `${fmtNum(e.qtd)} ${esc(e.unidade || '')} × ${fmtNum(e.fator)} = ${fmtNum(e.qtdUnidades)} un`
+                    : `${fmtNum(e.qtd)} ${esc(e.unidade || 'un')}`;
+                const valorNF = e.fator > 1 ? ` · NF ${fmtMoney(e.valorNF)}/emb.` : '';
+                const ultima = i === 0;
+                return `<div class="titulo-conta${ultima ? ' ultima' : ''}">
+                    ${ultima ? '<div class="etiqueta">ÚLTIMA ENTRADA · custo atual</div>' : ''}
+                    <div class="linha1"><span class="nome">${esc(e.fornecedor)}</span><b>${fmtMoney(e.custoUnit)}<small>/un</small></b></div>
+                    <div class="quando">NF ${esc(e.numero)}${e.serie ? '/' + esc(e.serie) : ''} · ${esc(e.data)} · ${qtdTexto}${valorNF}${variacao}${margem}${desconto}</div>
                 </div>`;
             }).join('');
             return linhas + (usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual.</div>' : '');
