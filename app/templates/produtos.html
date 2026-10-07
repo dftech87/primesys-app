@@ -210,7 +210,7 @@
         .corrigiu-preco { color: #64748b; }
         .linha-preco .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
         .linha-preco .sobe { color: #b91c1c; } .linha-preco .desce { color: #15803d; } .linha-preco .sem { color: #94a3b8; }
-        .tab-ent .legenda, #destinoPreco .legenda { font-size: 11px; color: #64748b; margin: 2px 0 8px; }
+        .tab-ent .legenda, #destinoPrecoFicha .legenda { font-size: 11px; color: #64748b; margin: 2px 0 8px; }
         .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid #cbd5e1;
             border-radius: 8px; background: #fff; color: var(--azul); font-size: 13px; font-weight: 700; cursor: pointer; }
 
@@ -682,20 +682,13 @@
             rolarParaTopo();
             mostrarViewCompras('detalhe');
             elComprasDetalhe.innerHTML = `<button class="voltar-compras" id="comprasVoltar">&larr; Voltar à lista</button>
-                <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>
-                <div class="dash-panel gestao" style="margin-top:16px">
-                    <details id="blocoPreco">
-                        <summary><div><div class="tit">Histórico de preço de venda</div><div class="sub-resumo">mudanças de preço e quem alterou</div></div></summary>
-                        <div id="destinoPreco"></div>
-                    </details>
-                </div>`;
+                <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>`;
             document.getElementById('comprasVoltar').addEventListener('click', () => {
                 entradasSeq++;
                 mostrarViewCompras(elBuscaCompras.value.trim().length >= 2 ? 'lista' : 'vazio');
                 elMain.scrollTop = posicaoListaCompras;
             });
             carregarEntradas(document.getElementById('comprasEntradas'), idVariacao, 10);
-            prepararBloco('blocoPreco', 'destinoPreco', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
         }
 
         function renderListaCompras(produtos) {
@@ -760,7 +753,19 @@
                         })() : ''}
                         <div class="secao-titulo">Estoque na loja selecionada</div>
                         <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
+                        <div class="dash-panel gestao" style="margin-top:16px">
+                            <details id="blocoPrecoFicha">
+                                <summary><div><div class="tit">Histórico de preço de venda</div><div class="sub-resumo">mudanças de preço e quem alterou</div></div></summary>
+                                <div id="destinoPrecoFicha"></div>
+                            </details>
+                        </div>
             `;
+        }
+
+        // Monta a ficha e liga o bloco recolhido do histórico de preço (só consulta o ERP quando a pessoa o abre).
+        function desenharFicha(p, idVariacao) {
+            elDetalhe.innerHTML = montarFicha(p);
+            prepararBloco('blocoPrecoFicha', 'destinoPrecoFicha', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
         }
 
         function abrirDetalhe(idVariacao, descricaoResumo) {
@@ -775,16 +780,15 @@
             const chaveFicha = `ficha|${idVariacao}|${elLoja.value}`;
             const vistoFicha = lerVisto(chaveFicha);
             // Antes de a ficha chegar: título + código já conhecidos da lista e esqueleto no resto.
-            elDetalhe.innerHTML = vistoFicha
-                ? montarFicha(vistoFicha.dados)
-                : `<h2>${esc(descricaoResumo)}</h2>${esqueleto(6)}`;
+            if (vistoFicha) desenharFicha(vistoFicha.dados, idVariacao);
+            else elDetalhe.innerHTML = `<h2>${esc(descricaoResumo)}</h2>${esqueleto(6)}`;
             if (estaFresco(vistoFicha)) return;
 
             fetch(`/api/produtos/${idVariacao}/detalhe?loja=${elLoja.value}`)
                 .then((r) => r.ok ? r.json() : Promise.reject(r))
                 .then((p) => {
                     guardarVisto(chaveFicha, p);
-                    elDetalhe.innerHTML = montarFicha(p);
+                    desenharFicha(p, idVariacao);
                 })
                 .catch(() => {
                     elDetalhe.innerHTML = '<div class="erro">Não foi possível carregar este produto.</div>';
