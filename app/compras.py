@@ -1,7 +1,6 @@
 """Entradas (compras) de um produto: as últimas notas fiscais em que ele chegou na loja."""
 
 import re
-from datetime import datetime
 
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import executar, i
@@ -73,11 +72,6 @@ async def entradas_produto(client: MeuERPClient, id_variacao: int, limite: int =
 # Histórico do preço de venda
 # ---------------------------------------------------------------------------------------------
 
-# Mudança de preço que passa deste percentual e volta ao valor anterior em poucos dias: provável erro.
-_LIMITE_ERRO_PRECO = 0.30
-_DIAS_PARA_VOLTAR = 15
-
-
 def nome_publico(bruto: str | None) -> str:
     """Só o primeiro nome de quem alterou: o e-mail do funcionário nunca sai do servidor."""
     texto = (bruto or "").strip().split("@", 1)[0]
@@ -91,12 +85,12 @@ def nome_publico(bruto: str | None) -> str:
 async def historico_preco(client: MeuERPClient, id_variacao: int, limite: int = 30) -> list[dict]:
     """Mudanças do preço de venda (tabela principal do produto), da mais nova para a mais antiga.
 
-    Marca `possivelErro` quando o preço mudou mais de 30% e voltou ao valor anterior em até 15 dias
-    (ex.: 1,46 -> 7,16 -> 1,46), e `corrigiu` na mudança que desfez o erro.
+    Só fatos do ERP: data, preço anterior, preço novo e o primeiro nome de quem alterou. O app não interpreta
+    a mudança (não diz se foi erro ou correção).
     """
     linhas = await executar(
         client,
-        f"""select to_char(h.datahora, 'YYYY-MM-DD HH24:MI:SS') as quando, to_char(h.datahora, 'DD/MM/YYYY') as data,
+        f"""select to_char(h.datahora, 'DD/MM/YYYY') as data,
                    h.valprecotual as de, h.valpreconovo as para, h.nomeusuarioalteracao as quem
             from mercadoria_tabela_preco_historico h
             where h._idmercadoriavariacao = {i(id_variacao)}
@@ -104,31 +98,13 @@ async def historico_preco(client: MeuERPClient, id_variacao: int, limite: int = 
                                  where x._idmercadoriavariacao = {i(id_variacao)})
             order by h.datahora desc limit {i(max(1, min(int(limite), 60)))}""",
     )
-    mudancas = [
+    return [
         {
-            "quando": datetime.strptime(l["quando"], "%Y-%m-%d %H:%M:%S"),
             "data": l["data"],
             "de": _num(l["de"]),
             "para": _num(l["para"]),
             "quem": nome_publico(l["quem"]),
-            "possivelErro": False,
-            "corrigiu": False,
-            "voltouEmDias": None,
+            "variacaoPct": round((_num(l["para"]) - _num(l["de"])) / _num(l["de"]) * 100, 1) if _num(l["de"]) > 0 else None,
         }
         for l in linhas
     ]
-    antigas_primeiro = sorted(mudancas, key=lambda m: m["quando"])
-    for k, m in enumerate(antigas_primeiro):
-        if m["de"] <= 0 or abs(m["para"] - m["de"]) / m["de"] < _LIMITE_ERRO_PRECO:
-            continue
-        for depois in antigas_primeiro[k + 1:]:
-            dias = (depois["quando"] - m["quando"]).days
-            if dias > _DIAS_PARA_VOLTAR:
-                break
-            if abs(depois["para"] - m["de"]) / m["de"] <= 0.05:
-                m["possivelErro"], m["voltouEmDias"], depois["corrigiu"] = True, dias, True
-                break
-    for m in mudancas:
-        m["variacaoPct"] = round((m["para"] - m["de"]) / m["de"] * 100, 1) if m["de"] > 0 else None
-        m["quando"] = m["quando"].isoformat()
-    return mudancas

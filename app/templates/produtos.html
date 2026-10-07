@@ -204,10 +204,7 @@
         .linha-preco.cab { font-size: 10px; color: #64748b; padding: 4px 6px; border: 0; }
         .linha-preco .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .linha-preco .lp-quem { padding-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .linha-preco .lp-nota { grid-column: 1 / -1; font-size: 11px; line-height: 1.4; }
         .linha-preco.atual { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-weight: 800; color: #0b3895; }
-        .aviso-preco { color: #92400e; }
-        .corrigiu-preco { color: #64748b; }
         .linha-preco .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
         .linha-preco .sobe { color: #b91c1c; } .linha-preco .desce { color: #15803d; } .linha-preco .sem { color: #94a3b8; }
         .tab-ent .legenda, #destinoPrecoFicha .legenda { font-size: 11px; color: #64748b; margin: 2px 0 8px; }
@@ -635,23 +632,18 @@
         function renderHistoricoPreco(mudancas) {
             if (!mudancas.length) return '<div class="indisponivel">Este produto não tem mudanças de preço registradas.</div>';
             const n3 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
-            const temErro = mudancas.some((m) => m.possivelErro);
             const linhas = mudancas.map((m, i) => {
                 const sobe = m.para > m.de;
                 const seta = Math.abs(m.variacaoPct ?? 0) >= 1
                     ? `<span class="seta ${sobe ? 'desce' : 'sobe'}">${sobe ? '▲' : '▼'}</span>` : '<span class="seta sem">–</span>';
-                const nota = m.possivelErro
-                    ? `<br><span class="aviso-preco">⚠ possível erro: o preço voltou ao anterior em ${m.voltouEmDias === 0 ? 'poucas horas' : m.voltouEmDias + ' dia(s)'}</span>`
-                    : m.corrigiu ? '<br><span class="corrigiu-preco">corrigiu o preço anterior</span>' : '';
                 return `<div class="linha-preco ${i === 0 ? 'atual' : ''}">
                     <div class="lp-data">${esc(m.data.slice(0, 6) + m.data.slice(8))}</div>
                     <div class="n">${n3(m.de)}</div>
                     <div class="n">${n3(m.para)} ${seta}</div>
                     <div class="lp-quem">${esc(m.quem)}</div>
-                    ${nota ? `<div class="lp-nota">${nota}</div>` : ''}
                 </div>`;
             }).join('');
-            return `<div class="legenda">A linha em destaque é a mudança mais recente: o preço de venda atual.${temErro ? ' Mudanças marcadas com ⚠ voltaram ao valor anterior em poucos dias.' : ''}</div>
+            return `<div class="legenda">A linha em destaque é a mudança mais recente: o preço de venda atual.</div>
                 <div class="linha-preco cab"><div>Data</div><div class="n">De</div><div class="n">Para</div><div>Quem</div></div>
                 ${linhas}`;
         }
