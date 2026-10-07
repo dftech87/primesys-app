@@ -1051,17 +1051,17 @@
             let html = '';
             if (ab.produtos) {
                 html += `<div class="sub-titulo">VENDIDOS ABAIXO DO CUSTO · perda de ${fmtMoney(ab.perda)}</div>`
-                    + ab.itens.map((i) => linha(i, '', `− ${fmtMoney(i.perda)}`, 'ruim')).join('')
+                    + ab.itens.map((i) => linha(i, `cód. ${esc(i.codigo)}`, `− ${fmtMoney(i.perda)}`, 'ruim')).join('')
                     + (ab.produtos > ab.itens.length ? `<div class="nota">e mais ${ab.produtos - ab.itens.length}.</div>` : '');
             }
             if (mg.menorMargem.length) {
                 html += '<div class="sub-titulo">MENOR MARGEM · produtos com venda relevante</div>'
-                    + mg.menorMargem.map((i) => linha(i, `vendeu ${fmtMoney(i.venda)}`,
+                    + mg.menorMargem.map((i) => linha(i, `cód. ${esc(i.codigo)} · vendeu ${fmtMoney(i.venda)}`,
                         `${fmtPct(i.margemPct)}%`, i.margemPct < 0 ? 'ruim' : i.margemPct < 10 ? 'aviso' : '')).join('');
             }
             if (mg.maiorLucro.length) {
                 html += '<div class="sub-titulo">MAIOR LUCRO</div>'
-                    + mg.maiorLucro.map((i) => linha(i, `margem ${fmtPct(i.margemPct)}%`, fmtMoney(i.lucro), 'ok')).join('');
+                    + mg.maiorLucro.map((i) => linha(i, `cód. ${esc(i.codigo)} · margem ${fmtPct(i.margemPct)}%`, fmtMoney(i.lucro), 'ok')).join('');
             }
             html += '<div class="nota">Margem estimada com o custo registrado no ERP no momento da venda. Itens sem custo ficam de fora.</div>';
             document.getElementById('margemDetalhe').innerHTML = html;

@@ -194,7 +194,7 @@ async def margem(
                      case when perda > 0 then row_number() over (order by perda desc nulls last) end as rn_perda
               from t
             )
-            select descricao, round(venda, 2) as venda, round(custo, 2) as custo, round(lucro, 2) as lucro,
+            select idv, descricao, round(venda, 2) as venda, round(custo, 2) as custo, round(lucro, 2) as lucro,
                    round(margem, 1) as margem, round(perda, 2) as perda,
                    rn_lucro, rn_margem, rn_perda,
                    g_venda_itens, g_venda, g_custo, g_venda_comp, g_custo_comp, g_perda, g_produtos_perda
@@ -216,7 +216,7 @@ async def margem(
         escolhidos = sorted((l for l in linhas if l[campo] is not None and l[campo] <= limite), key=lambda l: l[campo])
         return [
             {
-                "descricao": l["descricao"], "venda": _num(l["venda"]), "lucro": _num(l["lucro"]),
+                "codigo": l["idv"], "descricao": l["descricao"], "venda": _num(l["venda"]), "lucro": _num(l["lucro"]),
                 "margemPct": _num(l["margem"]), "perda": _num(l["perda"]),
             }
             for l in escolhidos
