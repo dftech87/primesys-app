@@ -46,6 +46,11 @@ async def fechamentos(client: MeuERPClient, inicio: date, fim: date) -> dict:
         client,
         f"""select d._iddocumento as id, d.numero, to_char(d.datahora, 'YYYY-MM-DD HH24:MI:SS') as quando,
                    d.idabertura as abertura, d.idcaixa as caixa, d.nomeusuario as operador,
+                   to_char((select max(a.datahora) from documento a
+                             where a.modelo = 'AX' and a.idcaixa = d.idcaixa and a.idabertura = d.idabertura
+                               and a.idusuario = d.idusuarioabertura and a.datahora <= d.datahora
+                               and a.datahora >= {d(inicio - timedelta(days=3))}),
+                           'YYYY-MM-DD HH24:MI:SS') as aberto_em,
                    (select max(x.nomeusuario) from documento x
                      where x.idusuario = dc.idusuario and x.datahora >= {d(inicio - timedelta(days=90))}) as conferente,
                    (dc._iddocumento is not null) as conferido_por_outro,
@@ -56,7 +61,8 @@ async def fechamentos(client: MeuERPClient, inicio: date, fim: date) -> dict:
             left join documento_conferencia dc on dc._iddocumento = d._iddocumento
             where d.modelo = 'FC' and d.status = 'E'
               and d.datahora >= {d(inicio)} and d.datahora < {d(fim + timedelta(days=1))}
-            group by d._iddocumento, d.numero, d.datahora, d.idabertura, d.idcaixa, d.nomeusuario, dc._iddocumento, dc.idusuario
+            group by d._iddocumento, d.numero, d.datahora, d.idabertura, d.idcaixa, d.idusuarioabertura, d.nomeusuario,
+                     dc._iddocumento, dc.idusuario
             having sum(c.valdisponivel) <> 0 or sum(c.valconferido) <> 0
             order by d.datahora desc limit {MAX_FECHAMENTOS}""",
     )
@@ -87,6 +93,7 @@ async def fechamentos(client: MeuERPClient, inicio: date, fim: date) -> dict:
             situacao = "conferido"
 
         quando = datetime.strptime(l["quando"], "%Y-%m-%d %H:%M:%S")
+        aberto = datetime.strptime(l["aberto_em"], "%Y-%m-%d %H:%M:%S") if l["aberto_em"] else None
         operador = _primeiro_nome(l["operador"])
         outras = [f for f in formas if not _eh_dinheiro(f["forma"])]
         dif_dinheiro = dinheiro["diferenca"] if dinheiro else 0.0
@@ -105,6 +112,9 @@ async def fechamentos(client: MeuERPClient, inicio: date, fim: date) -> dict:
                 "numero": l["numero"],
                 "data": quando.strftime("%d/%m"),
                 "hora": quando.strftime("%H:%M"),
+                "abertoEm": (
+                    {"data": aberto.strftime("%d/%m"), "hora": aberto.strftime("%H:%M")} if aberto else None
+                ),
                 "abertura": l["abertura"],
                 "caixa": l["caixa"],
                 "operador": operador,
