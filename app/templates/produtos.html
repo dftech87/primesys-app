@@ -290,6 +290,13 @@
             .sk { animation: none; }
             .tabbar button:active, .card:active, #dashFiltrar:active, #confFiltrar:active, .mais:active { transform: none; }
         }
+        .aviso-versao { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: #0b3895; color: #fff;
+            font-size: 13px; animation: entrada .25s ease-out; flex: 0 0 auto; }
+        .aviso-versao.mostrar { display: flex; }
+        .aviso-versao .texto { flex: 1; line-height: 1.35; }
+        .aviso-versao button { border: 0; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; }
+        .aviso-versao .atualizar { background: #fff; color: #0b3895; padding: 8px 14px; }
+        .aviso-versao .dispensar { background: none; color: #bfdbfe; padding: 6px 4px; font-size: 16px; }
         .tabbar button[hidden] { display: none; }
         #conferenciaView { display: none; padding: 16px; }
         #comprasView { display: none; }
@@ -460,6 +467,12 @@
                 </div>
             </div>
         </main>
+
+        <div class="aviso-versao" id="avisoVersao" role="status" aria-live="polite">
+            <span class="texto"><b>Nova versão disponível.</b> Atualize para ver as novidades.</span>
+            <button type="button" class="atualizar" id="btnAtualizarApp">Atualizar</button>
+            <button type="button" class="dispensar" id="btnDispensarAviso" aria-label="Agora não">&#10005;</button>
+        </div>
 
         <nav class="tabbar">
             <button class="ativo" id="tabProdutos">
@@ -1552,6 +1565,47 @@
                 window.location.reload();
             }
         });
+
+        // Aviso de nova versão. O app fica aberto em segundo plano e não recarrega sozinho: perguntamos ao servidor
+        // qual é a versão atual (ao voltar para o app e de tempos em tempos). Se mudou desde que esta tela foi
+        // carregada, aparece a faixa "Nova versão disponível"; o botão recarrega e volta para a mesma aba.
+        const VERSAO_DA_TELA = '{{ versao }}';
+        const elAvisoVersao = document.getElementById('avisoVersao');
+        let versaoDispensada = null;
+
+        async function verificarVersao() {
+            if (!VERSAO_DA_TELA) return;
+            try {
+                const res = await fetch('/api/versao', { cache: 'no-store' });
+                if (!res.ok) return;
+                const { versao } = await res.json();
+                if (versao && versao !== VERSAO_DA_TELA && versao !== versaoDispensada) {
+                    elAvisoVersao.classList.add('mostrar');
+                }
+            } catch (err) { /* sem internet agora: tenta na próxima */ }
+        }
+
+        document.getElementById('btnAtualizarApp').addEventListener('click', () => {
+            const botao = document.getElementById('btnAtualizarApp');
+            botao.textContent = 'Atualizando...';
+            botao.disabled = true;
+            try { sessionStorage.setItem('primesys_restaurar', abaAtual); } catch (err) {}
+            window.location.reload();
+        });
+        document.getElementById('btnDispensarAviso').addEventListener('click', async () => {
+            elAvisoVersao.classList.remove('mostrar');
+            try { versaoDispensada = (await (await fetch('/api/versao', { cache: 'no-store' })).json()).versao; } catch (err) {}
+        });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verificarVersao(); });
+        setInterval(verificarVersao, 5 * 60 * 1000);
+        setTimeout(verificarVersao, 4000);
+
+        // Depois de atualizar pelo aviso, volta para a aba em que a pessoa estava.
+        try {
+            const aba = sessionStorage.getItem('primesys_restaurar');
+            sessionStorage.removeItem('primesys_restaurar');
+            if (aba && aba !== 'produtos' && aba !== 'alertas' && tabs[aba]) mostrarTab(aba);
+        } catch (err) {}
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js').catch(() => {});

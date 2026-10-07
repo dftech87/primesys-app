@@ -1,9 +1,10 @@
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from app import versao
 from app.config import settings
 from app.database import init_db
 from app.routers import admin, auth, dashboard, painel_mobile, produtos
@@ -25,6 +26,12 @@ class _GZipSemServiceWorker(GZipMiddleware):
 app = FastAPI(title="PrimeSys Dashboard")
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.add_middleware(_GZipSemServiceWorker, minimum_size=1024)
+
+
+@app.get("/api/versao")
+async def versao_atual():
+    """Número da versão no ar (hash curto). O app compara com o da tela carregada e avisa quando mudou."""
+    return JSONResponse({"versao": versao.VERSAO}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/static/sw.js")

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import compras
+from app import compras, versao
 from app.cache import cached
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
@@ -60,7 +60,7 @@ async def produtos_page(request: Request):
     return templates.TemplateResponse(
         request,
         "produtos.html",
-        {"empresa_nome": tenant["nome_fantasia"]},
+        {"empresa_nome": tenant["nome_fantasia"], "versao": versao.VERSAO},
         headers={"Cache-Control": "no-store"},
     )
 
