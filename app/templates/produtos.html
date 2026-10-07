@@ -1608,7 +1608,9 @@
         window.addEventListener('pageshow', verificarVersao);
         window.addEventListener('online', verificarVersao);
         document.addEventListener('resume', verificarVersao);   // Page Lifecycle: página "descongelada"
-        setInterval(verificarVersao, 2 * 60 * 1000);
+        // A consulta é minúscula (não passa pelo ERP, não gasta a cota de 20 por minuto): a cada 30 s enquanto o app
+        // está na tela. Em segundo plano não consulta; ao voltar, o evento de visibilidade já verifica na hora.
+        setInterval(() => { if (document.visibilityState === 'visible') verificarVersao(); }, 30 * 1000);
         setTimeout(verificarVersao, 4000);
 
         // Depois de atualizar pelo aviso, volta para a aba em que a pessoa estava.
