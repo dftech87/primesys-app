@@ -159,6 +159,9 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
         .cx.cx-ok { border-left-color: #16a34a; } .cx.cx-neg { border-left-color: #dc2626; }
         .cx.cx-pos { border-left-color: #1d4fd8; } .cx.cx-neutro { border-left-color: #d97706; }
+        .cx { cursor: pointer; }
+        .cx:active { background: #f8fafc; }
+        .cx-formas { cursor: default; }
         .cx-topo { display: flex; align-items: baseline; gap: 8px; cursor: pointer; -webkit-tap-highlight-color: rgba(11,56,149,.08); }
         .cx-nome { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
         .cx-ab { font-size: 11px; color: #64748b; white-space: nowrap; }
@@ -1108,8 +1111,8 @@
                 : '<div class="indisponivel">Nenhum fechamento de caixa com movimento neste período.</div>';
 
             if (!data.fechamentos.length) { elFechDetalhe.innerHTML = '<div class="indisponivel">Nada para mostrar.</div>'; return; }
-            // Poucos caixas: já vêm abertos, com as formas de pagamento visíveis. Muitos: vêm fechados (toque para abrir).
-            const abertosPorPadrao = data.fechamentos.length <= 8;
+            // Todos os caixas entram fechados (uma linha por caixa); tocar no cartão abre as formas de pagamento.
+            const abertosPorPadrao = false;
             const cartoes = data.fechamentos.map((f) => {
                 const din = f.dinheiro;
                 let cor = 'cx-neutro';
@@ -1149,7 +1152,7 @@
                 </div>`;
             }).join('');
             elFechDetalhe.innerHTML = `${cartoes}
-                <div class="nota">Diferença = contado − esperado: + é sobra (verde), − é falta (vermelho). Faixa vermelha: falta de R$ ${n2(r.limite)} ou mais no dinheiro; azul: sobra de R$ ${n2(r.limite)} ou mais; verde: dentro de R$ ${n2(r.limite)}. Toque no nome do caixa para abrir ou fechar as formas de pagamento.${data.truncado ? ' Mostrando os 60 fechamentos mais recentes.' : ''}</div>`;
+                <div class="nota">Diferença = contado − esperado: + é sobra (verde), − é falta (vermelho). Faixa vermelha: falta de R$ ${n2(r.limite)} ou mais no dinheiro; azul: sobra de R$ ${n2(r.limite)} ou mais; verde: dentro de R$ ${n2(r.limite)}. Toque no caixa para ver as formas de pagamento.${data.truncado ? ' Mostrando os 60 fechamentos mais recentes.' : ''}</div>`;
         }
 
         // Abrir e fechar as formas de pagamento de cada caixa (toque explícito, sem depender do <details> do navegador).
@@ -1162,8 +1165,9 @@
             cartao.classList.toggle('aberto', abrir);
         }
         elFechDetalhe.addEventListener('click', (ev) => {
-            const topo = ev.target.closest('.cx-topo');
-            if (topo) alternarCaixa(topo);
+            if (ev.target.closest('.cx-formas')) return;
+            const cartao = ev.target.closest('.cx');
+            if (cartao) alternarCaixa(cartao.querySelector('.cx-topo'));
         });
         elFechDetalhe.addEventListener('keydown', (ev) => {
             if (ev.key !== 'Enter' && ev.key !== ' ') return;
