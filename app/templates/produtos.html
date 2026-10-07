@@ -151,20 +151,22 @@
         .val.ok { color: #15803d; }
         .val.aviso { color: #b45309; }
         .indisponivel { color: #94a3b8; font-size: 13px; }
-        .fech-cab, .fech-linha, .fd-linha { display: grid; grid-template-columns: 1fr 58px 58px 66px; gap: 4px; align-items: center; }
+        .fech-cab, .fech-linha { display: grid; grid-template-columns: 1fr 56px 56px 64px 14px; gap: 4px; align-items: center; }
+        .fd-linha { display: grid; grid-template-columns: 1fr 58px 58px 66px; gap: 4px; align-items: center; }
         .fech-cab, .fd-cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
         .fech { border-bottom: 1px solid #eef2f7; }
-        .fech > summary { list-style: none; cursor: pointer; padding: 9px 6px; font-size: 12px; }
-        .fech > summary::-webkit-details-marker { display: none; }
-        .fech[open] > summary { background: #f8fafc; border-radius: 8px; }
-        .fech .n, .fd-linha .n, .fech-cab .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .fech-linha { cursor: pointer; padding: 10px 6px; font-size: 12px; -webkit-tap-highlight-color: rgba(11,56,149,.08); }
+        .fech.aberto > .fech-linha { background: #f1f5f9; border-radius: 8px; }
+        .fech-linha .chev { color: #94a3b8; font-size: 12px; text-align: center; }
+        .fech.aberto .chev { transform: rotate(180deg); }
+        .fech-linha .n, .fd-linha .n, .fech-cab .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .fech-op { font-weight: 700; min-width: 0; }
         .fech-op .sub { font-weight: 400; }
         .dif-pos { color: #15803d; font-weight: 700; }
         .dif-neg { color: #b91c1c; font-weight: 700; }
         .dif-zero { color: #94a3b8; }
         .fech-aviso-texto { color: #92400e; font-size: 10.5px; }
-        .fech-det { padding: 4px 4px 12px; }
+        .fech-det { padding: 6px 4px 12px; }
         .fd-linha { padding: 6px 2px; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
         .fd-total { font-weight: 700; border-top: 1px solid #e2e8f0; }
         .fd-dif { display: inline-block; min-width: 56px; padding: 2px 5px; border-radius: 5px; text-align: right; }
@@ -252,6 +254,8 @@
         .titulo-conta .quando { color: #64748b; font-size: 11px; margin-top: 2px; }
         .titulo-conta .quando.atraso { color: #b91c1c; }
 
+        .tabbar button[hidden] { display: none; }
+        #conferenciaView { display: none; padding: 16px; }
         #comprasView { display: none; }
         #comprasDetalhe { padding: 16px; }
         .voltar-compras { border: 0; background: none; color: var(--azul); font-size: 14px; font-weight: 700;
@@ -369,12 +373,6 @@
                         <div id="margemDetalhe"></div>
                     </details>
                 </div>
-                <div class="dash-panel gestao" id="gestaoFechamento">
-                    <details id="fechBox">
-                        <summary><div><div class="tit">Fechamento de caixa</div><div class="sub-resumo" id="fechResumo">toque para ver os caixas do período</div></div></summary>
-                        <div id="fechDetalhe"></div>
-                    </details>
-                </div>
                 <div class="dash-panel">
                     <h3 id="dashDiarioTitulo">Vendas por dia</h3>
                     <canvas id="chartDiario" height="200"></canvas>
@@ -383,6 +381,22 @@
                     <h3>Cancelamentos</h3>
                     <div id="dashCancelamentos"></div>
                 </div>
+            </div>
+
+            <div id="conferenciaView">
+                <div class="dash-filtro">
+                    <div>
+                        <label for="confDe">De</label>
+                        <input id="confDe" type="date" />
+                    </div>
+                    <div>
+                        <label for="confAte">Até</label>
+                        <input id="confAte" type="date" />
+                    </div>
+                    <button id="confFiltrar">Filtrar</button>
+                </div>
+                <div class="dash-panel"><h3>Resumo do período</h3><div id="confResumo"></div></div>
+                <div class="dash-panel"><h3>Caixas fechados</h3><div id="confLista"></div></div>
             </div>
 
             <div id="alertasView">
@@ -424,7 +438,11 @@
                 <span class="tab-icone">&#128202;</span>
                 Dashboard
             </button>
-            <button id="tabAlertas">
+            <button id="tabConferencia">
+                <span class="tab-icone">&#128181;</span>
+                Conferência
+            </button>
+            <button id="tabAlertas" hidden>
                 <span class="tab-icone">&#9888;&#65039;<span class="selo" id="seloAlertas"></span></span>
                 Alertas
             </button>
@@ -723,7 +741,7 @@
                 .join('');
             // Se a pessoa já abriu "Alertas" antes da lista de lojas chegar, carrega agora.
             if (abaAtual === 'alertas') carregarAlertas();
-            else setTimeout(() => carregarAlertas(true), 2500);
+            // Aba Alertas escondida por enquanto: não consulta o ERP em segundo plano para o selo.
         }
 
         carregarLojas();
@@ -734,6 +752,7 @@
         const tabs = {
             produtos: document.getElementById('tabProdutos'),
             compras: document.getElementById('tabCompras'),
+            conferencia: document.getElementById('tabConferencia'),
             dashboard: document.getElementById('tabDashboard'),
             alertas: document.getElementById('tabAlertas'),
         };
@@ -760,6 +779,7 @@
             elDashboardView.style.display = tab === 'dashboard' ? 'block' : 'none';
             elAlertasView.style.display = tab === 'alertas' ? 'block' : 'none';
             elComprasView.style.display = tab === 'compras' ? 'block' : 'none';
+            elConferenciaView.style.display = tab === 'conferencia' ? 'block' : 'none';
             elBuscaComprasWrap.style.display = tab === 'compras' ? 'block' : 'none';
 
             if (tab === 'produtos') {
@@ -781,6 +801,16 @@
             // A loja só importa para o estoque (Alertas); as vendas são da empresa toda.
             elLoja.style.display = tab === 'alertas' ? 'block' : 'none';
 
+            if (tab === 'conferencia') {
+                elSubtitulo.textContent = 'Conferência de caixa';
+                if (!elConfDe.value) {
+                    elConfDe.value = hojeISO();
+                    elConfAte.value = hojeISO();
+                }
+                carregarFechamento();
+                return;
+            }
+
             if (tab === 'compras') {
                 elSubtitulo.textContent = 'Compras · notas de entrada';
                 return;
@@ -800,6 +830,7 @@
         }
         tabs.produtos.addEventListener('click', () => mostrarTab('produtos'));
         tabs.compras.addEventListener('click', () => mostrarTab('compras'));
+        tabs.conferencia.addEventListener('click', () => mostrarTab('conferencia'));
         tabs.dashboard.addEventListener('click', () => mostrarTab('dashboard'));
         tabs.alertas.addEventListener('click', () => mostrarTab('alertas'));
         elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value));
@@ -807,7 +838,6 @@
 
         async function carregarDashboardMobile(inicio, fim) {
             const seq = ++dashSeq;
-            periodoDoDashboardMudou();
             const elErro = document.getElementById('dashErro');
             elErro.style.display = 'none';
             document.getElementById('dashTotal').textContent = 'carregando...';
@@ -935,7 +965,7 @@
             document.getElementById('margemDetalhe').innerHTML = html;
         }
 
-        // Fechamento de caixa: esperado x contado por operador, com detalhe por forma de pagamento.
+        // Aba Conferência: fechamento de caixa por operador, com detalhe por forma de pagamento.
         // Diferença = contado - esperado: acima de zero é sobra (+, verde); abaixo de zero é falta (−, vermelho).
         const fmtSinal = (v) => {
             const n = Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -943,11 +973,12 @@
         };
         const classeDif = (v) => (v > 0.004 ? 'dif-pos' : v < -0.004 ? 'dif-neg' : 'dif-zero');
         const n2 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const elFechBox = document.getElementById('fechBox');
-        const elFechResumo = document.getElementById('fechResumo');
-        const elFechDetalhe = document.getElementById('fechDetalhe');
-        const FECH_TEXTO_INICIAL = 'toque para ver os caixas do período';
-        let fechChave = null;   // período já carregado
+        const moedaSinal = (v) => `${v < 0 ? '−' : '+'}R$ ${n2(Math.abs(v))}`;
+        const elConferenciaView = document.getElementById('conferenciaView');
+        const elConfDe = document.getElementById('confDe');
+        const elConfAte = document.getElementById('confAte');
+        const elFechResumo = document.getElementById('confResumo');
+        const elFechDetalhe = document.getElementById('confLista');
         let fechSeq = 0;
 
         function renderFechamentoDetalhe(f) {
@@ -971,32 +1002,28 @@
             } else if (f.situacao === 'sem_conferencia') {
                 aviso = '<div class="fech-aviso">Este caixa foi fechado sem conferência (nenhum valor contado).</div>';
             }
-            return `<div class="fech-det">
-                <div class="fd-linha fd-cab"><span>Forma</span><span class="n">Esperado</span><span class="n">Contado</span><span class="n">Dif.</span></div>
+            return `<div class="fd-linha fd-cab"><span>Forma</span><span class="n">Esperado</span><span class="n">Contado</span><span class="n">Dif.</span></div>
                 ${linhas}${total}${aviso}
-                <div class="fech-rodape">Abertura nº ${esc(f.abertura)} · fechamento nº ${esc(f.numero)} · conferido por ${esc(f.conferente)}</div>
-            </div>`;
+                <div class="fech-rodape">Abertura nº ${esc(f.abertura)} · fechamento nº ${esc(f.numero)} · conferido por ${esc(f.conferente)}</div>`;
         }
 
         function renderFechamento(data, umDia) {
             const r = data.resumo;
-            const partes = [];
+            const linhasResumo = [];
             if (r.conferidos) {
-                partes.push(`${r.conferidos} ${r.conferidos === 1 ? 'caixa conferido' : 'caixas conferidos'}`);
-                const moeda = (v) => `${v < 0 ? '−' : '+'}R$ ${n2(Math.abs(v))}`;
-                if (r.qtdFaltas) partes.push(`dinheiro <span class="dif-neg">${moeda(r.faltas)}</span>`);
-                if (r.qtdSobras) partes.push(`<span class="dif-pos">${moeda(r.sobras)}</span>`);
-                if (!r.qtdFaltas && !r.qtdSobras) partes.push('sem diferença relevante no dinheiro');
+                linhasResumo.push(`<div class="linha-info"><span class="desc">Caixas conferidos</span><span class="val">${r.conferidos}</span></div>`);
+                if (r.qtdFaltas) linhasResumo.push(`<div class="linha-info"><span class="desc">Falta no dinheiro (${r.qtdFaltas} ${r.qtdFaltas === 1 ? 'caixa' : 'caixas'})</span><span class="val dif-neg">${moedaSinal(r.faltas)}</span></div>`);
+                if (r.qtdSobras) linhasResumo.push(`<div class="linha-info"><span class="desc">Sobra no dinheiro (${r.qtdSobras} ${r.qtdSobras === 1 ? 'caixa' : 'caixas'})</span><span class="val dif-pos">${moedaSinal(r.sobras)}</span></div>`);
+                if (!r.qtdFaltas && !r.qtdSobras) linhasResumo.push('<div class="linha-info"><span class="desc">Diferença no dinheiro</span><span class="val dif-zero">nenhuma relevante</span></div>');
             }
-            if (r.dinheiroNaoContado) partes.push(`${r.dinheiroNaoContado} com dinheiro não contado`);
-            if (r.semConferencia) partes.push(`${r.semConferencia} sem conferência`);
-            elFechResumo.innerHTML = partes.length ? partes.join(' · ') : 'nenhum fechamento no período';
+            if (r.dinheiroNaoContado) linhasResumo.push(`<div class="linha-info"><span class="desc">Dinheiro não contado</span><span class="val">${r.dinheiroNaoContado}</span></div>`);
+            if (r.semConferencia) linhasResumo.push(`<div class="linha-info"><span class="desc">Sem conferência</span><span class="val">${r.semConferencia}</span></div>`);
+            elFechResumo.innerHTML = linhasResumo.length
+                ? linhasResumo.join('') + `<div class="nota">Só entram nas somas faltas e sobras de R$ ${n2(r.limite)} ou mais.</div>`
+                : '<div class="indisponivel">Nenhum fechamento de caixa com movimento neste período.</div>';
 
-            if (!data.fechamentos.length) {
-                elFechDetalhe.innerHTML = '<div class="indisponivel">Nenhum fechamento de caixa com movimento neste período.</div>';
-                return;
-            }
-            const linhas = data.fechamentos.map((f) => {
+            if (!data.fechamentos.length) { elFechDetalhe.innerHTML = '<div class="indisponivel">Nada para mostrar.</div>'; return; }
+            const linhas = data.fechamentos.map((f, i) => {
                 const din = f.dinheiro;
                 let esperado = '–', contado = '–', dif;
                 if (f.situacao === 'conferido' && din) {
@@ -1010,50 +1037,56 @@
                     dif = '<span class="dif-zero">sem conf.</span>';
                 }
                 const onde = `${umDia ? '' : esc(f.data) + ' · '}cx ${esc(f.caixa)} · ${esc(f.hora)}`;
-                return `<details class="fech">
-                    <summary class="fech-linha"><span class="fech-op">${esc(f.operador)}<span class="sub">${onde}</span></span>
-                        <span class="n">${esperado}</span><span class="n">${contado}</span><span class="n">${dif}</span></summary>
-                    ${renderFechamentoDetalhe(f)}
-                </details>`;
+                return `<div class="fech">
+                    <div class="fech-linha" role="button" tabindex="0" aria-expanded="false" data-i="${i}">
+                        <span class="fech-op">${esc(f.operador)}<span class="sub">${onde}</span></span>
+                        <span class="n">${esperado}</span><span class="n">${contado}</span><span class="n">${dif}</span><span class="chev">▾</span>
+                    </div>
+                    <div class="fech-det" hidden>${renderFechamentoDetalhe(f)}</div>
+                </div>`;
             }).join('');
             elFechDetalhe.innerHTML = `
-                <div class="fech-cab"><span>Operador</span><span class="n">Esperado</span><span class="n">Contado</span><span class="n">Dif.</span></div>
+                <div class="fech-cab"><span>Operador</span><span class="n">Esperado</span><span class="n">Contado</span><span class="n">Dif.</span><span></span></div>
                 ${linhas}
                 <div class="nota">Valores em dinheiro. Toque num caixa para ver todas as formas de pagamento. Diferença = contado − esperado: + é sobra, − é falta.${data.truncado ? ' Mostrando os 60 fechamentos mais recentes.' : ''}</div>`;
         }
 
+        // Abrir e fechar o detalhe de cada caixa (toque explícito, sem depender do <details> do navegador).
+        function alternarCaixa(linha) {
+            const detalhe = linha.nextElementSibling;
+            const abrir = detalhe.hasAttribute('hidden');
+            detalhe.toggleAttribute('hidden', !abrir);
+            linha.setAttribute('aria-expanded', String(abrir));
+            linha.parentElement.classList.toggle('aberto', abrir);
+        }
+        elFechDetalhe.addEventListener('click', (ev) => {
+            const linha = ev.target.closest('.fech-linha');
+            if (linha) alternarCaixa(linha);
+        });
+        elFechDetalhe.addEventListener('keydown', (ev) => {
+            if (ev.key !== 'Enter' && ev.key !== ' ') return;
+            const linha = ev.target.closest('.fech-linha');
+            if (linha) { ev.preventDefault(); alternarCaixa(linha); }
+        });
+
         async function carregarFechamento() {
-            const inicio = elDashDe.value, fim = elDashAte.value;
+            const inicio = elConfDe.value, fim = elConfAte.value;
             if (!inicio || !fim) return;
-            const chave = `${inicio}|${fim}`;
             const seq = ++fechSeq;
-            elFechDetalhe.innerHTML = '<div class="loading">Carregando...</div>';
+            elFechResumo.innerHTML = '<div class="loading">Carregando...</div>';
+            elFechDetalhe.innerHTML = '';
             try {
                 const res = await fetch(`/api/produtos/fechamento-caixa?${new URLSearchParams({ inicio, fim })}`);
                 if (!res.ok) throw new Error('falha');
                 const data = await res.json();
                 if (seq !== fechSeq) return;
-                fechChave = chave;
                 renderFechamento(data, inicio === fim);
             } catch (err) {
                 if (seq !== fechSeq) return;
-                fechChave = null;
-                elFechResumo.textContent = 'indisponível agora';
-                elFechDetalhe.innerHTML = '<div class="indisponivel">Não foi possível carregar o fechamento de caixa agora.</div>';
+                elFechResumo.innerHTML = '<div class="indisponivel">Não foi possível carregar a conferência de caixa agora.</div>';
             }
         }
-
-        // O período do Dashboard mudou: se o bloco está aberto, atualiza; se está fechado, só limpa o resumo.
-        function periodoDoDashboardMudou() {
-            fechSeq++;
-            if (elFechBox.open) { carregarFechamento(); return; }
-            fechChave = null;
-            elFechResumo.textContent = FECH_TEXTO_INICIAL;
-        }
-
-        elFechBox.addEventListener('toggle', () => {
-            if (elFechBox.open && fechChave !== `${elDashDe.value}|${elDashAte.value}`) carregarFechamento();
-        });
+        document.getElementById('confFiltrar').addEventListener('click', carregarFechamento);
 
         function renderDashboard(data, inicio, fim) {
             document.getElementById('dashTotal').textContent = fmtMoney(data.total);
