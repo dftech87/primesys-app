@@ -1596,8 +1596,13 @@
             elAvisoVersao.classList.remove('mostrar');
             try { versaoDispensada = (await (await fetch('/api/versao', { cache: 'no-store' })).json()).versao; } catch (err) {}
         });
+        // Vários sinais de "voltei para o app": o Android nem sempre dispara todos, então escutamos os principais.
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verificarVersao(); });
-        setInterval(verificarVersao, 5 * 60 * 1000);
+        window.addEventListener('focus', verificarVersao);
+        window.addEventListener('pageshow', verificarVersao);
+        window.addEventListener('online', verificarVersao);
+        document.addEventListener('resume', verificarVersao);   // Page Lifecycle: página "descongelada"
+        setInterval(verificarVersao, 2 * 60 * 1000);
         setTimeout(verificarVersao, 4000);
 
         // Depois de atualizar pelo aviso, volta para a aba em que a pessoa estava.
