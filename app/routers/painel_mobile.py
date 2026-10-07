@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from app import alertas, vendas
+from app import alertas, caixa, vendas
 from app.cache import cached
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 MAX_DIAS = 366
 TTL_DASHBOARD = 60            # período que inclui hoje: ainda está vendendo
+TTL_CAIXA = 120               # período que inclui hoje (ainda há caixas fechando)
+TTL_CAIXA_ENCERRADO = 900
 TTL_DASHBOARD_ENCERRADO = 900  # período já fechado: praticamente não muda
 _DIAS_SEMANA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 
@@ -181,3 +183,29 @@ async def alertas_mobile(
     # segundo_plano=1 (selo da aba, carregado sem ninguém esperando) usa só a cota que sobra do ERP
     client = MeuERPClient(tenant["api_token"], segundo_plano=bool(segundo_plano))
     return await _montar_alertas(client, tenant["cnpj"], loja, data_hoje)
+
+
+@router.get("/api/produtos/fechamento-caixa")
+async def fechamento_caixa(request: Request, inicio: str | None = Query(None), fim: str | None = Query(None)):
+    """Fechamento de caixa do período: esperado, contado e diferença (contado - esperado) por forma de pagamento."""
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+
+    hoje = date.today()
+    data_inicio, data_fim = _data(inicio, hoje), _data(fim, hoje)
+    if data_fim < data_inicio:
+        data_inicio, data_fim = data_fim, data_inicio
+    if (data_fim - data_inicio).days >= caixa.MAX_DIAS:
+        data_inicio = data_fim - timedelta(days=caixa.MAX_DIAS - 1)
+
+    client = MeuERPClient(tenant["api_token"])
+    try:
+        return await cached(
+            (tenant["cnpj"], "caixa", data_inicio, data_fim),
+            TTL_CAIXA if data_fim >= hoje else TTL_CAIXA_ENCERRADO,
+            lambda: caixa.fechamentos(client, data_inicio, data_fim),
+        )
+    except ConsultaIndisponivel:
+        logger.exception("consulta SQL indisponível (caixa) para %s", tenant["cnpj"])
+        return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)

@@ -151,6 +151,26 @@
         .val.ok { color: #15803d; }
         .val.aviso { color: #b45309; }
         .indisponivel { color: #94a3b8; font-size: 13px; }
+        .fech-cab, .fech-linha, .fd-linha { display: grid; grid-template-columns: 1fr 58px 58px 66px; gap: 4px; align-items: center; }
+        .fech-cab, .fd-cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
+        .fech { border-bottom: 1px solid #eef2f7; }
+        .fech > summary { list-style: none; cursor: pointer; padding: 9px 6px; font-size: 12px; }
+        .fech > summary::-webkit-details-marker { display: none; }
+        .fech[open] > summary { background: #f8fafc; border-radius: 8px; }
+        .fech .n, .fd-linha .n, .fech-cab .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .fech-op { font-weight: 700; min-width: 0; }
+        .fech-op .sub { font-weight: 400; }
+        .dif-pos { color: #15803d; font-weight: 700; }
+        .dif-neg { color: #b91c1c; font-weight: 700; }
+        .dif-zero { color: #94a3b8; }
+        .fech-aviso-texto { color: #92400e; font-size: 10.5px; }
+        .fech-det { padding: 4px 4px 12px; }
+        .fd-linha { padding: 6px 2px; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
+        .fd-total { font-weight: 700; border-top: 1px solid #e2e8f0; }
+        .fd-dif { display: inline-block; min-width: 56px; padding: 2px 5px; border-radius: 5px; text-align: right; }
+        .fd-dif.dif-pos { background: #dcfce7; } .fd-dif.dif-neg { background: #fee2e2; } .fd-dif.dif-zero { background: #f1f5f9; }
+        .fech-aviso { margin-top: 8px; padding: 8px 10px; background: #fffbeb; border-radius: 8px; font-size: 11.5px; line-height: 1.45; color: #92400e; }
+        .fech-rodape { margin-top: 8px; font-size: 11px; color: #64748b; }
         .tab-ent .cab, .tab-ent .ent-linha { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
         .tab-ent .cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
         .tab-ent .ent-linha { padding: 9px 6px; font-size: 12px; border: 1px solid transparent; border-bottom: 1px solid #eef2f7; }
@@ -347,6 +367,12 @@
                     <details>
                         <summary><div><div class="tit">Margem de vendas</div><div class="sub-resumo" id="margemResumo"></div></div></summary>
                         <div id="margemDetalhe"></div>
+                    </details>
+                </div>
+                <div class="dash-panel gestao" id="gestaoFechamento">
+                    <details id="fechBox">
+                        <summary><div><div class="tit">Fechamento de caixa</div><div class="sub-resumo" id="fechResumo">toque para ver os caixas do período</div></div></summary>
+                        <div id="fechDetalhe"></div>
                     </details>
                 </div>
                 <div class="dash-panel">
@@ -781,6 +807,7 @@
 
         async function carregarDashboardMobile(inicio, fim) {
             const seq = ++dashSeq;
+            periodoDoDashboardMudou();
             const elErro = document.getElementById('dashErro');
             elErro.style.display = 'none';
             document.getElementById('dashTotal').textContent = 'carregando...';
@@ -907,6 +934,126 @@
             html += '<div class="nota">Margem estimada com o custo registrado no ERP no momento da venda. Itens sem custo ficam de fora.</div>';
             document.getElementById('margemDetalhe').innerHTML = html;
         }
+
+        // Fechamento de caixa: esperado x contado por operador, com detalhe por forma de pagamento.
+        // Diferença = contado - esperado: acima de zero é sobra (+, verde); abaixo de zero é falta (−, vermelho).
+        const fmtSinal = (v) => {
+            const n = Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return v > 0.004 ? `+${n}` : v < -0.004 ? `−${n}` : n;
+        };
+        const classeDif = (v) => (v > 0.004 ? 'dif-pos' : v < -0.004 ? 'dif-neg' : 'dif-zero');
+        const n2 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const elFechBox = document.getElementById('fechBox');
+        const elFechResumo = document.getElementById('fechResumo');
+        const elFechDetalhe = document.getElementById('fechDetalhe');
+        const FECH_TEXTO_INICIAL = 'toque para ver os caixas do período';
+        let fechChave = null;   // período já carregado
+        let fechSeq = 0;
+
+        function renderFechamentoDetalhe(f) {
+            const linhas = f.formas.map((x) => `
+                <div class="fd-linha">
+                    <span>${esc(x.forma)}</span><span class="n">${n2(x.esperado)}</span><span class="n">${n2(x.contado)}</span>
+                    <span class="n"><span class="fd-dif ${classeDif(x.diferenca)}">${fmtSinal(x.diferenca)}</span></span>
+                </div>`).join('');
+            const total = f.situacao === 'conferido' ? `
+                <div class="fd-linha fd-total">
+                    <span>Total do caixa</span><span class="n">${n2(f.totalEsperado)}</span><span class="n">${n2(f.totalContado)}</span>
+                    <span class="n"><span class="fd-dif ${classeDif(f.difTotal)}">${fmtSinal(f.difTotal)}</span></span>
+                </div>` : '';
+            let aviso = '';
+            if (f.compensada) {
+                const dinheiro = f.dinheiro.diferenca;
+                aviso = `<div class="fech-aviso">${dinheiro < 0 ? 'A falta' : 'A sobra'} no dinheiro (${fmtSinal(dinheiro)}) foi compensada por
+                    ${f.difOutras > 0 ? 'sobra' : 'falta'} nas outras formas (${fmtSinal(f.difOutras)}): provável forma de pagamento errada na venda.</div>`;
+            } else if (f.situacao === 'dinheiro_nao_contado') {
+                aviso = '<div class="fech-aviso">O dinheiro deste caixa não foi contado, então a diferença não entra nas somas.</div>';
+            } else if (f.situacao === 'sem_conferencia') {
+                aviso = '<div class="fech-aviso">Este caixa foi fechado sem conferência (nenhum valor contado).</div>';
+            }
+            return `<div class="fech-det">
+                <div class="fd-linha fd-cab"><span>Forma</span><span class="n">Esperado</span><span class="n">Contado</span><span class="n">Dif.</span></div>
+                ${linhas}${total}${aviso}
+                <div class="fech-rodape">Abertura nº ${esc(f.abertura)} · fechamento nº ${esc(f.numero)} · conferido por ${esc(f.conferente)}</div>
+            </div>`;
+        }
+
+        function renderFechamento(data, umDia) {
+            const r = data.resumo;
+            const partes = [];
+            if (r.conferidos) {
+                partes.push(`${r.conferidos} ${r.conferidos === 1 ? 'caixa conferido' : 'caixas conferidos'}`);
+                const moeda = (v) => `${v < 0 ? '−' : '+'}R$ ${n2(Math.abs(v))}`;
+                if (r.qtdFaltas) partes.push(`dinheiro <span class="dif-neg">${moeda(r.faltas)}</span>`);
+                if (r.qtdSobras) partes.push(`<span class="dif-pos">${moeda(r.sobras)}</span>`);
+                if (!r.qtdFaltas && !r.qtdSobras) partes.push('sem diferença relevante no dinheiro');
+            }
+            if (r.dinheiroNaoContado) partes.push(`${r.dinheiroNaoContado} com dinheiro não contado`);
+            if (r.semConferencia) partes.push(`${r.semConferencia} sem conferência`);
+            elFechResumo.innerHTML = partes.length ? partes.join(' · ') : 'nenhum fechamento no período';
+
+            if (!data.fechamentos.length) {
+                elFechDetalhe.innerHTML = '<div class="indisponivel">Nenhum fechamento de caixa com movimento neste período.</div>';
+                return;
+            }
+            const linhas = data.fechamentos.map((f) => {
+                const din = f.dinheiro;
+                let esperado = '–', contado = '–', dif;
+                if (f.situacao === 'conferido' && din) {
+                    esperado = n2(din.esperado);
+                    contado = n2(din.contado);
+                    dif = `<span class="${classeDif(din.diferenca)}">${fmtSinal(din.diferenca)}</span>`;
+                } else if (f.situacao === 'dinheiro_nao_contado') {
+                    esperado = n2(din.esperado);
+                    dif = '<span class="fech-aviso-texto">não contado</span>';
+                } else {
+                    dif = '<span class="dif-zero">sem conf.</span>';
+                }
+                const onde = `${umDia ? '' : esc(f.data) + ' · '}cx ${esc(f.caixa)} · ${esc(f.hora)}`;
+                return `<details class="fech">
+                    <summary class="fech-linha"><span class="fech-op">${esc(f.operador)}<span class="sub">${onde}</span></span>
+                        <span class="n">${esperado}</span><span class="n">${contado}</span><span class="n">${dif}</span></summary>
+                    ${renderFechamentoDetalhe(f)}
+                </details>`;
+            }).join('');
+            elFechDetalhe.innerHTML = `
+                <div class="fech-cab"><span>Operador</span><span class="n">Esperado</span><span class="n">Contado</span><span class="n">Dif.</span></div>
+                ${linhas}
+                <div class="nota">Valores em dinheiro. Toque num caixa para ver todas as formas de pagamento. Diferença = contado − esperado: + é sobra, − é falta.${data.truncado ? ' Mostrando os 60 fechamentos mais recentes.' : ''}</div>`;
+        }
+
+        async function carregarFechamento() {
+            const inicio = elDashDe.value, fim = elDashAte.value;
+            if (!inicio || !fim) return;
+            const chave = `${inicio}|${fim}`;
+            const seq = ++fechSeq;
+            elFechDetalhe.innerHTML = '<div class="loading">Carregando...</div>';
+            try {
+                const res = await fetch(`/api/produtos/fechamento-caixa?${new URLSearchParams({ inicio, fim })}`);
+                if (!res.ok) throw new Error('falha');
+                const data = await res.json();
+                if (seq !== fechSeq) return;
+                fechChave = chave;
+                renderFechamento(data, inicio === fim);
+            } catch (err) {
+                if (seq !== fechSeq) return;
+                fechChave = null;
+                elFechResumo.textContent = 'indisponível agora';
+                elFechDetalhe.innerHTML = '<div class="indisponivel">Não foi possível carregar o fechamento de caixa agora.</div>';
+            }
+        }
+
+        // O período do Dashboard mudou: se o bloco está aberto, atualiza; se está fechado, só limpa o resumo.
+        function periodoDoDashboardMudou() {
+            fechSeq++;
+            if (elFechBox.open) { carregarFechamento(); return; }
+            fechChave = null;
+            elFechResumo.textContent = FECH_TEXTO_INICIAL;
+        }
+
+        elFechBox.addEventListener('toggle', () => {
+            if (elFechBox.open && fechChave !== `${elDashDe.value}|${elDashAte.value}`) carregarFechamento();
+        });
 
         function renderDashboard(data, inicio, fim) {
             document.getElementById('dashTotal').textContent = fmtMoney(data.total);
