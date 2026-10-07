@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>PrimeSys | Login</title>
     <meta name="theme-color" content="#0b3895" />
     <link rel="manifest" href="/static/manifest.json" />
@@ -11,11 +11,21 @@
     <style>
         :root { color-scheme: light; }
         * { box-sizing: border-box; }
+        html, body { height: 100%; }
         body {
-            margin: 0; min-height: 100vh; font-family: 'Segoe UI', Tahoma, sans-serif;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding: 28px; color: #0f172a;
+            margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
+            font-family: 'Segoe UI', Tahoma, sans-serif; color: #0f172a;
             background: linear-gradient(160deg, #0b3895 0%, #1d4fd8 45%, #10ebff 100%);
+        }
+        /* 100vh no Chrome do celular é maior que a área visível (barra de endereço), e isso fazia a tela "andar".
+           100dvh/100svh é a altura realmente visível. O conteúdo fica centralizado e só rola se não couber. */
+        .pagina {
+            height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: none;
+            display: flex; padding: 28px;
+        }
+        .conteudo {
+            margin: auto; width: 100%; max-width: 380px;
+            display: flex; flex-direction: column; align-items: center;
         }
         .badge {
             width: 80px; height: 80px; border-radius: 50%; background: #fff;
@@ -32,7 +42,7 @@
         label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
         input {
             width: 100%; border: 1px solid #cbd5e1; background: #fff; border-radius: 10px;
-            padding: 12px 14px; font-size: 14px; margin-bottom: 16px;
+            padding: 12px 14px; font-size: 16px; margin-bottom: 16px;
         }
         button {
             width: 100%; border: 0; border-radius: 10px; padding: 12px 16px;
@@ -54,6 +64,7 @@
     </style>
 </head>
 <body>
+<div class="pagina"><div class="conteudo">
     <div class="badge">
         <img class="logo" src="/static/icons/icon-192.png" alt="PrimeSys" />
     </div>
@@ -69,7 +80,7 @@
             <input type="hidden" name="next" value="{{ next }}" />
             <div id="campoCnpj">
                 <label for="cnpj">CNPJ da empresa</label>
-                <input id="cnpj" name="cnpj" type="text" inputmode="numeric" autocomplete="off" required autofocus />
+                <input id="cnpj" name="cnpj" type="text" inputmode="numeric" autocomplete="off" required />
             </div>
             <label for="email">E-mail (usuário do ERP)</label>
             <input id="email" name="email" type="email" autocomplete="username" required />
@@ -78,6 +89,7 @@
             <button type="submit">Entrar</button>
         </form>
     </main>
+</div></div>
     <script>
         // Lembra o CNPJ no aparelho (não sai daqui) depois do primeiro login, pra
         // quem sempre acessa a mesma empresa não precisar redigitar toda vez.
@@ -101,7 +113,6 @@
             elCampoCnpj.style.display = 'none';
             elEmpresaSalvaCnpj.textContent = formatarCnpj(cnpj);
             elEmpresaSalva.style.display = 'flex';
-            elEmail.focus();
         }
 
         function mostrarCampoCnpj() {
