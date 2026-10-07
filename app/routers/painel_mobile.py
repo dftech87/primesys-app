@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from app import alertas, caixa, vendas
+from app import alertas, cadastro, caixa, vendas
 from app.cache import cached
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 MAX_DIAS = 366
 TTL_DASHBOARD = 60            # período que inclui hoje: ainda está vendendo
+TTL_CADASTRO = 900            # cadastro de preço e custo muda devagar
 TTL_CAIXA = 120               # período que inclui hoje (ainda há caixas fechando)
 TTL_CAIXA_ENCERRADO = 900
 TTL_DASHBOARD_ENCERRADO = 900  # período já fechado: praticamente não muda
@@ -208,4 +209,25 @@ async def fechamento_caixa(request: Request, inicio: str | None = Query(None), f
         )
     except ConsultaIndisponivel:
         logger.exception("consulta SQL indisponível (caixa) para %s", tenant["cnpj"])
+        return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)
+
+
+@router.get("/api/produtos/margem-cadastro")
+async def margem_cadastro(request: Request):
+    """Produtos cujo preço de venda atual está abaixo do custo atual (margem negativa no cadastro)."""
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+
+    hoje = date.today()
+    client = MeuERPClient(tenant["api_token"])
+    try:
+        return await cached(
+            (tenant["cnpj"], "margem-cadastro", hoje),
+            TTL_CADASTRO,
+            lambda: cadastro.margem_negativa(client, hoje),
+            obsoleto_ate=TTL_CADASTRO,
+        )
+    except ConsultaIndisponivel:
+        logger.exception("consulta SQL indisponível (margem do cadastro) para %s", tenant["cnpj"])
         return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)

@@ -245,6 +245,8 @@
         .gestao details[open] > summary::after { content: '\25B4'; }
         .gestao .tit { font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; }
         .gestao .pill { float: none; margin-left: 6px; text-transform: none; }
+        .alerta-margem { color: #b91c1c; font-weight: 700; }
+        .alerta-margem:empty { display: none; }
         .sub-resumo { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: #475569; }
         .gestao details > div { margin-top: 10px; }
         .sub-titulo { font-size: 11px; font-weight: 700; color: #64748b; margin: 10px 0 2px; }
@@ -412,7 +414,9 @@
                 </div>
                 <div class="dash-panel gestao" id="gestaoMargem" style="display:none">
                     <details>
-                        <summary><div><div class="tit">Margem de vendas</div><div class="sub-resumo" id="margemResumo"></div></div></summary>
+                        <summary><div><div class="tit">Margem de vendas</div><div class="sub-resumo" id="margemResumo"></div>
+                            <div class="sub-resumo alerta-margem" id="margemAlerta"></div></div></summary>
+                        <div id="margemCadastro"></div>
                         <div id="margemDetalhe"></div>
                     </details>
                 </div>
@@ -1029,9 +1033,43 @@
         }
 
         // Margem por produto (custo gravado no momento da venda). Lista só o que merece atenção.
+        // Cadastro com margem negativa (preço de hoje abaixo do custo de hoje): é o que o ERP mostra no cadastro
+        // do produto. Carrega por trás e aparece na linha do painel mesmo com ele fechado.
+        let cadastroNegativos = 0;
+
+        function renderMargemCadastro(data) {
+            cadastroNegativos = data.total;
+            const alerta = document.getElementById('margemAlerta');
+            const lista = document.getElementById('margemCadastro');
+            document.getElementById('gestaoMargem').style.display = 'block';
+            if (!data.total) { alerta.textContent = ''; lista.innerHTML = ''; return; }
+            alerta.textContent = `⚠ ${data.total} ${data.total === 1 ? 'produto' : 'produtos'} com margem negativa no cadastro`
+                + (data.vendendo ? ` · ${data.vendendo} vendendo` : '');
+            const pct = (v) => `${v < 0 ? '−' : ''}${fmtPct(Math.abs(v))}%`;
+            lista.innerHTML = '<div class="sub-titulo">CADASTRO COM MARGEM NEGATIVA · preço de venda abaixo do custo de hoje</div>'
+                + data.itens.map((i) => `<div class="linha-info">
+                    <span class="desc">${esc(i.produto)}<span class="sub">cód. ${esc(i.codigo)} · preço ${fmtMoney(i.preco)} · custo ${fmtMoney(i.custo)}</span></span>
+                    <span class="val ruim">${pct(i.margemPct)}</span></div>`).join('')
+                + (data.total > data.itens.length ? `<div class="nota">e mais ${data.total - data.itens.length}.</div>` : '')
+                + `<div class="nota">Mesmo cálculo do cadastro do produto no ERP. Quem vendeu nos últimos ${data.dias} dias aparece primeiro.</div>`;
+        }
+
+        async function carregarMargemCadastro() {
+            const chave = 'margem-cadastro';
+            const visto = lerVisto(chave);
+            if (visto) { renderMargemCadastro(visto.dados); if (estaFresco(visto)) return; }
+            try {
+                const res = await fetch('/api/produtos/margem-cadastro');
+                if (!res.ok) return;
+                const data = await res.json();
+                guardarVisto(chave, data);
+                renderMargemCadastro(data);
+            } catch (err) { /* o alerta é um extra: sem ele o painel continua funcionando */ }
+        }
+
         function renderMargemPainel(mg) {
             const painel = document.getElementById('gestaoMargem');
-            if (!mg) { painel.style.display = 'none'; return; }
+            if (!mg) { painel.style.display = cadastroNegativos ? 'block' : 'none'; document.getElementById('margemResumo').textContent = ''; document.getElementById('margemDetalhe').innerHTML = ''; return; }
             painel.style.display = 'block';
 
             const ab = mg.abaixoDoCusto;
@@ -1055,7 +1093,7 @@
                     + (ab.produtos > ab.itens.length ? `<div class="nota">e mais ${ab.produtos - ab.itens.length}.</div>` : '');
             }
             if (mg.menorMargem.length) {
-                html += '<div class="sub-titulo">MENOR MARGEM · produtos com venda relevante</div>'
+                html += '<div class="sub-titulo">MENOR MARGEM NAS VENDAS DO PERÍODO · produtos com venda relevante</div>'
                     + mg.menorMargem.map((i) => linha(i, `cód. ${esc(i.codigo)} · vendeu ${fmtMoney(i.venda)}`,
                         `${fmtPct(i.margemPct)}%`, i.margemPct < 0 ? 'ruim' : i.margemPct < 10 ? 'aviso' : '')).join('');
             }
@@ -1063,7 +1101,7 @@
                 html += '<div class="sub-titulo">MAIOR LUCRO</div>'
                     + mg.maiorLucro.map((i) => linha(i, `cód. ${esc(i.codigo)} · margem ${fmtPct(i.margemPct)}%`, fmtMoney(i.lucro), 'ok')).join('');
             }
-            html += '<div class="nota">Margem estimada com o custo registrado no ERP no momento da venda. Itens sem custo ficam de fora.</div>';
+            html += '<div class="nota">As margens destas listas são as das vendas do período, com o custo registrado no momento da venda; podem diferir da margem do cadastro, que usa o preço e o custo de hoje. Itens sem custo ficam de fora.</div>';
             document.getElementById('margemDetalhe').innerHTML = html;
         }
 
@@ -1243,6 +1281,7 @@
             }
 
             renderMargemPainel(mg);
+            carregarMargemCadastro();
 
             const porHora = data.vendasPorHora;
             document.getElementById('dashDiarioTitulo').textContent = porHora
