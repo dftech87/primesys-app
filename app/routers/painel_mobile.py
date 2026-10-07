@@ -73,12 +73,12 @@ async def _montar_dashboard(client: MeuERPClient, inicio: date, fim: date) -> di
     um_dia = inicio == fim
     tarefas = [
         vendas.resumo_comparado(client, inicio, fim, comp_ini, comp_fim),
-        vendas.formas_pagamento(client, inicio, fim),
+        vendas.pagamentos(client, inicio, fim),
         vendas.cancelamentos(client, inicio, fim),
         _opcional("margem", vendas.margem(client, inicio, fim, *_comparacao_margem(inicio, fim, comp_ini, comp_fim))),
         vendas.vendas_por_hora(client, inicio) if um_dia else vendas.vendas_por_dia(client, inicio, fim),
     ]
-    (atual, anterior), formas, cancel, margem, hora_ou_dia = await asyncio.gather(*tarefas)
+    (atual, anterior), (formas, por_tipo), cancel, margem, hora_ou_dia = await asyncio.gather(*tarefas)
     por_hora = hora_ou_dia if um_dia else None
     por_dia = {inicio.isoformat(): atual["total"]} if um_dia else hora_ou_dia
 
@@ -99,6 +99,7 @@ async def _montar_dashboard(client: MeuERPClient, inicio: date, fim: date) -> di
         "vendasPorDia": serie_dias,
         "vendasPorHora": por_hora,
         "formasPagamento": formas,
+        "vendasPorTipo": por_tipo,
         "semFormaPagamento": sem_pagamento if sem_pagamento > 1 else 0,
         "cancelamentos": cancel,
         "margem": margem,

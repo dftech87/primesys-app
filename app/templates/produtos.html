@@ -213,6 +213,17 @@
 
         .rosca { text-align: center; margin-bottom: 8px; }
         .rosca svg { max-width: 190px; width: 100%; height: auto; }
+        .tipo-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .tipo-card { background: #f8fafc; border: 2px solid transparent; border-radius: 12px; padding: 12px; cursor: pointer;
+            touch-action: manipulation; text-align: left; font: inherit; color: inherit; width: 100%; }
+        .tipo-card.sel { background: #fff; border-color: var(--azul); }
+        .tipo-card .nome { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #64748b; }
+        .tipo-card .cor { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+        .tipo-card .nome .seta { color: #94a3b8; font-size: 13px; }
+        .tipo-card .valor { font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 4px; white-space: nowrap; }
+        .tipo-card .qtd { font-size: 12px; color: #64748b; margin-top: 2px; }
+        .tipo-det { margin-top: 10px; background: #f8fafc; border-radius: 10px; padding: 4px 12px; }
+        .tipo-det .qtd-forma { font-size: 11px; color: #94a3b8; margin-left: 5px; }
         .legenda .cor { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
         .legenda .linha-info .desc { display: flex; align-items: center; }
         .insight { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9;
@@ -400,6 +411,10 @@
                     </div>
                     <div class="dash-card"><div class="rotulo">Vendas</div><div class="valor" id="dashVendas">-</div></div>
                     <div class="dash-card"><div class="rotulo">Ticket médio</div><div class="valor" id="dashTicket">-</div></div>
+                </div>
+                <div class="dash-panel" id="painelTipo" style="display:none">
+                    <h3>Vendas por tipo</h3>
+                    <div id="dashTipo"></div>
                 </div>
                 <div class="dash-panel">
                     <h3>Formas de pagamento</h3>
@@ -989,6 +1004,64 @@
                 </svg></div><div class="legenda">${legenda}</div>`;
         }
 
+        // Vendas por tipo (NFC-e / pré-venda): rosca com o total, dois cartões e, ao tocar num cartão, as formas de pagamento.
+        // Só vem do servidor quando o cliente vendeu em mais de um tipo no período.
+        const CORES_TIPO = { fiscal: '#0b3895', naoFiscal: '#f59e0b' };
+        let tiposDados = [];
+        let tipoAberto = null;
+
+        function corTipo(t) { return t.fiscal ? CORES_TIPO.fiscal : CORES_TIPO.naoFiscal; }
+
+        function desenharTipos() {
+            const painel = document.getElementById('painelTipo');
+            const alvo = document.getElementById('dashTipo');
+            if (!tiposDados.length) { painel.style.display = 'none'; alvo.innerHTML = ''; return; }
+            painel.style.display = 'block';
+
+            const soma = tiposDados.reduce((s, t) => s + Number(t.total), 0) || 1;
+            const r = 50, circ = 2 * Math.PI * r;
+            let acumulado = 0;
+            const arcos = tiposDados.map((t) => {
+                const parte = circ * Number(t.total) / soma;
+                const arco = `<circle cx="75" cy="75" r="${r}" fill="none" stroke="${corTipo(t)}" stroke-width="22"
+                    stroke-dasharray="${parte} ${circ}" stroke-dashoffset="${-acumulado}" transform="rotate(-90 75 75)"/>`;
+                acumulado += parte;
+                return arco;
+            }).join('');
+            const rosca = `<div class="rosca"><svg viewBox="0 0 150 150" role="img" aria-label="Vendas por tipo">${arcos}
+                <text x="75" y="70" text-anchor="middle" font-size="10" fill="#64748b">Total</text>
+                <text x="75" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">${valorCurto(soma)}</text></svg></div>`;
+
+            const cartoes = tiposDados.map((t, i) => `
+                <button type="button" class="tipo-card${tipoAberto === i ? ' sel' : ''}" data-tipo="${i}" aria-expanded="${tipoAberto === i}">
+                    <div class="nome"><span><span class="cor" style="background:${corTipo(t)}"></span>${esc(t.tipo)}</span><span class="seta">${tipoAberto === i ? '▴' : '▾'}</span></div>
+                    <div class="valor">${fmtMoney(t.total)}</div>
+                    <div class="qtd">${Number(t.vendas).toLocaleString('pt-BR')} vendas · ${fmtPct(t.percentual)}%</div>
+                </button>`).join('');
+
+            let detalhe = '';
+            if (tipoAberto !== null && tiposDados[tipoAberto]) {
+                const t = tiposDados[tipoAberto];
+                detalhe = `<div class="tipo-det">${t.formas.map((f) => `
+                    <div class="linha-info"><span class="desc">${esc(f.forma)}</span><span class="val">${fmtMoney(f.valor)}</span></div>`).join('')}</div>`;
+            }
+            alvo.innerHTML = `${rosca}<div class="tipo-cards">${cartoes}</div>${detalhe}`;
+        }
+
+        document.getElementById('dashTipo').addEventListener('click', (e) => {
+            const cartao = e.target.closest('.tipo-card');
+            if (!cartao) return;
+            const i = Number(cartao.dataset.tipo);
+            tipoAberto = tipoAberto === i ? null : i;
+            desenharTipos();
+        });
+
+        function renderTipos(lista) {
+            tiposDados = lista || [];
+            if (tipoAberto !== null && !tiposDados[tipoAberto]) tipoAberto = null;
+            desenharTipos();
+        }
+
         // Frases que explicam os números. Só usa o que o endpoint já devolve; nada novo é consultado.
         function insights(data, inicio) {
             const item = (ico, html) => `<div class="insight"><span class="ico">${ico}</span><div>${html}</div></div>`;
@@ -1260,6 +1333,8 @@
                     options: { responsive: true, animation: { duration: 350 }, plugins: { legend: { display: false } } },
                 });
             }
+
+            renderTipos(data.vendasPorTipo);
 
             const elFormas = document.getElementById('dashFormas');
             elFormas.innerHTML = data.formasPagamento.length

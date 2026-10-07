@@ -25,6 +25,7 @@ _ROTULO_PAGAMENTO = {
     "CARTAO DEBITO": "Cartão de débito",
     "CARTAO CREDITO": "Cartão de crédito",
     "A PRAZO": "A prazo (fiado)",
+    "PIX POS": "Pix (POS)",
     "VALE REFEICAO": "Vale refeição",
     "VALE ALIMENTACAO": "Vale alimentação",
 }
@@ -96,33 +97,72 @@ async def vendas_por_hora(client: MeuERPClient, dia: date) -> list[dict]:
     return [{"hora": int(l["hora"]), "vendas": int(l["vendas"]), "valor": _num(l["total"])} for l in linhas]
 
 
-async def formas_pagamento(client: MeuERPClient, inicio: date, fim: date) -> list[dict]:
-    """Soma por forma de pagamento, com o troco (lançado como valor negativo) abatido do dinheiro
-    e rótulos iguais agrupados (o ERP grava 'Pix' e 'PIX', 'A Prazo' e 'A PRAZO' separados)."""
-    linhas = await executar(
-        client,
-        f"""select translate(upper(trim(coalesce(p.descricao, ''))), 'ÁÀÂÃÉÊÍÓÔÕÚÇ', 'AAAAEEIOOOUC') as forma,
-                   round(sum(p.valor), 2) as total
-            from documento_pagamento p join documento d on d._iddocumento = p._iddocumento
-            where {_VENDA} and {_janela(inicio, fim)} group by 1""",
-    )
-    somas: dict[str, float] = {}
-    for linha in linhas:
-        forma = linha["forma"] or "OUTROS"
-        if forma.startswith("TROCO"):
-            forma = "DINHEIRO"
-        somas[forma] = somas.get(forma, 0.0) + _num(linha["total"])
+# Nomes diferentes que o ERP de cada cliente dá à mesma forma de pagamento.
+_SINONIMO_PAGAMENTO = {"VENDA A PRAZO": "A PRAZO"}
+_TIPO_VENDA = {"65": "NFC-e", "55": "NF-e", "PV": "Pré-venda"}
+_ORDEM_TIPO = {"65": 0, "55": 1, "PV": 2}   # fiscais primeiro, pré-venda (não fiscal) por último
+
+
+def _lista_formas(somas: dict[str, float]) -> list[dict]:
     positivas = {f: v for f, v in somas.items() if v > 0}
     total = sum(positivas.values())
     resultado = [
         {
-            "forma": _ROTULO_PAGAMENTO.get(f, f.title()),
+            "forma": _ROTULO_PAGAMENTO.get(f, f.capitalize()),
             "valor": round(v, 2),
             "percentual": round(v / total * 100, 1) if total else 0.0,
         }
         for f, v in positivas.items()
     ]
     return sorted(resultado, key=lambda x: x["valor"], reverse=True)
+
+
+async def pagamentos(client: MeuERPClient, inicio: date, fim: date) -> tuple[list[dict], list[dict]]:
+    """Formas de pagamento do período, no total e por tipo de venda (NFC-e, NF-e, pré-venda), numa só consulta.
+
+    O troco (lançado como valor negativo) é abatido do dinheiro e rótulos iguais são agrupados (o ERP grava
+    'Pix' e 'PIX', 'A Prazo' e 'A PRAZO' separados). Por tipo só é devolvido quando há mais de um tipo
+    vendendo no período: com um só, o bloco não acrescenta nada."""
+    linhas = await executar(
+        client,
+        f"""select modelo, forma, grouping(forma) as agregado, count(distinct id) as vendas, round(sum(valor), 2) as total
+            from (select d.modelo, d._iddocumento as id, p.valor,
+                         translate(upper(trim(coalesce(p.descricao, ''))), 'ÁÀÂÃÉÊÍÓÔÕÚÇ', 'AAAAEEIOOOUC') as forma
+                  from documento_pagamento p join documento d on d._iddocumento = p._iddocumento
+                  where {_VENDA} and {_janela(inicio, fim)}) x
+            group by grouping sets ((modelo, forma), (modelo))""",
+    )
+    somas: dict[str, float] = {}
+    tipos: dict[str, dict] = {}
+    for linha in linhas:
+        tipo = tipos.setdefault(linha["modelo"], {"vendas": 0, "total": 0.0, "somas": {}})
+        if int(linha["agregado"]):
+            tipo["vendas"], tipo["total"] = int(linha["vendas"]), _num(linha["total"])
+            continue
+        forma = linha["forma"] or "OUTROS"
+        if forma.startswith("TROCO"):
+            forma = "DINHEIRO"
+        forma = _SINONIMO_PAGAMENTO.get(forma, forma)
+        valor = _num(linha["total"])
+        somas[forma] = somas.get(forma, 0.0) + valor
+        tipo["somas"][forma] = tipo["somas"].get(forma, 0.0) + valor
+
+    por_tipo: list[dict] = []
+    soma_tipos = sum(t["total"] for t in tipos.values() if t["total"] > 0)
+    if len([t for t in tipos.values() if t["total"] > 0]) > 1:
+        for modelo in sorted(tipos, key=lambda m: _ORDEM_TIPO.get(m, 9)):
+            t = tipos[modelo]
+            if t["total"] <= 0:
+                continue
+            por_tipo.append({
+                "tipo": _TIPO_VENDA.get(modelo, modelo),
+                "fiscal": modelo != "PV",
+                "vendas": t["vendas"],
+                "total": round(t["total"], 2),
+                "percentual": round(t["total"] / soma_tipos * 100, 1),
+                "formas": _lista_formas(t["somas"]),
+            })
+    return _lista_formas(somas), por_tipo
 
 
 async def top_produtos(client: MeuERPClient, inicio: date, fim: date, limite: int = 10) -> list[dict]:
