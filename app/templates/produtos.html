@@ -8,7 +8,8 @@
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" href="/static/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
     <style>
         :root {
             --azul: #0b3895;
@@ -261,6 +262,31 @@
         .titulo-conta .quando { color: #64748b; font-size: 11px; margin-top: 2px; }
         .titulo-conta .quando.atraso { color: #b91c1c; }
 
+        /* Fluidez: entrada suave das telas, resposta ao toque e esqueletos no lugar de "Carregando..." */
+        @keyframes entrada { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @keyframes brilho { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+        #dashboardView, #comprasView, #conferenciaView, #alertasView, #vazio, #lista, #detalhe,
+        #comprasVazio, #comprasLista, #comprasDetalhe { animation: entrada .22s ease-out; }
+        main { overscroll-behavior-y: contain; }
+        button, .card, .cx-topo, select, input { touch-action: manipulation; }
+        .tabbar button { transition: color .15s ease, transform .1s ease; }
+        .tabbar button:active { transform: scale(.93); }
+        .card, .cx-topo, .btn-scan, #dashFiltrar, #confFiltrar, .mais, .voltar-compras { transition: background-color .12s ease, transform .1s ease; }
+        .card:active { transform: scale(.985); background: #f8fafc; }
+        #dashFiltrar:active, #confFiltrar:active, .mais:active { transform: scale(.97); }
+        .sk { display: block; height: 14px; margin: 9px 0; border-radius: 6px;
+            background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 40%, #e2e8f0 60%); background-size: 300% 100%;
+            animation: brilho 1.3s ease-in-out infinite; }
+        .sk.alto { height: 26px; } .sk.card-sk { height: 74px; border-radius: 12px; margin: 0 0 10px; }
+        /* Quem pede menos movimento (opção "remover animações" do Android) não vê deslocamento nem brilho, mas ainda
+           recebe um fade curto de transparência, que dá a sensação de transição sem mexer a tela. */
+        @keyframes entradaSuave { from { opacity: 0; } to { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) {
+            #dashboardView, #comprasView, #conferenciaView, #alertasView, #vazio, #lista, #detalhe,
+            #comprasVazio, #comprasLista, #comprasDetalhe { animation: entradaSuave .16s ease-out; }
+            .sk { animation: none; }
+            .tabbar button:active, .card:active, #dashFiltrar:active, #confFiltrar:active, .mais:active { transform: none; }
+        }
         .tabbar button[hidden] { display: none; }
         #conferenciaView { display: none; padding: 16px; }
         #comprasView { display: none; }
@@ -482,6 +508,22 @@
         const elSubtitulo = document.getElementById('subtituloHeader');
         const tituloOriginal = elTitulo.textContent;
 
+        // Esqueleto: barras cinzas com brilho no lugar de "Carregando...". O layout não pula quando o dado chega.
+        const esqueleto = (linhas = 3, alto = false) =>
+            Array.from({ length: linhas }, (_, i) => `<span class="sk ${alto ? 'alto' : ''}" style="width:${[92, 78, 64, 86][i % 4]}%"></span>`).join('');
+        const esqueletoCartoes = (n = 2) => Array.from({ length: n }, () => '<span class="sk card-sk"></span>').join('');
+
+        // Dados já vistos nesta sessão: voltar a uma aba mostra o que havia na hora e só atualiza por trás.
+        const jaVisto = new Map();
+        const IDADE_FRESCA_MS = 45000;
+        function guardarVisto(chave, dados) { jaVisto.set(chave, { dados, em: Date.now() }); }
+        function lerVisto(chave) { return jaVisto.get(chave) || null; }
+        const estaFresco = (visto) => visto && Date.now() - visto.em < IDADE_FRESCA_MS;
+
+        // Posição da rolagem: cada tela começa no topo; a lista de busca volta para onde estava.
+        const elMain = document.querySelector('main');
+        const rolarParaTopo = () => { elMain.scrollTop = 0; };
+
         function mostrarView(view) {
             elVazio.style.display = view === 'vazio' ? 'block' : 'none';
             elLista.style.display = view === 'lista' ? 'flex' : 'none';
@@ -543,12 +585,9 @@
 
         async function carregarEntradas(container, idVariacao, limite) {
             const seq = ++entradasSeq;
-            container.innerHTML = '<div class="loading">Carregando...</div>';
-            try {
-                const res = await fetch(`/api/produtos/${idVariacao}/entradas?limite=${limite}`);
-                if (!res.ok) throw new Error('falha');
-                const data = await res.json();
-                if (seq !== entradasSeq) return;
+            const chave = `entradas|${idVariacao}|${limite}`;
+            const visto = lerVisto(chave);
+            const desenhar = (data) => {
                 container.innerHTML = renderEntradas(data.entradas, { precoVenda: data.precoVenda });
                 if (limite < 30 && data.entradas.length >= limite) {
                     const botao = document.createElement('button');
@@ -557,8 +596,18 @@
                     botao.addEventListener('click', () => carregarEntradas(container, idVariacao, 30));
                     container.appendChild(botao);
                 }
+            };
+            if (visto) { desenhar(visto.dados); if (estaFresco(visto)) return; } else { container.innerHTML = esqueleto(5); }
+            try {
+                const res = await fetch(`/api/produtos/${idVariacao}/entradas?limite=${limite}`);
+                if (!res.ok) throw new Error('falha');
+                const data = await res.json();
+                if (seq !== entradasSeq) return;
+                guardarVisto(chave, data);
+                desenhar(data);
             } catch (err) {
                 if (seq !== entradasSeq) return;
+                if (visto) return; // já mostramos o que havia; a atualização por trás falhou, sem alarde
                 container.innerHTML = '<div class="indisponivel">Não foi possível carregar as entradas agora.</div>';
             }
         }
@@ -595,7 +644,7 @@
             caixa.addEventListener('toggle', async () => {
                 if (!caixa.open || carregou) return;
                 carregou = true;
-                destino.innerHTML = '<div class="loading">Carregando...</div>';
+                destino.innerHTML = esqueleto(4);
                 try {
                     const res = await fetch(url);
                     if (!res.ok) throw new Error('falha');
@@ -607,7 +656,11 @@
             });
         }
 
+        let posicaoListaCompras = 0;
+
         function abrirEntradas(idVariacao, descricao) {
+            posicaoListaCompras = elMain.scrollTop;
+            rolarParaTopo();
             mostrarViewCompras('detalhe');
             elComprasDetalhe.innerHTML = `<button class="voltar-compras" id="comprasVoltar">&larr; Voltar à lista</button>
                 <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>
@@ -620,6 +673,7 @@
             document.getElementById('comprasVoltar').addEventListener('click', () => {
                 entradasSeq++;
                 mostrarViewCompras(elBuscaCompras.value.trim().length >= 2 ? 'lista' : 'vazio');
+                elMain.scrollTop = posicaoListaCompras;
             });
             carregarEntradas(document.getElementById('comprasEntradas'), idVariacao, 10);
             prepararBloco('blocoPreco', 'destinoPreco', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
@@ -653,7 +707,7 @@
                 if (anterior) anterior.abort();
                 if (termo.length < 2) { mostrar('vazio'); return; }
                 temporizador = setTimeout(() => {
-                    elLista.innerHTML = '<div class="loading">Buscando...</div>';
+                    elLista.innerHTML = esqueletoCartoes(3);
                     mostrar('lista');
                     anterior = new AbortController();
                     fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${loja || 0}`, { signal: anterior.signal })
@@ -663,26 +717,17 @@
                             if (err && err.name === 'AbortError') return;
                             if (meu === numero) elLista.innerHTML = '<div class="erro">Erro ao buscar produtos.</div>';
                         });
-                }, 400);
+                }, 250);
             };
         }
 
         const buscarCompras = criarBuscaProtegida(renderListaCompras, elComprasLista, mostrarViewCompras);
         elBuscaCompras.addEventListener('input', () => buscarCompras(elBuscaCompras.value.trim(), elLoja.value));
 
-        function abrirDetalhe(idVariacao, descricaoResumo) {
-            elBtnVoltar.classList.add('mostrar');
-            elBuscaWrap.style.display = 'none';
-            elLoja.style.display = 'none';
-            elTitulo.textContent = 'Detalhes do produto';
-            elSubtitulo.textContent = descricaoResumo;
-            mostrarView('detalhe');
-            elDetalhe.innerHTML = '<div class="loading">Carregando...</div>';
+        let posicaoLista = 0;
 
-            fetch(`/api/produtos/${idVariacao}/detalhe?loja=${elLoja.value}`)
-                .then((r) => r.ok ? r.json() : Promise.reject(r))
-                .then((p) => {
-                    elDetalhe.innerHTML = `
+        function montarFicha(p) {
+            return `
                         <h2>${esc(p.descricao)}</h2>
                         <div class="campo"><span class="rotulo">Código de barras</span><span class="valor">${esc(p.codigoBarras || '-')}</span></div>
                         <div class="campo"><span class="rotulo">Código interno</span><span class="valor">${esc(p.codigoInterno ?? '-')}</span></div>
@@ -696,7 +741,31 @@
                         })() : ''}
                         <div class="secao-titulo">Estoque na loja selecionada</div>
                         <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
-                    `;
+            `;
+        }
+
+        function abrirDetalhe(idVariacao, descricaoResumo) {
+            elBtnVoltar.classList.add('mostrar');
+            elBuscaWrap.style.display = 'none';
+            elLoja.style.display = 'none';
+            elTitulo.textContent = 'Detalhes do produto';
+            elSubtitulo.textContent = descricaoResumo;
+            mostrarView('detalhe');
+            posicaoLista = elMain.scrollTop;
+            rolarParaTopo();
+            const chaveFicha = `ficha|${idVariacao}|${elLoja.value}`;
+            const vistoFicha = lerVisto(chaveFicha);
+            // Antes de a ficha chegar: título + código já conhecidos da lista e esqueleto no resto.
+            elDetalhe.innerHTML = vistoFicha
+                ? montarFicha(vistoFicha.dados)
+                : `<h2>${esc(descricaoResumo)}</h2>${esqueleto(6)}`;
+            if (estaFresco(vistoFicha)) return;
+
+            fetch(`/api/produtos/${idVariacao}/detalhe?loja=${elLoja.value}`)
+                .then((r) => r.ok ? r.json() : Promise.reject(r))
+                .then((p) => {
+                    guardarVisto(chaveFicha, p);
+                    elDetalhe.innerHTML = montarFicha(p);
                 })
                 .catch(() => {
                     elDetalhe.innerHTML = '<div class="erro">Não foi possível carregar este produto.</div>';
@@ -711,6 +780,7 @@
             elSubtitulo.textContent = 'Consulta de produtos';
             if (elBusca.value.trim().length >= 2) {
                 mostrarView('lista');
+                elMain.scrollTop = posicaoLista;
             } else {
                 mostrarView('vazio');
             }
@@ -781,6 +851,7 @@
         const fmtDataBR = (iso) => iso.split('-').reverse().join('/');
 
         function mostrarTab(tab) {
+            if (tab !== abaAtual) rolarParaTopo();
             abaAtual = tab;
             Object.entries(tabs).forEach(([nome, el]) => el.classList.toggle('ativo', nome === tab));
             elDashboardView.style.display = tab === 'dashboard' ? 'block' : 'none';
@@ -840,14 +911,21 @@
         tabs.conferencia.addEventListener('click', () => mostrarTab('conferencia'));
         tabs.dashboard.addEventListener('click', () => mostrarTab('dashboard'));
         tabs.alertas.addEventListener('click', () => mostrarTab('alertas'));
-        elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value));
+        elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value, true));
         elLoja.addEventListener('change', () => { if (abaAtual === 'alertas') carregarAlertas(); });
 
-        async function carregarDashboardMobile(inicio, fim) {
+        async function carregarDashboardMobile(inicio, fim, forcar = false) {
             const seq = ++dashSeq;
             const elErro = document.getElementById('dashErro');
             elErro.style.display = 'none';
-            document.getElementById('dashTotal').textContent = 'carregando...';
+            const chave = `dash|${inicio}|${fim}`;
+            const visto = lerVisto(chave);
+            if (visto) {
+                renderDashboard(visto.dados, inicio, fim);              // mostra o que já havia, sem piscar
+                if (!forcar && estaFresco(visto)) return;                // dado recente: nem consulta de novo
+            } else {
+                document.getElementById('dashTotal').innerHTML = '<span class="sk alto" style="width:150px;display:inline-block;margin:2px 0"></span>';
+            }
             try {
                 const res = await fetch(`/api/produtos/dashboard-mobile?${new URLSearchParams({ inicio, fim })}`);
                 if (!res.ok) {
@@ -855,9 +933,10 @@
                     throw new Error(corpo.detail || 'Não foi possível carregar o dashboard.');
                 }
                 const data = await res.json();
+                guardarVisto(chave, data);
                 if (seq === dashSeq) renderDashboard(data, inicio, fim);
             } catch (err) {
-                if (seq !== dashSeq) return;
+                if (seq !== dashSeq || visto) return;
                 document.getElementById('dashTotal').textContent = '-';
                 elErro.textContent = err.message;
                 elErro.style.display = 'block';
@@ -1092,24 +1171,32 @@
             if (topo) { ev.preventDefault(); alternarCaixa(topo); }
         });
 
-        async function carregarFechamento() {
+        async function carregarFechamento(forcar = false) {
             const inicio = elConfDe.value, fim = elConfAte.value;
             if (!inicio || !fim) return;
             const seq = ++fechSeq;
-            elFechResumo.innerHTML = '<div class="loading">Carregando...</div>';
-            elFechDetalhe.innerHTML = '';
+            const chave = `caixa|${inicio}|${fim}`;
+            const visto = lerVisto(chave);
+            if (visto) {
+                renderFechamento(visto.dados, inicio === fim);
+                if (!forcar && estaFresco(visto)) return;
+            } else {
+                elFechResumo.innerHTML = esqueleto(3);
+                elFechDetalhe.innerHTML = esqueletoCartoes(2);
+            }
             try {
                 const res = await fetch(`/api/produtos/fechamento-caixa?${new URLSearchParams({ inicio, fim })}`);
                 if (!res.ok) throw new Error('falha');
                 const data = await res.json();
                 if (seq !== fechSeq) return;
+                guardarVisto(chave, data);
                 renderFechamento(data, inicio === fim);
             } catch (err) {
-                if (seq !== fechSeq) return;
+                if (seq !== fechSeq || visto) return;
                 elFechResumo.innerHTML = '<div class="indisponivel">Não foi possível carregar a conferência de caixa agora.</div>';
             }
         }
-        document.getElementById('confFiltrar').addEventListener('click', carregarFechamento);
+        document.getElementById('confFiltrar').addEventListener('click', () => carregarFechamento(true));
 
         function renderDashboard(data, inicio, fim) {
             document.getElementById('dashTotal').textContent = fmtMoney(data.total);
@@ -1146,12 +1233,14 @@
                 : 'Vendas por dia no período';
             const rotulos = porHora ? porHora.map((h) => `${h.hora}h`) : data.vendasPorDia.map((d) => d.dia);
             const valores = porHora ? porHora.map((h) => h.valor) : data.vendasPorDia.map((d) => d.valor);
-            if (chartDiario) chartDiario.destroy();
-            chartDiario = new Chart(document.getElementById('chartDiario'), {
-                type: 'bar',
-                data: { labels: rotulos, datasets: [{ label: 'Vendas', data: valores, backgroundColor: '#0b3895' }] },
-                options: { responsive: true, plugins: { legend: { display: false } } },
-            });
+            if (chartDiario) { chartDiario.destroy(); chartDiario = null; }
+            if (typeof Chart !== 'undefined') {   // se a biblioteca do gráfico ainda não chegou, o resto da tela aparece mesmo assim
+                chartDiario = new Chart(document.getElementById('chartDiario'), {
+                    type: 'bar',
+                    data: { labels: rotulos, datasets: [{ label: 'Vendas', data: valores, backgroundColor: '#0b3895' }] },
+                    options: { responsive: true, animation: { duration: 350 }, plugins: { legend: { display: false } } },
+                });
+            }
 
             const elFormas = document.getElementById('dashFormas');
             elFormas.innerHTML = data.formasPagamento.length

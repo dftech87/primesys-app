@@ -9,9 +9,22 @@ from app.database import init_db
 from app.routers import admin, auth, dashboard, painel_mobile, produtos
 from app.tenants import create_tenant
 
+
+
+class _GZipSemServiceWorker(GZipMiddleware):
+    """Comprime as respostas (ajuda no 4G), exceto o service worker: ele é a peça mais sensível do app
+    instalado e continua sendo entregue exatamente como antes, sem nenhuma camada no meio."""
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"] == "/static/sw.js":
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
 app = FastAPI(title="PrimeSys Dashboard")
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
-app.add_middleware(GZipMiddleware, minimum_size=1024)
+app.add_middleware(_GZipSemServiceWorker, minimum_size=1024)
 
 
 @app.get("/static/sw.js")
