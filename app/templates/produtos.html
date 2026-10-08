@@ -1895,7 +1895,10 @@
         try {
             const aba = sessionStorage.getItem('primesys_restaurar');
             sessionStorage.removeItem('primesys_restaurar');
-            if (aba && aba !== 'produtos' && aba !== 'alertas' && tabs[aba]) mostrarTab(aba);
+            // Ao abrir o app começa no Dashboard (o dono quer os números do dia); ao recarregar por causa de uma
+            // atualização, volta para a aba em que a pessoa estava.
+            const inicial = aba && aba !== 'alertas' && tabs[aba] ? aba : 'dashboard';
+            if (inicial !== 'produtos') mostrarTab(inicial);
         } catch (err) {}
 
         if ('serviceWorker' in navigator) {
