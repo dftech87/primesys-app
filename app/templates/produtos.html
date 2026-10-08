@@ -284,7 +284,7 @@
         /* Fluidez: entrada suave das telas, resposta ao toque e esqueletos no lugar de "Carregando..." */
         @keyframes entrada { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
         @keyframes brilho { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
-        #dashboardView, #comprasView, #conferenciaView, #alertasView, #vazio, #lista, #detalhe,
+        #dashboardView, #comprasView, #conferenciaView, #financeiroView, #alertasView, #vazio, #lista, #detalhe,
         #comprasVazio, #comprasLista, #comprasDetalhe { animation: entrada .22s ease-out; }
         main { overscroll-behavior-y: contain; }
         button, .card, .cx-topo, select, input { touch-action: manipulation; }
@@ -301,7 +301,7 @@
            recebe um fade curto de transparência, que dá a sensação de transição sem mexer a tela. */
         @keyframes entradaSuave { from { opacity: 0; } to { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) {
-            #dashboardView, #comprasView, #conferenciaView, #alertasView, #vazio, #lista, #detalhe,
+            #dashboardView, #comprasView, #conferenciaView, #financeiroView, #alertasView, #vazio, #lista, #detalhe,
             #comprasVazio, #comprasLista, #comprasDetalhe { animation: entradaSuave .16s ease-out; }
             .sk { animation: none; }
             .tabbar button:active, .card:active, #dashFiltrar:active, #confFiltrar:active, .mais:active { transform: none; }
@@ -315,6 +315,26 @@
         .aviso-versao .dispensar { background: none; color: #bfdbfe; padding: 6px 4px; font-size: 16px; }
         .tabbar button[hidden] { display: none; }
         #conferenciaView { display: none; padding: 16px; }
+        #financeiroView { display: none; padding: 16px; }
+        .fin-seg { display: flex; background: #e2e8f0; border-radius: 10px; padding: 3px; gap: 3px; margin-bottom: 14px; }
+        .fin-seg button { flex: 1; border: 0; background: none; border-radius: 8px; padding: 9px 4px; font: inherit; font-size: 14px;
+            color: #64748b; cursor: pointer; touch-action: manipulation; }
+        .fin-seg button.on { background: #fff; color: #0f172a; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+        .fin-total { font-size: 24px; font-weight: 700; }
+        .fin-total.pagar { color: #b91c1c; } .fin-total.receber { color: #15803d; }
+        .fin-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+        .fin-faixa { padding: 10px 0; border-bottom: 1px solid #f1f5f9; cursor: pointer; touch-action: manipulation; }
+        .fin-faixa:last-of-type { border-bottom: 0; }
+        .fin-faixa .topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+        .fin-faixa .topo .qtd { color: #64748b; font-size: 12px; margin-left: 4px; }
+        .fin-faixa .topo b { white-space: nowrap; }
+        .fin-faixa .topo .seta { color: #94a3b8; margin-left: 6px; font-size: 13px; }
+        .fin-faixa.vazia { cursor: default; opacity: .55; }
+        .fin-faixa .barra { height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; margin-top: 7px; }
+        .fin-faixa .barra i { display: block; height: 100%; border-radius: 3px; }
+        .fin-cor { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 7px; }
+        .fin-titulos { background: #f8fafc; border-radius: 10px; padding: 2px 12px; margin-top: 8px; cursor: default; }
+        .fin-titulos .val.pagar { color: #b91c1c; } .fin-titulos .val.receber { color: #15803d; }
         #comprasView { display: none; }
         #comprasDetalhe { padding: 16px; }
         .voltar-compras { border: 0; background: none; color: var(--azul); font-size: 14px; font-weight: 700;
@@ -469,6 +489,10 @@
                 <div id="confLista"></div>
             </div>
 
+            <div id="financeiroView">
+                <div class="dash-panel" id="finPainel"></div>
+            </div>
+
             <div id="alertasView">
                 <div id="alertaResumo" class="resumo-alertas"></div>
                 <div class="dash-panel gestao" id="gestaoRuptura" style="display:none">
@@ -517,6 +541,10 @@
             <button id="tabConferencia">
                 <span class="tab-icone">&#128181;</span>
                 Conferência
+            </button>
+            <button id="tabFinanceiro">
+                <span class="tab-icone">&#127974;</span>
+                Financeiro
             </button>
             <button id="tabAlertas" hidden>
                 <span class="tab-icone">&#9888;&#65039;<span class="selo" id="seloAlertas"></span></span>
@@ -867,11 +895,13 @@
 
         // Abas da barra inferior: Produtos | Dashboard | Alertas
         const elDashboardView = document.getElementById('dashboardView');
+        const elFinanceiroView = document.getElementById('financeiroView');
         const elAlertasView = document.getElementById('alertasView');
         const tabs = {
             produtos: document.getElementById('tabProdutos'),
             compras: document.getElementById('tabCompras'),
             conferencia: document.getElementById('tabConferencia'),
+            financeiro: document.getElementById('tabFinanceiro'),
             dashboard: document.getElementById('tabDashboard'),
             alertas: document.getElementById('tabAlertas'),
         };
@@ -900,6 +930,7 @@
             elAlertasView.style.display = tab === 'alertas' ? 'block' : 'none';
             elComprasView.style.display = tab === 'compras' ? 'block' : 'none';
             elConferenciaView.style.display = tab === 'conferencia' ? 'block' : 'none';
+            elFinanceiroView.style.display = tab === 'financeiro' ? 'block' : 'none';
             elBuscaComprasWrap.style.display = tab === 'compras' ? 'block' : 'none';
 
             if (tab === 'produtos') {
@@ -931,6 +962,12 @@
                 return;
             }
 
+            if (tab === 'financeiro') {
+                elSubtitulo.textContent = 'Financeiro · contas a pagar e a receber';
+                carregarFinanceiro();
+                return;
+            }
+
             if (tab === 'compras') {
                 elSubtitulo.textContent = 'Compras · notas de entrada';
                 return;
@@ -951,6 +988,7 @@
         tabs.produtos.addEventListener('click', () => mostrarTab('produtos'));
         tabs.compras.addEventListener('click', () => mostrarTab('compras'));
         tabs.conferencia.addEventListener('click', () => mostrarTab('conferencia'));
+        tabs.financeiro.addEventListener('click', () => mostrarTab('financeiro'));
         tabs.dashboard.addEventListener('click', () => mostrarTab('dashboard'));
         tabs.alertas.addEventListener('click', () => mostrarTab('alertas'));
         elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value, true));
@@ -1014,6 +1052,81 @@
                     <text x="75" y="70" text-anchor="middle" font-size="10" fill="#64748b">Total</text>
                     <text x="75" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">${valorCurto(soma)}</text>
                 </svg></div><div class="legenda">${legenda}</div>`;
+        }
+
+        // Financeiro: contas em aberto, uma lista por vez (A pagar | A receber), com faixas de vencimento.
+        // Os totais vêm exatos do servidor (10 min de cache); o app reaproveita o que já buscou por 5 min.
+        const FAIXA_COR = { atrasadas: '#b91c1c', hoje: '#d97706', prox7: '#0b3895', prox30: '#94a3b8', depois: '#cbd5e1' };
+        const IDADE_FINANCEIRO_MS = 5 * 60 * 1000;
+        const fmtDataCurta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+        let finDados = null;
+        let finTipo = 'pagar';
+        const finAberta = { pagar: undefined, receber: undefined };   // undefined = a primeira faixa com títulos; null = tudo fechado
+
+        function desenharFinanceiro() {
+            const alvo = document.getElementById('finPainel');
+            if (!finDados) return;
+            const bloco = finDados[finTipo];
+            const sinal = finTipo === 'pagar' ? '−' : '+';
+            const n = (v) => Number(v).toLocaleString('pt-BR');
+            const seg = `<div class="fin-seg"><button type="button" data-tipo="pagar" class="${finTipo === 'pagar' ? 'on' : ''}">A pagar</button>
+                <button type="button" data-tipo="receber" class="${finTipo === 'receber' ? 'on' : ''}">A receber</button></div>`;
+            if (!bloco.quantidade) {
+                alvo.innerHTML = `${seg}<div class="indisponivel">Nenhuma conta ${finTipo === 'pagar' ? 'a pagar' : 'a receber'} em aberto.</div>`;
+                return;
+            }
+            let aberta = finAberta[finTipo];
+            if (aberta === undefined) aberta = (bloco.faixas.find((f) => f.quantidade) || {}).id || null;
+
+            const faixas = bloco.faixas.map((f) => {
+                const largura = bloco.valor ? Math.max(f.valor ? 2 : 0, Math.round(f.valor / bloco.valor * 100)) : 0;
+                const cor = FAIXA_COR[f.id] || '#94a3b8';
+                const abre = f.quantidade && aberta === f.id;
+                const resto = f.quantidade - f.titulos.length;
+                const lista = abre ? `<div class="fin-titulos">${f.titulos.map((t) => `
+                    <div class="linha-info"><span class="desc">${esc(t.nome)}<span class="sub">venc. ${fmtDataCurta(t.vencimento)}${t.numero ? ` · NF ${esc(t.numero)}` : ''}</span></span>
+                    <span class="val ${finTipo}">${sinal} ${fmtMoney(t.valor)}</span></div>`).join('')}
+                    ${resto > 0 ? `<div class="nota">e mais ${n(resto)} ${resto === 1 ? 'título' : 'títulos'} nesta faixa.</div>` : ''}</div>` : '';
+                return `<div class="fin-faixa${f.quantidade ? '' : ' vazia'}" data-faixa="${f.id}">
+                    <div class="topo"><span><span class="fin-cor" style="background:${cor}"></span>${esc(f.rotulo)}<span class="qtd">· ${n(f.quantidade)} ${f.quantidade === 1 ? 'título' : 'títulos'}</span></span>
+                        <span><b>${fmtMoney(f.valor)}</b>${f.quantidade ? `<span class="seta">${abre ? '▴' : '▾'}</span>` : ''}</span></div>
+                    <div class="barra"><i style="width:${largura}%;background:${cor}"></i></div>${lista}</div>`;
+            }).join('');
+
+            const hora = new Date(finDados.geradoEm * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            alvo.innerHTML = `${seg}
+                <div class="fin-total ${finTipo}">${fmtMoney(bloco.valor)}</div>
+                <div class="fin-sub">${n(bloco.quantidade)} ${bloco.quantidade === 1 ? 'título em aberto' : 'títulos em aberto'}</div>
+                <div style="margin-top:10px">${faixas}</div>
+                <div class="nota">Parcelas em aberto de lançamentos emitidos, já descontados os pagamentos parciais. Posição de ${hora}.</div>`;
+        }
+
+        document.getElementById('finPainel').addEventListener('click', (e) => {
+            const botao = e.target.closest('.fin-seg button');
+            if (botao) { finTipo = botao.dataset.tipo; desenharFinanceiro(); return; }
+            const faixa = e.target.closest('.fin-faixa');
+            if (!faixa || faixa.classList.contains('vazia') || e.target.closest('.fin-titulos')) return;
+            const atual = finAberta[finTipo] === undefined
+                ? (finDados[finTipo].faixas.find((f) => f.quantidade) || {}).id
+                : finAberta[finTipo];
+            finAberta[finTipo] = atual === faixa.dataset.faixa ? null : faixa.dataset.faixa;
+            desenharFinanceiro();
+        });
+
+        async function carregarFinanceiro() {
+            const chave = 'financeiro';
+            const visto = lerVisto(chave);
+            if (visto) { finDados = visto.dados; desenharFinanceiro(); if (Date.now() - visto.em < IDADE_FINANCEIRO_MS) return; }
+            else document.getElementById('finPainel').innerHTML = esqueleto(6);
+            try {
+                const res = await fetch(`/api/produtos/financeiro?hoje=${hojeISO()}`);
+                if (!res.ok) throw new Error(res.status);
+                finDados = await res.json();
+                guardarVisto(chave, finDados);
+                desenharFinanceiro();
+            } catch (err) {
+                if (!visto) document.getElementById('finPainel').innerHTML = '<div class="indisponivel">Indisponível no momento. Tente novamente em instantes.</div>';
+            }
         }
 
         // Estoque: foto do dia. O servidor guarda por horas (o ERP só é consultado de tempos em tempos) e o app

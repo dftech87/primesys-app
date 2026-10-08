@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from app import alertas, caixa, estoque, vendas
+from app import alertas, caixa, estoque, financeiro, vendas
 from app.cache import cached, descartar
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
@@ -22,6 +22,7 @@ TTL_DASHBOARD = 60            # período que inclui hoje: ainda está vendendo
 TTL_CAIXA = 120               # período que inclui hoje (ainda há caixas fechando)
 TTL_CAIXA_ENCERRADO = 900
 TTL_DASHBOARD_ENCERRADO = 900  # período já fechado: praticamente não muda
+TTL_FINANCEIRO = 600             # contas em aberto mudam devagar; dobra de cache em 10 min
 TTL_ESTOQUE_POSICAO = 6 * 3600   # o estoque é acompanhado por dia: no máximo ~4 consultas ao ERP por dia
 INTERVALO_MIN_ATUALIZAR = 600    # "Atualizar" só refaz a consulta se a posição guardada tiver mais de 10 min
 _DIAS_SEMANA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
@@ -235,4 +236,25 @@ async def estoque_resumo(request: Request, atualizar: bool = Query(False)):
         return posicao
     except ConsultaIndisponivel:
         logger.exception("consulta SQL indisponível (estoque) para %s", tenant["cnpj"])
+        return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)
+
+
+@router.get("/api/produtos/financeiro")
+async def financeiro_mobile(request: Request, hoje: str | None = Query(None)):
+    """Contas a pagar e a receber em aberto, por faixa de vencimento (exato, uma consulta)."""
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+
+    data_hoje = _data_do_cliente(hoje)
+    client = MeuERPClient(tenant["api_token"])
+    try:
+        return await cached(
+            (tenant["cnpj"], "financeiro", data_hoje),
+            TTL_FINANCEIRO,
+            lambda: financeiro.posicao(client, data_hoje),
+            obsoleto_ate=TTL_FINANCEIRO,
+        )
+    except ConsultaIndisponivel:
+        logger.exception("consulta SQL indisponível (financeiro) para %s", tenant["cnpj"])
         return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)
