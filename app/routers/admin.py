@@ -2,7 +2,10 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.config import settings
+import secrets
+
+from app import limite
+from app.config import ADMIN_ATIVO, settings
 from app.tenants import create_tenant, list_tenants, set_tenant_ativo
 
 router = APIRouter(prefix="/admin")
@@ -14,9 +17,8 @@ def _is_admin(request: Request) -> bool:
 
 
 def _mask_token(token: str) -> str:
-    if len(token) <= 8:
-        return "****"
-    return f"{token[:4]}...{token[-4:]}"
+    # Só os 4 últimos: o suficiente para reconhecer qual token é, sem expor o começo dele.
+    return f"••••{token[-4:]}" if len(token) > 8 else "••••"
 
 
 def _tenants_view() -> list[dict]:
@@ -30,10 +32,23 @@ async def admin_login_page(request: Request):
 
 @router.post("/login")
 async def admin_login_submit(request: Request, usuario: str = Form(...), senha: str = Form(...)):
-    if usuario != settings.admin_user or senha != settings.admin_password:
-        return templates.TemplateResponse(
-            request, "admin_login.html", {"error": "Usuário ou senha inválidos."}, status_code=401
-        )
+    def recusar(mensagem: str, status: int):
+        return templates.TemplateResponse(request, "admin_login.html", {"error": mensagem}, status_code=status)
+
+    if not ADMIN_ATIVO:
+        return recusar("Acesso de administração desativado: defina ADMIN_PASSWORD (uma senha forte) no servidor.", 503)
+
+    chave = f"admin:{limite.ip_do_cliente(request) or 'sem-ip'}"
+    espera = limite.segundos_bloqueado(chave, limite.LIMITE_ADMIN)
+    if espera:
+        return recusar(limite.mensagem_bloqueio(espera), 429)
+
+    usuario_ok = secrets.compare_digest(usuario.encode(), settings.admin_user.encode())
+    senha_ok = secrets.compare_digest(senha.encode(), settings.admin_password.encode())
+    if not (usuario_ok and senha_ok):
+        limite.registrar_falha(chave)
+        return recusar("Usuário ou senha inválidos.", 401)
+    limite.limpar(chave)
     request.session["is_admin"] = True
     return RedirectResponse("/admin", status_code=303)
 

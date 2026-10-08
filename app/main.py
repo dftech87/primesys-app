@@ -5,10 +5,10 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import versao
-from app.config import settings
+from app.config import COOKIE_SEGURO, SESSAO_MAX_IDADE, settings
 from app.database import init_db
 from app.routers import admin, auth, dashboard, painel_mobile, produtos
-from app.tenants import create_tenant
+from app.tenants import create_tenant, criptografar_tokens_existentes
 
 
 
@@ -24,7 +24,9 @@ class _GZipSemServiceWorker(GZipMiddleware):
 
 
 app = FastAPI(title="PrimeSys Dashboard")
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+app.add_middleware(
+    SessionMiddleware, secret_key=settings.session_secret, https_only=COOKIE_SEGURO, same_site="lax", max_age=SESSAO_MAX_IDADE
+)
 app.add_middleware(_GZipSemServiceWorker, minimum_size=1024)
 
 
@@ -60,6 +62,9 @@ init_db()
 # acesso a shell no servidor. Idempotente: apenas atualiza se já existir.
 if settings.meuerp_cnpj and settings.meuerp_token:
     create_tenant(cnpj=settings.meuerp_cnpj, nome_fantasia="DFTECH", api_token=settings.meuerp_token)
+
+# Com TOKEN_ENCRYPTION_KEY definida, converte para criptografado os tokens que ainda estão em texto simples.
+criptografar_tokens_existentes()
 
 app.include_router(auth.router)
 app.include_router(admin.router)
