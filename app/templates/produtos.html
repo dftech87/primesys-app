@@ -263,6 +263,9 @@
         .est-k .valor { font-size: 16px; font-weight: 700; color: var(--azul); margin-top: 3px; white-space: nowrap; }
         .est-rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: #64748b; }
         .est-rodape button { background: none; border: 0; color: var(--azul); font: inherit; font-weight: 700; padding: 6px 0; cursor: pointer; touch-action: manipulation; }
+        .abre-produto { cursor: pointer; touch-action: manipulation; transition: background-color .12s ease; }
+        .abre-produto:active { background: #f1f5f9; }
+        .abre-produto .val::after { content: ' \203A'; color: #94a3b8; font-weight: 400; margin-left: 4px; }
         .sub-titulo { font-size: 11px; font-weight: 700; color: #64748b; margin: 10px 0 2px; }
         .sub { display: block; font-size: 11px; color: #64748b; margin-top: 2px; }
         .val small { display: block; font-weight: 400; color: #15803d; }
@@ -842,7 +845,23 @@
                 });
         }
 
+        // Ficha aberta a partir de outra tela (ex.: lista de margem do Dashboard): o "voltar" retorna para lá.
+        let origemFicha = null;
+
+        function irParaProduto(idVariacao, descricao) {
+            const origem = { aba: abaAtual, rolagem: elMain.scrollTop };
+            mostrarTab('produtos');
+            abrirDetalhe(idVariacao, descricao);
+            origemFicha = origem;   // depois do mostrarTab, que zera a origem ao trocar de aba
+        }
+
         function fecharDetalhe() {
+            if (origemFicha) {
+                const { aba, rolagem } = origemFicha;
+                mostrarTab(aba);
+                requestAnimationFrame(() => { elMain.scrollTop = rolagem; });
+                return;
+            }
             elBtnVoltar.classList.remove('mostrar');
             elBuscaWrap.style.display = 'block';
             elLoja.style.display = 'block';
@@ -923,6 +942,7 @@
         const fmtDataBR = (iso) => iso.split('-').reverse().join('/');
 
         function mostrarTab(tab) {
+            origemFicha = null;   // trocar de aba pela barra inferior cancela o "voltar" para a tela de origem
             if (tab !== abaAtual) rolarParaTopo();
             abaAtual = tab;
             Object.entries(tabs).forEach(([nome, el]) => el.classList.toggle('ativo', nome === tab));
@@ -1296,7 +1316,8 @@
                 ? `⚠ ${ab.produtos} ${ab.produtos === 1 ? 'produto vendido' : 'produtos vendidos'} com margem negativa no período · perda de ${fmtMoney(ab.perda)}`
                 : '';
 
-            const linha = (i, sub, valor, classe) => `<div class="linha-info">
+            const linha = (i, sub, valor, classe) => `<div class="linha-info abre-produto" role="button" tabindex="0"
+                data-id="${esc(i.codigo)}" data-desc="${esc(i.descricao)}">
                 <span class="desc">${esc(i.descricao)}<span class="sub">${sub}</span></span>
                 <span class="val ${classe}">${valor}</span></div>`;
             let html = '';
@@ -1317,6 +1338,15 @@
             html += '<div class="nota">Margem das vendas do período escolhido no filtro, com o custo registrado no ERP no momento da venda. Itens sem custo ficam de fora.</div>';
             document.getElementById('margemDetalhe').innerHTML = html;
         }
+
+        const elMargemDetalhe = document.getElementById('margemDetalhe');
+        const abrirDaMargem = (e) => {
+            const linha = e.target.closest('.abre-produto');
+            if (!linha) return;
+            irParaProduto(linha.dataset.id, linha.dataset.desc);
+        };
+        elMargemDetalhe.addEventListener('click', abrirDaMargem);
+        elMargemDetalhe.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirDaMargem(e); } });
 
         // Aba Conferência: fechamento de caixa por operador, com detalhe por forma de pagamento.
         // Diferença = contado - esperado: acima de zero é sobra (+, verde); abaixo de zero é falta (−, vermelho).
