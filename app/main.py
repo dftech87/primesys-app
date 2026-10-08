@@ -6,7 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import versao
 from app.config import COOKIE_SEGURO, SESSAO_MAX_IDADE, settings
-from app.database import init_db
+from app.database import db_session, init_db
 from app.routers import admin, auth, dashboard, painel_mobile, produtos
 from app.tenants import create_tenant, criptografar_tokens_existentes
 
@@ -28,6 +28,18 @@ app.add_middleware(
     SessionMiddleware, secret_key=settings.session_secret, https_only=COOKIE_SEGURO, same_site="lax", max_age=SESSAO_MAX_IDADE
 )
 app.add_middleware(_GZipSemServiceWorker, minimum_size=1024)
+
+
+@app.api_route("/saude", methods=["GET", "HEAD"])
+async def saude():
+    """Verificação de saúde para o monitoramento externo e para o deploy do Railway: responde 200 só se o app
+    está de pé e o banco de clientes abre. Não consulta o ERP (gastaria a cota de chamadas) e não revela nada."""
+    try:
+        with db_session() as conn:
+            conn.execute("SELECT 1 FROM empresas LIMIT 1").fetchone()
+    except Exception:
+        return JSONResponse({"ok": False}, status_code=503, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"ok": True}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/versao")
