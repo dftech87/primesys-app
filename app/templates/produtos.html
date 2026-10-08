@@ -257,6 +257,12 @@
         .alerta-margem:empty { display: none; }
         .sub-resumo { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: #475569; }
         .gestao details > div { margin-top: 10px; }
+        .est-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 8px; }
+        .est-k { background: #f8fafc; border-radius: 12px; padding: 12px; }
+        .est-k .rotulo { font-size: 12px; color: #64748b; }
+        .est-k .valor { font-size: 16px; font-weight: 700; color: var(--azul); margin-top: 3px; white-space: nowrap; }
+        .est-rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: #64748b; }
+        .est-rodape button { background: none; border: 0; color: var(--azul); font: inherit; font-weight: 700; padding: 6px 0; cursor: pointer; touch-action: manipulation; }
         .sub-titulo { font-size: 11px; font-weight: 700; color: #64748b; margin: 10px 0 2px; }
         .sub { display: block; font-size: 11px; color: #64748b; margin-top: 2px; }
         .val small { display: block; font-weight: 400; color: #15803d; }
@@ -429,6 +435,12 @@
                         <summary><div><div class="tit">Margem de vendas</div><div class="sub-resumo" id="margemResumo"></div>
                             <div class="sub-resumo alerta-margem" id="margemAlerta"></div></div></summary>
                         <div id="margemDetalhe"></div>
+                    </details>
+                </div>
+                <div class="dash-panel gestao" id="gestaoEstoque" style="display:none">
+                    <details>
+                        <summary><div><div class="tit">Estoque</div><div class="sub-resumo" id="estoqueResumo"></div></div></summary>
+                        <div id="estoqueDetalhe"></div>
                     </details>
                 </div>
                 <div class="dash-panel">
@@ -1004,6 +1016,57 @@
                 </svg></div><div class="legenda">${legenda}</div>`;
         }
 
+        // Estoque: foto do dia. O servidor guarda por horas (o ERP só é consultado de tempos em tempos) e o app
+        // reaproveita o que já buscou nesta sessão; só o botão "Atualizar" pede de novo.
+        const fmtReais = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+        const IDADE_ESTOQUE_MS = 10 * 60 * 1000;
+
+        function renderEstoque(d) {
+            document.getElementById('gestaoEstoque').style.display = 'block';
+            document.getElementById('estoqueResumo').textContent = `${fmtReais(d.valorCusto)} a custo · ${fmtReais(d.valorVenda)} a preço de venda`;
+            const n = (v) => Number(v).toLocaleString('pt-BR');
+            const linha = (rotulo, valor, classe) => `<div class="linha-info"><span class="desc">${rotulo}</span><span class="val ${classe || ''}">${valor}</span></div>`;
+            const hora = new Date(d.geradoEm * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const dia = new Date(d.geradoEm * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            const avisos = [];
+            if (d.semCusto) avisos.push(`${n(d.semCusto)} ${d.semCusto === 1 ? 'produto com estoque e sem custo cadastrado fica fora' : 'produtos com estoque e sem custo cadastrado ficam fora'} do valor a custo.`);
+            if (d.semPreco) avisos.push(`${n(d.semPreco)} ${d.semPreco === 1 ? 'produto com estoque e sem preço de venda fica fora' : 'produtos com estoque e sem preço de venda ficam fora'} do valor a preço de venda.`);
+            document.getElementById('estoqueDetalhe').innerHTML = `
+                <div class="est-g2">
+                    <div class="est-k"><div class="rotulo">A preço de custo</div><div class="valor">${fmtMoney(d.valorCusto)}</div></div>
+                    <div class="est-k"><div class="rotulo">A preço de venda</div><div class="valor">${fmtMoney(d.valorVenda)}</div></div>
+                </div>
+                <div class="sub-titulo">PRODUTOS</div>
+                ${linha('Mercadorias ativas', n(d.ativas))}
+                ${linha('Produtos com estoque', n(d.comEstoque))}
+                ${linha('Unidades em estoque', n(d.unidades))}
+                ${d.negativos ? '<div class="sub-titulo">ATENÇÃO</div>' + linha('Estoque negativo (fora do valor)', `${n(d.negativos)} ${d.negativos === 1 ? 'produto' : 'produtos'}`, 'ruim') : ''}
+                ${avisos.map((a) => `<div class="nota">${a}</div>`).join('')}
+                <div class="nota">Só produtos ativos com saldo positivo, com custo e preço de venda como estão no cadastro do ERP.</div>
+                <div class="est-rodape"><span>Posição de ${dia} às ${hora}</span><button type="button" id="btnEstoqueAtualizar">Atualizar</button></div>`;
+        }
+
+        async function carregarEstoque(forcar = false) {
+            const chave = 'estoque-resumo';
+            const visto = lerVisto(chave);
+            if (!forcar && visto && Date.now() - visto.em < IDADE_ESTOQUE_MS) { renderEstoque(visto.dados); return; }
+            if (visto) renderEstoque(visto.dados);   // mostra o que já tem enquanto confere
+            try {
+                const res = await fetch(`/api/produtos/estoque-resumo${forcar ? '?atualizar=1' : ''}`);
+                if (!res.ok) return;
+                const dados = await res.json();
+                guardarVisto(chave, dados);
+                renderEstoque(dados);
+            } catch (err) { /* o estoque é um extra: sem ele o dashboard continua funcionando */ }
+        }
+
+        document.getElementById('estoqueDetalhe').addEventListener('click', async (e) => {
+            const botao = e.target.closest('#btnEstoqueAtualizar');
+            if (!botao) return;
+            botao.disabled = true; botao.textContent = 'Atualizando…';
+            await carregarEstoque(true);
+        });
+
         // Vendas por tipo (NFC-e / pré-venda): rosca com o total, dois cartões e, ao tocar num cartão, as formas de pagamento.
         // Só vem do servidor quando o cliente vendeu em mais de um tipo no período.
         const CORES_TIPO = { fiscal: '#0b3895', naoFiscal: '#f59e0b' };
@@ -1335,6 +1398,7 @@
             }
 
             renderTipos(data.vendasPorTipo);
+            carregarEstoque();
 
             const elFormas = document.getElementById('dashFormas');
             elFormas.innerHTML = data.formasPagamento.length

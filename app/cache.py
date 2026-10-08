@@ -74,3 +74,8 @@ def _ignorar_erro(tarefa: asyncio.Task) -> None:
     """Renovação em segundo plano que falhou: o valor antigo continua valendo, só registramos."""
     if not tarefa.cancelled() and tarefa.exception() is not None:
         logger.warning("renovação em segundo plano falhou: %r", tarefa.exception())
+
+
+def descartar(chave: tuple) -> None:
+    """Esquece um resultado guardado (ex.: o dono pediu para atualizar)."""
+    _guardado.pop(chave, None)

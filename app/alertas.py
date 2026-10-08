@@ -7,7 +7,8 @@ from app import rest, vendas
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import d, executar, i
 
-_ATIVO = "coalesce(ve.flaginativo, 'N') <> 'S'"
+# O ERP grava 'T'/'F' em flaginativo (alguns cadastros antigos usam 'S'/'N').
+_ATIVO = "coalesce(ve.flaginativo, 'F') not in ('T', 'S')"
 
 
 def _num(valor) -> float:

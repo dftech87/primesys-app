@@ -2,13 +2,14 @@
 
 import asyncio
 import logging
+import time
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from app import alertas, caixa, vendas
-from app.cache import cached
+from app import alertas, caixa, estoque, vendas
+from app.cache import cached, descartar
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
@@ -21,6 +22,8 @@ TTL_DASHBOARD = 60            # período que inclui hoje: ainda está vendendo
 TTL_CAIXA = 120               # período que inclui hoje (ainda há caixas fechando)
 TTL_CAIXA_ENCERRADO = 900
 TTL_DASHBOARD_ENCERRADO = 900  # período já fechado: praticamente não muda
+TTL_ESTOQUE_POSICAO = 6 * 3600   # o estoque é acompanhado por dia: no máximo ~4 consultas ao ERP por dia
+INTERVALO_MIN_ATUALIZAR = 600    # "Atualizar" só refaz a consulta se a posição guardada tiver mais de 10 min
 _DIAS_SEMANA = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 
 
@@ -209,4 +212,27 @@ async def fechamento_caixa(request: Request, inicio: str | None = Query(None), f
         )
     except ConsultaIndisponivel:
         logger.exception("consulta SQL indisponível (caixa) para %s", tenant["cnpj"])
+        return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)
+
+
+@router.get("/api/produtos/estoque-resumo")
+async def estoque_resumo(request: Request, atualizar: bool = Query(False)):
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+
+    client = MeuERPClient(tenant["api_token"])
+    chave = (tenant["cnpj"], "estoque-resumo")
+
+    def produzir():
+        return cached(chave, TTL_ESTOQUE_POSICAO, lambda: estoque.posicao(client), obsoleto_ate=TTL_ESTOQUE_POSICAO)
+
+    try:
+        posicao = await produzir()
+        if atualizar and time.time() - posicao["geradoEm"] > INTERVALO_MIN_ATUALIZAR:
+            descartar(chave)
+            posicao = await produzir()
+        return posicao
+    except ConsultaIndisponivel:
+        logger.exception("consulta SQL indisponível (estoque) para %s", tenant["cnpj"])
         return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)
