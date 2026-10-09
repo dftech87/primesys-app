@@ -6,7 +6,8 @@ import secrets
 
 from app import limite
 from app.config import ADMIN_ATIVO, settings
-from app.tenants import create_tenant, list_tenants, set_tenant_ativo
+from app.security import normalize_cnpj
+from app.tenants import create_tenant, empresa_do_token, list_tenants, set_tenant_ativo
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/templates")
@@ -75,12 +76,17 @@ async def admin_create_tenant(
 ):
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
-    create_tenant(cnpj=cnpj, nome_fantasia=nome_fantasia, api_token=api_token.strip())
-    return templates.TemplateResponse(
-        request,
-        "admin.html",
-        {"tenants": _tenants_view(), "message": f"Cliente {nome_fantasia} cadastrado com sucesso."},
-    )
+    token = api_token.strip()
+    # Confere no próprio ERP de quem é o token antes de gravar: token trocado = dados de outra empresa na tela.
+    dono = await empresa_do_token(token)
+    if dono is None:
+        mensagem = "NÃO cadastrado: o ERP não reconheceu esse token. Confira se ele foi copiado inteiro e tente de novo."
+    elif dono != normalize_cnpj(cnpj):
+        mensagem = f"NÃO cadastrado: esse token pertence à empresa de CNPJ {dono}, e não ao CNPJ informado. Use o token da empresa certa."
+    else:
+        create_tenant(cnpj=cnpj, nome_fantasia=nome_fantasia, api_token=token)
+        mensagem = f"Cliente {nome_fantasia} cadastrado com sucesso (token conferido com o CNPJ no ERP)."
+    return templates.TemplateResponse(request, "admin.html", {"tenants": _tenants_view(), "message": mensagem})
 
 
 @router.post("/tenants/{cnpj}/desativar")

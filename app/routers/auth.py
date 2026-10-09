@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import limite
 from app.security import normalize_cnpj
-from app.tenants import ERRO_INDISPONIVEL, authenticate
+from app.tenants import ERRO_INDISPONIVEL, ERRO_TOKEN_DE_OUTRA_EMPRESA, authenticate
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -54,7 +54,7 @@ async def login_submit(
 
     tenant, erro = await authenticate(cnpj, email, senha)
     if tenant is None:
-        if erro != ERRO_INDISPONIVEL:   # falha do ERP ou do nosso banco não é senha errada
+        if erro not in (ERRO_INDISPONIVEL, ERRO_TOKEN_DE_OUTRA_EMPRESA):   # falha nossa ou do ERP não é senha errada
             limite.registrar_falha(chave_usuario)
             if chave_ip:
                 limite.registrar_falha(chave_ip)

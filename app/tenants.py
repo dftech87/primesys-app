@@ -4,6 +4,7 @@ import sqlite3
 import httpx
 
 from app import cripto
+from app.cache import cached
 from app.database import db_session, get_connection
 from app.meuerp_client import MeuERPClient
 from app.security import normalize_cnpj
@@ -11,6 +12,8 @@ from app.security import normalize_cnpj
 logger = logging.getLogger(__name__)
 
 ERRO_INDISPONIVEL = "Não foi possível validar suas credenciais agora. Tente novamente."
+ERRO_TOKEN_DE_OUTRA_EMPRESA = "O cadastro desta empresa está com a chave de acesso de outra empresa. Fale com o suporte."
+TTL_DONO_DO_TOKEN = 6 * 3600
 
 
 def create_tenant(cnpj: str, nome_fantasia: str, api_token: str) -> None:
@@ -25,6 +28,37 @@ def create_tenant(cnpj: str, nome_fantasia: str, api_token: str) -> None:
             """,
             (normalize_cnpj(cnpj), nome_fantasia, cripto.proteger(api_token)),
         )
+
+
+def create_tenant_if_missing(cnpj: str, nome_fantasia: str, api_token: str) -> None:
+    """Cadastro inicial (variáveis de ambiente): só cria se o CNPJ ainda não existe. Nunca sobrescreve o token que
+    foi cadastrado ou corrigido pelo /admin."""
+    with db_session() as conn:
+        conn.execute(
+            "INSERT INTO empresas (cnpj, nome_fantasia, api_token) VALUES (?, ?, ?) ON CONFLICT(cnpj) DO NOTHING",
+            (normalize_cnpj(cnpj), nome_fantasia, cripto.proteger(api_token)),
+        )
+
+
+async def empresa_do_token(token: str) -> str | None:
+    """CNPJ (só dígitos) da empresa dona do token, segundo o próprio ERP. None se não deu para saber."""
+    try:
+        resposta = await MeuERPClient(token).get("/api/empresa/v1")
+    except Exception:
+        return None
+    return normalize_cnpj(resposta.get("cnpjCpf")) or None
+
+
+async def token_confere_com_cnpj(tenant: dict) -> bool:
+    """False só quando o ERP afirma que o token é de OUTRA empresa. Se não deu para conferir (ERP fora do ar),
+    não bloqueia. Só o resultado 'confere' fica guardado, para uma correção no /admin valer na hora."""
+    dono = await cached(
+        (tenant["cnpj"], "dono-do-token"),
+        TTL_DONO_DO_TOKEN,
+        lambda: empresa_do_token(tenant["api_token"]),
+        guardar_se=lambda v: v == tenant["cnpj"],
+    )
+    return dono is None or dono == tenant["cnpj"]
 
 
 def _com_token_aberto(linha: sqlite3.Row) -> dict:
@@ -117,6 +151,11 @@ async def authenticate(cnpj: str, email: str, senha: str) -> tuple[dict | None, 
         return None, ERRO_INDISPONIVEL
     if tenant is None:
         return None, "Empresa não encontrada. Verifique o CNPJ ou fale com o suporte."
+
+    # Garante que o token cadastrado é mesmo desta empresa: um token trocado entregaria os dados de outra empresa.
+    if not await token_confere_com_cnpj(tenant):
+        logger.error("TOKEN DE OUTRA EMPRESA no cadastro do CNPJ %s: acesso bloqueado até corrigir no /admin", tenant["cnpj"])
+        return None, ERRO_TOKEN_DE_OUTRA_EMPRESA
 
     client = MeuERPClient(tenant["api_token"])
     try:

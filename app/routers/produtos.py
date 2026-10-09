@@ -10,6 +10,7 @@ from app.cache import cached
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
+from app.tenants import token_confere_com_cnpj
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -56,6 +57,10 @@ async def _estoque(client: MeuERPClient, id_variacao: int, id_loja: int) -> floa
 async def produtos_page(request: Request):
     tenant = current_tenant(request)
     if tenant is None:
+        return RedirectResponse("/login?next=/produtos", status_code=303)
+    # Cadastro com token de outra empresa: encerra a sessão; no login a pessoa vê o motivo.
+    if not await token_confere_com_cnpj(tenant):
+        request.session.clear()
         return RedirectResponse("/login?next=/produtos", status_code=303)
     return templates.TemplateResponse(
         request,
