@@ -198,7 +198,7 @@
         .tab-ent .sobe { color: #15803d; font-size: 10px; }   /* custo subiu: verde */
         .tab-ent .desce { color: #b91c1c; font-size: 10px; }  /* custo caiu: vermelho */
         .tab-ent .mg-ruim { color: #b91c1c; }
-        .tab-ent .mg-aviso { color: #b45309; }
+        .tab-ent .mg-ok { color: #15803d; }
         .linha-preco { display: grid; grid-template-columns: 56px 1fr 1fr 82px; gap: 4px; align-items: center; padding: 8px 6px;
             border-bottom: 1px solid #eef2f7; font-size: 12px; }
         .linha-preco.cab { font-size: 10px; color: #64748b; padding: 4px 6px; border: 0; }
@@ -625,7 +625,7 @@
                 const preco = e.precoVenda > 0 ? e.precoVenda : p.precoVenda;
                 if (!(e.precoVenda > 0) && preco > 0) usouPrecoAtual = true;
                 const margemPct = preco > 0 && e.custoUnit > 0 ? (preco - e.custoUnit) / preco * 100 : null;
-                const classeMargem = margemPct == null ? '' : margemPct < 0 ? 'mg-ruim' : margemPct < 10 ? 'mg-aviso' : '';
+                const classeMargem = margemPct == null ? '' : margemPct < 0 ? 'mg-ruim' : margemPct > 0 ? 'mg-ok' : '';
                 const margem = margemPct == null ? '-' : `${fmtPct(margemPct)}%${e.precoVenda > 0 ? '' : '*'}`;
                 const dataCurta = e.data.slice(0, 6) + e.data.slice(8);
                 return `<div class="ent-linha ${i === 0 ? 'ultima' : ''}">
@@ -799,7 +799,7 @@
                         <div class="campo"><span class="rotulo">Preço de venda</span><span class="valor">${fmtMoney(p.precoVenda)}</span></div>
                         ${p.precoCusto > 0 && p.precoVenda > 0 ? (() => {
                             const m = (p.precoVenda - p.precoCusto) / p.precoVenda * 100;
-                            return `<div class="campo"><span class="rotulo">Margem</span><span class="valor ${m < 0 ? 'nao' : ''}">${m.toFixed(1).replace('.', ',')}%${m < 0 ? ' (abaixo do custo)' : ''}</span></div>`;
+                            return `<div class="campo"><span class="rotulo">Margem</span><span class="valor ${m < 0 ? 'nao' : m > 0 ? 'sim' : ''}">${m.toFixed(1).replace('.', ',')}%${m < 0 ? ' (abaixo do custo)' : ''}</span></div>`;
                         })() : ''}
                         <div class="secao-titulo">Estoque na loja selecionada</div>
                         <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
