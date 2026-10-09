@@ -1329,7 +1329,7 @@
             if (mg.menorMargem.length) {
                 html += '<div class="sub-titulo">MENOR MARGEM NAS VENDAS DO PERÍODO · produtos com venda relevante</div>'
                     + mg.menorMargem.map((i) => linha(i, `cód. ${esc(i.codigo)} · vendeu ${fmtMoney(i.venda)}`,
-                        `${fmtPct(i.margemPct)}%`, i.margemPct < 0 ? 'ruim' : i.margemPct < 10 ? 'aviso' : '')).join('');
+                        `${fmtPct(i.margemPct)}%`, i.margemPct < 0 ? 'ruim' : i.margemPct > 0 ? 'ok' : '')).join('');
             }
             if (mg.maiorLucro.length) {
                 html += '<div class="sub-titulo">MAIOR LUCRO</div>'
