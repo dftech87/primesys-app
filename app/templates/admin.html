@@ -71,13 +71,14 @@
         <div class="panel">
             <h2>Clientes cadastrados</h2>
             <table>
-                <thead><tr><th>CNPJ</th><th>Nome</th><th>Token</th><th>Status</th><th>Cadastrado em</th><th></th></tr></thead>
+                <thead><tr><th>CNPJ</th><th>Nome</th><th>Token</th><th>Conferência do token</th><th>Status</th><th>Cadastrado em</th><th></th></tr></thead>
                 <tbody>
                     {% for t in tenants %}
                     <tr>
                         <td>{{ t.cnpj }}</td>
                         <td>{{ t.nome_fantasia }}</td>
                         <td class="token">{{ t.api_token }}</td>
+                        <td style="color:{{ t.conf_cor }};font-weight:600;">{{ t.conf_texto }}</td>
                         <td>{% if t.ativo %}<span style="color:#166534;">Ativo</span>{% else %}<span style="color:#991b1b;">Desativado</span>{% endif %}</td>
                         <td>{{ t.criado_em }}</td>
                         <td>
@@ -93,7 +94,7 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6">Nenhum cliente cadastrado.</td></tr>
+                    <tr><td colspan="7">Nenhum cliente cadastrado.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

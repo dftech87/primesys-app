@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+import asyncio
 import secrets
 
 from app import limite
@@ -22,8 +23,37 @@ def _mask_token(token: str) -> str:
     return f"••••{token[-4:]}" if len(token) > 8 else "••••"
 
 
-def _tenants_view() -> list[dict]:
-    return [{**dict(t), "api_token": _mask_token(t["api_token"])} for t in list_tenants()]
+async def _tenants_view() -> list[dict]:
+    """Lista para a tela, já com a conferência de cada token: ele é da empresa do CNPJ? Está repetido em outro
+    cadastro? (A pergunta é feita ao próprio ERP, 1 chamada por cliente; o token em si nunca aparece inteiro.)"""
+    tenants = list_tenants()
+    donos = await asyncio.gather(*(empresa_do_token(t["api_token"]) if t["api_token"] else asyncio.sleep(0) for t in tenants))
+    quem_usa: dict[str, list[str]] = {}
+    for t in tenants:
+        if t["api_token"]:
+            quem_usa.setdefault(t["api_token"], []).append(t["nome_fantasia"])
+
+    resultado = []
+    for t, dono in zip(tenants, donos):
+        problemas, cor = [], "#166534"
+        repetido_com = [n for n in quem_usa.get(t["api_token"], []) if n != t["nome_fantasia"]] if t["api_token"] else []
+        if not t["api_token"]:
+            problemas, cor = ["Token ilegível (chave de criptografia ausente ou diferente)"], "#991b1b"
+        else:
+            if repetido_com:
+                problemas.append("Token REPETIDO com: " + ", ".join(repetido_com))
+            if dono is None:
+                problemas.append("Não foi possível conferir no ERP (token inválido ou ERP fora do ar)")
+            elif dono != normalize_cnpj(t["cnpj"]):
+                problemas.append(f"Token é da empresa de CNPJ {dono}, não deste CNPJ")
+            cor = "#991b1b" if problemas else "#166534"
+        resultado.append({
+            **dict(t),
+            "api_token": _mask_token(t["api_token"]),
+            "conf_texto": "; ".join(problemas) if problemas else "Confere com o CNPJ",
+            "conf_cor": cor,
+        })
+    return resultado
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -64,7 +94,7 @@ async def admin_logout(request: Request):
 async def admin_home(request: Request):
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
-    return templates.TemplateResponse(request, "admin.html", {"tenants": _tenants_view(), "message": None})
+    return templates.TemplateResponse(request, "admin.html", {"tenants": await _tenants_view(), "message": None})
 
 
 @router.post("/tenants")
@@ -86,7 +116,7 @@ async def admin_create_tenant(
     else:
         create_tenant(cnpj=cnpj, nome_fantasia=nome_fantasia, api_token=token)
         mensagem = f"Cliente {nome_fantasia} cadastrado com sucesso (token conferido com o CNPJ no ERP)."
-    return templates.TemplateResponse(request, "admin.html", {"tenants": _tenants_view(), "message": mensagem})
+    return templates.TemplateResponse(request, "admin.html", {"tenants": await _tenants_view(), "message": mensagem})
 
 
 @router.post("/tenants/{cnpj}/desativar")
@@ -95,7 +125,7 @@ async def admin_desativar_tenant(request: Request, cnpj: str):
         return RedirectResponse("/admin/login", status_code=303)
     set_tenant_ativo(cnpj, ativo=False)
     return templates.TemplateResponse(
-        request, "admin.html", {"tenants": _tenants_view(), "message": "Cliente desativado."}
+        request, "admin.html", {"tenants": await _tenants_view(), "message": "Cliente desativado."}
     )
 
 
@@ -105,5 +135,5 @@ async def admin_reativar_tenant(request: Request, cnpj: str):
         return RedirectResponse("/admin/login", status_code=303)
     set_tenant_ativo(cnpj, ativo=True)
     return templates.TemplateResponse(
-        request, "admin.html", {"tenants": _tenants_view(), "message": "Cliente reativado."}
+        request, "admin.html", {"tenants": await _tenants_view(), "message": "Cliente reativado."}
     )
