@@ -8,8 +8,6 @@
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" href="/static/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js" integrity="sha384-G436+Z2nlA8+PNoeRvWdxKbvOf8E/y+lYxqht2iBwNHTQDV5CJr3+AGVj8fGZi5t" crossorigin="anonymous" defer></script>
     <style>
         :root {
             --azul: #0b3895;
@@ -115,6 +113,7 @@
         .dash-filtro {
             display: flex; align-items: flex-end; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
         }
+        .dash-filtro[hidden] { display: none; }
         .dash-filtro label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
         .dash-filtro input {
             border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 13px;
@@ -124,6 +123,36 @@
             color: #fff; background: var(--azul); cursor: pointer;
         }
         .dash-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        /* Atalhos de período */
+        .dash-atalhos { display: flex; gap: 6px; margin-bottom: 12px; }
+        .dash-atalhos button {
+            border: 1px solid #e2e8f0; background: #fff; color: #475569; border-radius: 18px; padding: 7px 13px;
+            font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; touch-action: manipulation;
+        }
+        .dash-atalhos button.on { background: var(--azul); border-color: var(--azul); color: #fff; font-weight: 700; }
+        .dash-atalhos .cal { margin-left: auto; }
+        /* Destaque do dia: total, comparação e gráfico no mesmo cartão */
+        .dash-hero {
+            background: linear-gradient(150deg, #0b3895, #1d4fd8 70%, #0ea5e9); color: #fff; border-radius: 16px;
+            padding: 16px; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(11, 56, 149, 0.25);
+        }
+        .dash-hero .rot { font-size: 12px; color: #bfdbfe; }
+        .dash-hero .total { font-size: 32px; font-weight: 700; line-height: 1.15; margin-top: 2px; }
+        .dash-hero .delta { font-size: 12px; margin-top: 2px; color: #dbeafe; }
+        .dash-hero .delta.up { color: #bbf7d0; }
+        .dash-hero .delta.down { color: #fecaca; }
+        .hero-grafico { display: flex; align-items: flex-end; gap: 3px; height: 84px; margin-top: 14px; }
+        .hero-grafico .b { flex: 1; min-width: 2px; background: rgba(255, 255, 255, 0.55); border-radius: 3px 3px 0 0; cursor: pointer; touch-action: manipulation; }
+        .hero-grafico .b.pico { background: #fff; }
+        .hero-grafico .b.sel { background: #10ebff; }
+        .hero-eixo { display: flex; gap: 3px; margin-top: 4px; font-size: 9px; color: #bfdbfe; }
+        .hero-eixo span { flex: 1; min-width: 2px; text-align: center; white-space: nowrap; overflow: visible; }
+        .hero-legenda { font-size: 12px; color: #e0f2fe; margin-top: 8px; min-height: 16px; }
+        .dash-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        .rosca-lado { display: flex; align-items: center; gap: 14px; }
+        .rosca-lado svg { width: 112px; height: 112px; flex: 0 0 auto; }
+        .rosca-lado .legenda { flex: 1; min-width: 0; }
+        .rosca-lado .linha-info { padding: 6px 0; }
         .dash-card {
             background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
@@ -419,7 +448,14 @@
             </div>
 
             <div id="dashboardView">
-                <div class="dash-filtro">
+                <div class="dash-atalhos" id="dashAtalhos">
+                    <button type="button" data-periodo="hoje" class="on">Hoje</button>
+                    <button type="button" data-periodo="ontem">Ontem</button>
+                    <button type="button" data-periodo="7dias">7 dias</button>
+                    <button type="button" data-periodo="mes">Mês</button>
+                    <button type="button" data-periodo="outro" class="cal" aria-label="Escolher as datas">&#128197;</button>
+                </div>
+                <div class="dash-filtro" id="dashFiltroDatas" hidden>
                     <div>
                         <label for="dashDe">De</label>
                         <input id="dashDe" type="date" />
@@ -431,23 +467,27 @@
                     <button id="dashFiltrar">Filtrar</button>
                 </div>
                 <div id="dashErro" class="erro" style="display:none;"></div>
-                <div class="dash-cards">
-                    <div class="dash-card dash-card-full">
-                        <div class="rotulo">Total vendido no período</div>
-                        <div class="valor" id="dashTotal">-</div>
-                        <div class="delta" id="dashDelta"></div>
-                        <div class="delta" id="dashMargem"></div>
-                    </div>
-                    <div class="dash-card"><div class="rotulo">Vendas</div><div class="valor" id="dashVendas">-</div></div>
-                    <div class="dash-card"><div class="rotulo">Ticket médio</div><div class="valor" id="dashTicket">-</div></div>
+                <div class="dash-hero">
+                    <div class="rot" id="dashHeroRotulo">Vendido hoje</div>
+                    <div class="total" id="dashTotal">-</div>
+                    <div class="delta" id="dashDelta"></div>
+                    <div class="hero-grafico" id="dashGrafico"></div>
+                    <div class="hero-eixo" id="dashEixo"></div>
+                    <div class="hero-legenda" id="dashGraficoLegenda"></div>
                 </div>
-                <div class="dash-panel" id="painelTipo" style="display:none">
-                    <h3>Vendas por tipo</h3>
-                    <div id="dashTipo"></div>
+                <div class="dash-kpis">
+                    <div class="dash-card"><div class="rotulo">Vendas</div><div class="valor" id="dashVendas">-</div><div class="delta" id="dashVendasDelta"></div></div>
+                    <div class="dash-card"><div class="rotulo">Ticket médio</div><div class="valor" id="dashTicket">-</div><div class="delta" id="dashTicketDelta"></div></div>
+                    <div class="dash-card"><div class="rotulo">Margem</div><div class="valor" id="dashMargemPct">-</div><div class="delta" id="dashMargemDelta"></div></div>
+                    <div class="dash-card"><div class="rotulo">Lucro bruto</div><div class="valor" id="dashLucro">-</div><div class="delta" id="dashLucroSub"></div></div>
                 </div>
                 <div class="dash-panel">
                     <h3>Formas de pagamento</h3>
                     <div id="dashFormas"></div>
+                </div>
+                <div class="dash-panel" id="painelTipo" style="display:none">
+                    <h3>Vendas por tipo</h3>
+                    <div id="dashTipo"></div>
                 </div>
                 <div class="dash-panel" style="display:none"><!-- oculto por enquanto; o código de insights() foi mantido -->
                     <h3>Resumo do período</h3>
@@ -465,10 +505,6 @@
                         <summary><div><div class="tit">Estoque</div><div class="sub-resumo" id="estoqueResumo"></div></div></summary>
                         <div id="estoqueDetalhe"></div>
                     </details>
-                </div>
-                <div class="dash-panel">
-                    <h3 id="dashDiarioTitulo">Vendas por dia</h3>
-                    <canvas id="chartDiario" height="200"></canvas>
                 </div>
                 <div class="dash-panel">
                     <h3>Cancelamentos</h3>
@@ -925,7 +961,6 @@
             alertas: document.getElementById('tabAlertas'),
         };
         let abaAtual = 'produtos';
-        let chartDiario = null;
         let dashSeq = 0;
         let alertasSeq = 0;
         const elDashDe = document.getElementById('dashDe');
@@ -1011,7 +1046,38 @@
         tabs.financeiro.addEventListener('click', () => mostrarTab('financeiro'));
         tabs.dashboard.addEventListener('click', () => mostrarTab('dashboard'));
         tabs.alertas.addEventListener('click', () => mostrarTab('alertas'));
-        elDashFiltrar.addEventListener('click', () => carregarDashboardMobile(elDashDe.value, elDashAte.value, true));
+        // Atalhos de período (Hoje, Ontem, 7 dias, Mês) e o calendário para escolher as datas.
+        let dashPeriodo = 'hoje';
+        const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        function datasDoAtalho(periodo) {
+            const hoje = new Date();
+            if (periodo === 'ontem') { const o = new Date(hoje); o.setDate(o.getDate() - 1); return [isoLocal(o), isoLocal(o)]; }
+            if (periodo === '7dias') { const i = new Date(hoje); i.setDate(i.getDate() - 6); return [isoLocal(i), isoLocal(hoje)]; }
+            if (periodo === 'mes') return [isoLocal(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), isoLocal(hoje)];
+            return [isoLocal(hoje), isoLocal(hoje)];
+        }
+        function marcarAtalho(periodo) {
+            dashPeriodo = periodo;
+            document.querySelectorAll('#dashAtalhos button').forEach((b) => b.classList.toggle('on', b.dataset.periodo === periodo));
+        }
+        document.getElementById('dashAtalhos').addEventListener('click', (e) => {
+            const botao = e.target.closest('button');
+            if (!botao) return;
+            const elDatas = document.getElementById('dashFiltroDatas');
+            if (botao.dataset.periodo === 'outro') {
+                elDatas.hidden = !elDatas.hidden;   // abre/fecha a escolha de datas; só filtra ao tocar em "Filtrar"
+                return;
+            }
+            elDatas.hidden = true;
+            marcarAtalho(botao.dataset.periodo);
+            const [inicio, fim] = datasDoAtalho(botao.dataset.periodo);
+            elDashDe.value = inicio; elDashAte.value = fim;
+            carregarDashboardMobile(inicio, fim);
+        });
+        elDashFiltrar.addEventListener('click', () => {
+            marcarAtalho('outro');
+            carregarDashboardMobile(elDashDe.value, elDashAte.value, true);
+        });
         elLoja.addEventListener('change', () => { if (abaAtual === 'alertas') carregarAlertas(); });
 
         async function carregarDashboardMobile(inicio, fim, forcar = false) {
@@ -1063,15 +1129,17 @@
                 acumulado += parte;
                 return arco;
             }).join('');
+            // Nome curto para caber ao lado da rosca ("Cartão de débito" -> "Débito"); o valor vai em reais.
+            const curto = (nome) => String(nome).replace(/^Cartão de (\w)/i, (_, l) => l.toUpperCase()).replace(/\s*\(fiado\)$/i, '');
             const legenda = formas.map((f, i) => `
                 <div class="linha-info">
-                    <span class="desc"><span class="cor" style="background:${CORES_ROSCA[i % CORES_ROSCA.length]}"></span>${esc(f.forma)}</span>
-                    <span class="val">${fmtMoney(f.valor)} · ${fmtPct(f.percentual)}%</span>
+                    <span class="desc"><span class="cor" style="background:${CORES_ROSCA[i % CORES_ROSCA.length]}"></span>${esc(curto(f.forma))}</span>
+                    <span class="val">${fmtMoney(f.valor)}</span>
                 </div>`).join('');
-            return `<div class="rosca"><svg viewBox="0 0 150 150" role="img" aria-label="Formas de pagamento">${arcos}
-                    <text x="75" y="70" text-anchor="middle" font-size="10" fill="#64748b">Total</text>
-                    <text x="75" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">${valorCurto(soma)}</text>
-                </svg></div><div class="legenda">${legenda}</div>`;
+            return `<div class="rosca-lado"><svg viewBox="0 0 150 150" role="img" aria-label="Formas de pagamento">${arcos}
+                    <text x="75" y="70" text-anchor="middle" font-size="11" fill="#64748b">Total</text>
+                    <text x="75" y="89" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">${valorCurto(soma)}</text>
+                </svg><div class="legenda">${legenda}</div></div>`;
         }
 
         // Financeiro: contas em aberto, uma lista por vez (A pagar | A receber), com faixas de vencimento.
@@ -1496,49 +1564,103 @@
         }
         document.getElementById('confFiltrar').addEventListener('click', () => carregarFechamento(true));
 
+        // Variação com seta e cor: ▲ verde quando sobe, ▼ vermelho quando cai.
+        function variacao(el, dif, texto) {
+            el.className = 'delta' + (dif > 0.0001 ? ' up' : dif < -0.0001 ? ' down' : '');
+            el.textContent = texto;
+        }
+
+        // Gráfico do cartão azul: por hora num dia só, por dia num período. Tocar numa barra mostra o valor dela.
+        let graficoBarras = [];
+        function desenharGraficoTopo(data) {
+            const porHora = data.vendasPorHora;
+            graficoBarras = porHora
+                ? porHora.map((h) => ({ rotulo: `${h.hora}h`, valor: Number(h.valor) }))
+                : data.vendasPorDia.map((d) => ({ rotulo: d.dia, valor: Number(d.valor) }));
+            const elG = document.getElementById('dashGrafico');
+            const elE = document.getElementById('dashEixo');
+            if (!graficoBarras.some((b) => b.valor > 0)) {
+                elG.innerHTML = ''; elE.innerHTML = '';
+                document.getElementById('dashGraficoLegenda').textContent = 'Sem vendas no período.';
+                return;
+            }
+            const maior = Math.max(...graficoBarras.map((b) => b.valor));
+            const iPico = graficoBarras.findIndex((b) => b.valor === maior);
+            const passo = graficoBarras.length <= 10 ? 1 : porHora ? 2 : Math.ceil(graficoBarras.length / 6);
+            elG.innerHTML = graficoBarras.map((b, i) => `<div class="b${i === iPico ? ' pico' : ''}" data-i="${i}"
+                style="height:${Math.max(2, b.valor / maior * 100)}%" title="${esc(b.rotulo)}"></div>`).join('');
+            elE.innerHTML = graficoBarras.map((b, i) => `<span>${i % passo === 0 ? esc(b.rotulo) : ''}</span>`).join('');
+            document.getElementById('dashGraficoLegenda').textContent =
+                `${porHora ? 'Pico às' : 'Melhor dia:'} ${graficoBarras[iPico].rotulo} · ${fmtMoney(maior)}`;
+        }
+        document.getElementById('dashGrafico').addEventListener('click', (e) => {
+            const barra = e.target.closest('.b');
+            if (!barra) return;
+            document.querySelectorAll('#dashGrafico .b.sel').forEach((b) => b.classList.remove('sel'));
+            barra.classList.add('sel');
+            const b = graficoBarras[Number(barra.dataset.i)];
+            document.getElementById('dashGraficoLegenda').textContent = `${b.rotulo} · ${fmtMoney(b.valor)}`;
+        });
+
+        function rotuloDoPeriodo(inicio, fim) {
+            if (dashPeriodo === 'hoje') return 'Vendido hoje';
+            if (dashPeriodo === 'ontem') return 'Vendido ontem';
+            if (dashPeriodo === '7dias') return 'Vendido nos últimos 7 dias';
+            if (dashPeriodo === 'mes') return 'Vendido no mês';
+            return inicio === fim ? `Vendido em ${fmtDataBR(inicio)}` : `Vendido de ${fmtDataBR(inicio).slice(0, 5)} a ${fmtDataBR(fim).slice(0, 5)}`;
+        }
+
         function renderDashboard(data, inicio, fim) {
+            document.getElementById('dashHeroRotulo').textContent = rotuloDoPeriodo(inicio, fim);
             document.getElementById('dashTotal').textContent = fmtMoney(data.total);
             document.getElementById('dashVendas').textContent = Number(data.vendas).toLocaleString('pt-BR');
             document.getElementById('dashTicket').textContent = fmtMoney(data.ticketMedio);
 
-            const elDelta = document.getElementById('dashDelta');
             const comp = data.comparativo;
-            elDelta.className = 'delta';
+            const elDelta = document.getElementById('dashDelta');
+            const rotuloComp = comp ? comp.rotulo.replace(/\s*\(.*\)$/, '') : '';
             if (comp && comp.total > 0) {
                 const pct = (data.total - comp.total) / comp.total * 100;
-                elDelta.classList.add(pct >= 0 ? 'up' : 'down');
-                elDelta.textContent = `${pct >= 0 ? '▲' : '▼'} ${fmtPct(Math.abs(pct))}% ${comp.rotulo} (${fmtMoney(comp.total)})`;
+                variacao(elDelta, pct, `${pct >= 0 ? '▲' : '▼'} ${fmtPct(Math.abs(pct))}% ${rotuloComp}`);
             } else {
-                elDelta.textContent = comp ? `${comp.rotulo}: sem vendas` : '';
+                variacao(elDelta, 0, comp ? `${rotuloComp}: sem vendas` : '');
+            }
+
+            // Cartões: vendas e ticket comparados com o mesmo período de comparação do total.
+            const elVendasDelta = document.getElementById('dashVendasDelta');
+            const elTicketDelta = document.getElementById('dashTicketDelta');
+            if (comp && comp.vendas > 0) {
+                const difVendas = data.vendas - comp.vendas;
+                const n = Math.abs(difVendas).toLocaleString('pt-BR');
+                variacao(elVendasDelta, difVendas, difVendas === 0 ? '= igual' : `${difVendas > 0 ? '▲' : '▼'} ${n} ${Math.abs(difVendas) === 1 ? 'venda' : 'vendas'}`);
+                const difTicket = data.ticketMedio - comp.total / comp.vendas;
+                variacao(elTicketDelta, difTicket, Math.abs(difTicket) < 0.005 ? '= igual' : `${difTicket > 0 ? '▲' : '▼'} ${fmtMoney(Math.abs(difTicket))}`);
+            } else {
+                variacao(elVendasDelta, 0, ''); variacao(elTicketDelta, 0, '');
             }
 
             // Margem bruta estimada (custo gravado no momento da venda). Some se o ERP não trouxer custo.
-            const elMargem = document.getElementById('dashMargem');
             const mg = data.margem;
+            const elMargemDelta = document.getElementById('dashMargemDelta');
+            const elLucroSub = document.getElementById('dashLucroSub');
             if (mg) {
-                const parcial = mg.coberturaPct < 95
-                    ? ` · calculada sobre ${fmtPct(mg.coberturaPct)}% das vendas (as que têm custo)` : '';
-                elMargem.textContent = `Margem bruta estimada ${fmtPct(mg.margemPct)}% · lucro ${fmtMoney(mg.lucro)}${parcial}`;
+                document.getElementById('dashMargemPct').textContent = `${fmtPct(mg.margemPct)}%`;
+                document.getElementById('dashLucro').textContent = fmtMoney(mg.lucro);
+                if (mg.margemAnteriorPct != null) {
+                    const dif = mg.margemPct - mg.margemAnteriorPct;
+                    variacao(elMargemDelta, dif, Math.abs(dif) < 0.05 ? '= igual' : `${dif > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(dif))} pt`);
+                } else {
+                    variacao(elMargemDelta, 0, '');
+                }
+                variacao(elLucroSub, 0, mg.coberturaPct < 95 ? `sobre ${fmtPct(mg.coberturaPct)}% das vendas (as com custo)` : 'venda menos o custo');
             } else {
-                elMargem.textContent = '';
+                document.getElementById('dashMargemPct').textContent = '-';
+                document.getElementById('dashLucro').textContent = '-';
+                variacao(elMargemDelta, 0, data.vendas ? 'sem custo no ERP' : ''); variacao(elLucroSub, 0, '');
             }
 
             renderMargemPainel(mg);
-
-            const porHora = data.vendasPorHora;
-            document.getElementById('dashDiarioTitulo').textContent = porHora
-                ? `Vendas por hora — ${fmtDataBR(inicio)}`
-                : 'Vendas por dia no período';
-            const rotulos = porHora ? porHora.map((h) => `${h.hora}h`) : data.vendasPorDia.map((d) => d.dia);
-            const valores = porHora ? porHora.map((h) => h.valor) : data.vendasPorDia.map((d) => d.valor);
-            if (chartDiario) { chartDiario.destroy(); chartDiario = null; }
-            if (typeof Chart !== 'undefined') {   // se a biblioteca do gráfico ainda não chegou, o resto da tela aparece mesmo assim
-                chartDiario = new Chart(document.getElementById('chartDiario'), {
-                    type: 'bar',
-                    data: { labels: rotulos, datasets: [{ label: 'Vendas', data: valores, backgroundColor: '#0b3895' }] },
-                    options: { responsive: true, animation: { duration: 350 }, plugins: { legend: { display: false } } },
-                });
-            }
+            desenharGraficoTopo(data);
 
             renderTipos(data.vendasPorTipo);
             carregarEstoque();
