@@ -219,22 +219,15 @@
         .ce-k .r { font-size: 11px; color: #64748b; }
         .ce-k .v { font-size: 15px; font-weight: 700; color: var(--azul); margin-top: 2px; white-space: nowrap; }
         .ce-k .v.ok { color: #15803d; } .ce-k .v.ruim { color: #b91c1c; }
-        .ce-barras { display: flex; align-items: flex-end; gap: 6px; height: 110px; }
-        .ce-barras .col { flex: 1; min-width: 4px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
-        .ce-barras i { display: block; width: 100%; max-width: 34px; background: #93c5fd; border-radius: 4px 4px 0 0; }
-        .ce-barras i.ult { background: var(--azul); }
-        .ce-rot { display: flex; gap: 6px; margin-top: 4px; }
-        .ce-rot span { flex: 1; min-width: 4px; text-align: center; font-size: 10px; color: #64748b; line-height: 1.25; white-space: nowrap; }
-        .ce-rot b { display: block; font-size: 10.5px; color: #0f172a; }
-        .ce-resumo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-        .ce-nota { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
-        .ce-nota:last-child { border-bottom: 0; }
-        .ce-nota.ult { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; }
-        .ce-nota .t { font-size: 13px; font-weight: 700; color: #0f172a; }
-        .ce-nota .t .nf { font-weight: 600; color: var(--azul); }
-        .ce-nota .s { font-size: 11.5px; color: #64748b; margin-top: 2px; line-height: 1.3; }
-        .ce-nota .dir { text-align: right; white-space: nowrap; font-size: 12px; font-weight: 700; }
-        .ce-nota .dir .mg { display: block; font-size: 11px; font-weight: 600; margin-top: 2px; }
+        .ce-tab { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+        .ce-tab th { text-align: left; color: #64748b; font-weight: 600; font-size: 11px; padding: 6px 4px; border-bottom: 1px solid #e2e8f0; }
+        .ce-tab td { padding: 8px 4px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+        .ce-tab .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .ce-tab .forn .nome { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.3; }
+        .ce-tab .sub { display: block; font-size: 10.5px; color: #64748b; font-weight: 400; margin-top: 2px; }
+        .ce-tab tr.ult td { background: #eff6ff; font-weight: 700; color: #0b3895; }
+        .ce-tab .sub.ce-sobe { color: #15803d; font-weight: 600; } .ce-tab .sub.ce-desce { color: #b91c1c; font-weight: 600; } .ce-tab .sub.ce-igual { color: #94a3b8; }
+        .ce-tab tr.ult td:first-child { border-radius: 8px 0 0 8px; } .ce-tab tr.ult td:last-child { border-radius: 0 8px 8px 0; }
         .ce-sobe { color: #15803d; } .ce-desce { color: #b91c1c; } .ce-igual { color: #94a3b8; }
         .ce-k .v.ce-sobe { color: #15803d; } .ce-k .v.ce-desce { color: #b91c1c; } .ce-k .v.ce-igual { color: #94a3b8; }
         .tab-ent .cab, .tab-ent .ent-linha { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
@@ -673,16 +666,14 @@
         // Últimas notas de entrada do produto. Só consulta o ERP quando a pessoa abre o bloco.
         const LIMITE_VARIACAO_CUSTO = 1; // % mínima para mostrar a seta de aumento/queda do custo
 
-        // Tela do produto em Compras: resumo, evolução do custo nota a nota e a lista das notas (com o número da NF).
+        // Tela do produto em Compras: resumo do topo e a tabela compacta das notas, como no ERP (com o número da NF).
         // Custo que SOBE aparece em verde e que CAI em vermelho (escolha do dono para esta tela).
         function renderEntradas(entradas, p) {
             if (!entradas.length) return '<div class="indisponivel">Nenhuma nota de entrada encontrada para este produto.</div>';
             const n2 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const pctTxt = (v) => `${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}%`;
             const classeVar = (v) => (v >= LIMITE_VARIACAO_CUSTO ? 'ce-sobe' : v <= -LIMITE_VARIACAO_CUSTO ? 'ce-desce' : 'ce-igual');
             const margemDe = (preco, custo) => (preco > 0 && custo > 0 ? (preco - custo) / preco * 100 : null);
 
-            // Resumo do topo: preço de hoje, último custo (a nota mais recente) e a margem com eles.
             const ultimo = entradas[0].custoUnit;
             const margemAtual = margemDe(p.precoVenda, ultimo);
             const kpis = `<div class="ce-kpis">
@@ -691,58 +682,35 @@
                 <div class="ce-k"><div class="r">Margem atual</div><div class="v ${margemAtual == null ? '' : margemAtual < 0 ? 'ruim' : 'ok'}">${margemAtual == null ? '-' : fmtPct(margemAtual) + '%'}</div></div>
             </div>`;
 
-            // Evolução do custo: da nota mais antiga (esquerda) para a mais recente (direita).
-            const comCusto = entradas.filter((e) => e.custoUnit > 0);
-            const cron = [...comCusto].reverse();
-            let evolucao = '';
-            if (cron.length >= 2) {
-                const custos = cron.map((e) => e.custoUnit);
-                const menor = Math.min(...custos), maior = Math.max(...custos);
-                const medio = custos.reduce((a, b) => a + b, 0) / custos.length;
-                const altura = (c) => (maior > menor ? 15 + 85 * (c - menor) / (maior - menor) : 60);
-                const passo = cron.length <= 10 ? 1 : Math.ceil(cron.length / 6);
-                const barras = cron.map((e, k) => `<div class="col"><i class="${k === cron.length - 1 ? 'ult' : ''}" style="height:${altura(e.custoUnit)}%"
-                    title="${esc(e.data)} · R$ ${n2(e.custoUnit)}"></i></div>`).join('');
-                const rotulos = cron.map((e, k) => (k % passo === 0 || k === cron.length - 1)
-                    ? `<span><b>${n2(e.custoUnit)}</b>${esc(e.data.slice(0, 5))}</span>` : '<span></span>').join('');
-                const total = (custos[custos.length - 1] - custos[0]) / custos[0] * 100;
-                const rotuloTotal = Math.abs(total) < LIMITE_VARIACAO_CUSTO ? 'Variação no período' : total > 0 ? 'Subiu no período' : 'Caiu no período';
-                evolucao = `<div class="dash-panel"><h3>Evolução do custo</h3>
-                    <div class="ce-barras">${barras}</div><div class="ce-rot">${rotulos}</div>
-                    <div class="ce-resumo">
-                        <div class="ce-k"><div class="r">Menor custo</div><div class="v">${fmtMoney(menor)}</div></div>
-                        <div class="ce-k"><div class="r">Maior custo</div><div class="v">${fmtMoney(maior)}</div></div>
-                        <div class="ce-k"><div class="r">Custo médio</div><div class="v">${fmtMoney(medio)}</div></div>
-                        <div class="ce-k"><div class="r">${rotuloTotal}</div><div class="v ${classeVar(total)}">${Math.abs(total) < LIMITE_VARIACAO_CUSTO ? '–' : pctTxt(total)}</div></div>
-                    </div></div>`;
-            }
-
-            // Lista das notas (mais recente primeiro), com o número da NF.
             let usouPrecoAtual = false;
-            const notas = entradas.map((e, k) => {
+            const linhas = entradas.map((e, k) => {
                 const anterior = entradas[k + 1];
-                let varTxt = '<span class="ce-igual">–</span>';
+                let varTxt = '<span class="sub ce-igual">–</span>';
                 if (anterior && anterior.custoUnit > 0 && e.custoUnit > 0) {
                     const v = (e.custoUnit - anterior.custoUnit) / anterior.custoUnit * 100;
-                    if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) varTxt = `<span class="${classeVar(v)}">${pctTxt(v)}</span>`;
+                    if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) varTxt = `<span class="sub ${classeVar(v)}">${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}%</span>`;
                 }
                 const preco = e.precoVenda > 0 ? e.precoVenda : p.precoVenda;
                 if (!(e.precoVenda > 0) && preco > 0) usouPrecoAtual = true;
                 const mg = margemDe(preco, e.custoUnit);
-                const mgTxt = mg == null ? '' : `<span class="mg ${mg < 0 ? 'ce-desce' : 'ce-sobe'}">mg ${fmtPct(mg)}%${e.precoVenda > 0 ? '' : '*'}</span>`;
+                const mgTxt = mg == null ? '-' : `<span class="${mg < 0 ? 'ce-desce' : 'ce-sobe'}">${fmtPct(mg)}%${e.precoVenda > 0 ? '' : '*'}</span>`;
                 const qtd = `${fmtNum(e.qtdUnidades)} ${esc(e.unidade || '')}`.trim();
-                return `<div class="ce-nota ${k === 0 ? 'ult' : ''}">
-                    <div><div class="t">${esc(e.data.slice(0, 5))} · <span class="nf">NF ${esc(e.numero)}</span> · ${e.custoUnit > 0 ? 'R$ ' + n2(e.custoUnit) : '-'}</div>
-                        <div class="s">${esc(e.fornecedor)} · ${qtd}</div></div>
-                    <div class="dir">${varTxt}${mgTxt}</div>
-                </div>`;
+                return `<tr class="${k === 0 ? 'ult' : ''}">
+                    <td>${esc(e.data.slice(0, 5))}<span class="sub">NF ${esc(e.numero)}</span></td>
+                    <td class="forn"><span class="nome">${esc(e.fornecedor)}</span><span class="sub">${qtd}</span></td>
+                    <td class="r">${e.custoUnit > 0 ? 'R$ ' + n2(e.custoUnit) : '-'}${varTxt}</td>
+                    <td class="r">${mgTxt}</td>
+                </tr>`;
             }).join('');
 
-            return `<div class="dash-panel">${kpis}</div>${evolucao}
+            return `<div class="dash-panel">${kpis}</div>
                 <div class="dash-panel"><h3>Notas de entrada</h3>
-                    <div class="tab-ent"><div class="legenda">A nota em destaque é a mais recente: é o custo atual do produto.</div></div>
-                    ${notas}
-                    ${usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual. Custo e margem por unidade.</div>' : '<div class="nota">Custo e margem por unidade.</div>'}
+                    <table class="ce-tab">
+                        <colgroup><col style="width:64px"><col><col style="width:84px"><col style="width:58px"></colgroup>
+                        <tr><th>Data</th><th>Fornecedor</th><th class="r">Custo un.</th><th class="r">Margem</th></tr>
+                        ${linhas}
+                    </table>
+                    <div class="nota">Linha azul: última nota (é o custo atual). Custo e margem por unidade${usouPrecoAtual ? '; * margem com o preço de venda atual' : ''}.</div>
                 </div>`;
         }
 
