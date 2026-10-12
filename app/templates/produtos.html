@@ -381,6 +381,17 @@
             color: #64748b; cursor: pointer; touch-action: manipulation; }
         .fin-seg button.on { background: #fff; color: #0f172a; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
         .fin-total { font-size: 24px; font-weight: 700; }
+        /* Destaque no topo: vermelho em A pagar, verde em A receber, com a barra dividida por faixa */
+        .fin-hero { border-radius: 16px; padding: 16px; color: #fff; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18); }
+        .fin-hero.pagar { background: linear-gradient(150deg, #7f1d1d, #b91c1c 70%, #ef4444); }
+        .fin-hero.receber { background: linear-gradient(150deg, #14532d, #15803d 70%, #22c55e); }
+        .fin-hero .rot { font-size: 12px; color: rgba(255, 255, 255, 0.8); }
+        .fin-hero .valor { font-size: 30px; font-weight: 700; line-height: 1.15; margin-top: 2px; }
+        .fin-hero .info { font-size: 12px; color: rgba(255, 255, 255, 0.9); margin-top: 2px; }
+        .fin-pilha { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 14px; background: rgba(255, 255, 255, 0.2); }
+        .fin-pilha i { display: block; height: 100%; }
+        .fin-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 11px; color: rgba(255, 255, 255, 0.95); }
+        .fin-leg span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; background: var(--c); }
         .fin-total.pagar { color: #b91c1c; } .fin-total.receber { color: #15803d; }
         .fin-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
         .fin-faixa { padding: 10px 0; border-bottom: 1px solid #f1f5f9; cursor: pointer; touch-action: manipulation; }
@@ -557,7 +568,7 @@
             </div>
 
             <div id="financeiroView">
-                <div class="dash-panel" id="finPainel"></div>
+                <div id="finPainel"></div>
             </div>
 
             <div id="alertasView">
@@ -1205,7 +1216,7 @@
             const seg = `<div class="fin-seg"><button type="button" data-tipo="pagar" class="${finTipo === 'pagar' ? 'on' : ''}">A pagar</button>
                 <button type="button" data-tipo="receber" class="${finTipo === 'receber' ? 'on' : ''}">A receber</button></div>`;
             if (!bloco.quantidade) {
-                alvo.innerHTML = `${seg}<div class="indisponivel">Nenhuma conta ${finTipo === 'pagar' ? 'a pagar' : 'a receber'} em aberto.</div>`;
+                alvo.innerHTML = `${seg}<div class="dash-panel"><div class="indisponivel">Nenhuma conta ${finTipo === 'pagar' ? 'a pagar' : 'a receber'} em aberto.</div></div>`;
                 return;
             }
             let aberta = finAberta[finTipo];
@@ -1226,12 +1237,26 @@
                     <div class="barra"><i style="width:${largura}%;background:${cor}"></i></div>${lista}</div>`;
             }).join('');
 
+            // Cartão de destaque: total, quanto já está atrasado e a barra dividida por faixa de vencimento.
+            const COR_PILHA = { atrasadas: '#fca5a5', hoje: '#fcd34d', prox7: '#ffffff', prox30: '#93c5fd', depois: '#cbd5e1' };
+            const atrasadas = bloco.faixas.find((f) => f.id === 'atrasadas');
+            const comValor = bloco.faixas.filter((f) => f.valor > 0);
+            const pilha = comValor.map((f) => `<i style="width:${f.valor / bloco.valor * 100}%;background:${COR_PILHA[f.id] || '#cbd5e1'}"></i>`).join('');
+            const legenda = comValor.map((f) => `<span style="--c:${COR_PILHA[f.id] || '#cbd5e1'}">${esc(f.rotulo)} · ${fmtMoney(f.valor)}</span>`).join('');
+            const info = `${n(bloco.quantidade)} ${bloco.quantidade === 1 ? 'título' : 'títulos'} · `
+                + (atrasadas && atrasadas.valor > 0 ? `${fmtMoney(atrasadas.valor)} já atrasados` : 'nenhum atrasado');
+            const hero = `<div class="fin-hero ${finTipo}">
+                <div class="rot">${finTipo === 'pagar' ? 'A pagar em aberto' : 'A receber em aberto'}</div>
+                <div class="valor">${fmtMoney(bloco.valor)}</div>
+                <div class="info">${info}</div>
+                <div class="fin-pilha">${pilha}</div><div class="fin-leg">${legenda}</div>
+            </div>`;
+
             const hora = new Date(finDados.geradoEm * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            alvo.innerHTML = `${seg}
-                <div class="fin-total ${finTipo}">${fmtMoney(bloco.valor)}</div>
-                <div class="fin-sub">${n(bloco.quantidade)} ${bloco.quantidade === 1 ? 'título em aberto' : 'títulos em aberto'}</div>
-                <div style="margin-top:10px">${faixas}</div>
-                <div class="nota">Parcelas em aberto de lançamentos emitidos, já descontados os pagamentos parciais. Posição de ${hora}.</div>`;
+            alvo.innerHTML = `${seg}${hero}
+                <div class="dash-panel">${faixas}
+                    <div class="nota">Parcelas em aberto de lançamentos emitidos, já descontados os pagamentos parciais. Posição de ${hora}.</div>
+                </div>`;
         }
 
         document.getElementById('finPainel').addEventListener('click', (e) => {
@@ -1250,7 +1275,7 @@
             const chave = 'financeiro';
             const visto = lerVisto(chave);
             if (visto) { finDados = visto.dados; desenharFinanceiro(); if (Date.now() - visto.em < IDADE_FINANCEIRO_MS) return; }
-            else document.getElementById('finPainel').innerHTML = esqueleto(6);
+            else document.getElementById('finPainel').innerHTML = `<div class="dash-panel">${esqueleto(6)}</div>`;
             try {
                 const res = await fetch(`/api/produtos/financeiro?hoje=${hojeISO()}`);
                 if (!res.ok) throw new Error(res.status);
@@ -1258,7 +1283,7 @@
                 guardarVisto(chave, finDados);
                 desenharFinanceiro();
             } catch (err) {
-                if (!visto) document.getElementById('finPainel').innerHTML = '<div class="indisponivel">Indisponível no momento. Tente novamente em instantes.</div>';
+                if (!visto) document.getElementById('finPainel').innerHTML = '<div class="dash-panel"><div class="indisponivel">Indisponível no momento. Tente novamente em instantes.</div></div>';
             }
         }
 
