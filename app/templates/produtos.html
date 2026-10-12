@@ -283,9 +283,14 @@
         .gestao details[open] > summary::after { content: '\25B4'; }
         .gestao .tit { font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; }
         .gestao .pill { float: none; margin-left: 6px; text-transform: none; }
-        .alerta-margem { color: #b91c1c; font-weight: 700; }
-        .alerta-margem:empty { display: none; }
         .sub-resumo { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: #475569; }
+        /* Aviso de venda com margem negativa: caixa vermelha em destaque, visível com o painel fechado.
+           (vem depois de .sub-resumo e com mais especificidade, senão a cor cinza do resumo vence) */
+        .sub-resumo.alerta-margem {
+            margin-top: 8px; padding: 8px 10px; border-radius: 10px; line-height: 1.35;
+            background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-weight: 700;
+        }
+        .sub-resumo.alerta-margem:empty { display: none; }
         .gestao details > div { margin-top: 10px; }
         .est-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 8px; }
         .est-k { background: #f8fafc; border-radius: 12px; padding: 12px; }
