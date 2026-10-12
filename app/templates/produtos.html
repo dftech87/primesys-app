@@ -226,7 +226,12 @@
         .ce-tab .forn .nome { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.3; }
         .ce-tab .sub { display: block; font-size: 10.5px; color: #64748b; font-weight: 400; margin-top: 2px; }
         .ce-tab tr.ult td { background: #eff6ff; font-weight: 700; color: #0b3895; }
-        .ce-tab .sub.ce-sobe { color: #15803d; font-weight: 600; } .ce-tab .sub.ce-desce { color: #b91c1c; font-weight: 600; } .ce-tab .sub.ce-igual { color: #94a3b8; }
+        .ce-tab .sub.ce-igual { color: #94a3b8; }
+        /* Selo da variação do custo em relação à nota anterior: sobe = verde, cai = vermelho */
+        .ce-tab .custo { display: block; }
+        .ce-selo { display: inline-block; margin-top: 4px; padding: 2px 7px; border-radius: 10px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+        .ce-selo.sobe { background: #dcfce7; color: #15803d; }
+        .ce-selo.desce { background: #fee2e2; color: #b91c1c; }
         .ce-tab tr.ult td:first-child { border-radius: 8px 0 0 8px; } .ce-tab tr.ult td:last-child { border-radius: 0 8px 8px 0; }
         .ce-sobe { color: #15803d; } .ce-desce { color: #b91c1c; } .ce-igual { color: #94a3b8; }
         .ce-k .v.ce-sobe { color: #15803d; } .ce-k .v.ce-desce { color: #b91c1c; } .ce-k .v.ce-igual { color: #94a3b8; }
@@ -671,7 +676,6 @@
         function renderEntradas(entradas, p) {
             if (!entradas.length) return '<div class="indisponivel">Nenhuma nota de entrada encontrada para este produto.</div>';
             const n2 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const classeVar = (v) => (v >= LIMITE_VARIACAO_CUSTO ? 'ce-sobe' : v <= -LIMITE_VARIACAO_CUSTO ? 'ce-desce' : 'ce-igual');
             const margemDe = (preco, custo) => (preco > 0 && custo > 0 ? (preco - custo) / preco * 100 : null);
 
             const ultimo = entradas[0].custoUnit;
@@ -685,10 +689,15 @@
             let usouPrecoAtual = false;
             const linhas = entradas.map((e, k) => {
                 const anterior = entradas[k + 1];
+                // Seta sempre que o custo mostrado (em centavos) mudou em relação à nota anterior.
                 let varTxt = '<span class="sub ce-igual">–</span>';
                 if (anterior && anterior.custoUnit > 0 && e.custoUnit > 0) {
-                    const v = (e.custoUnit - anterior.custoUnit) / anterior.custoUnit * 100;
-                    if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) varTxt = `<span class="sub ${classeVar(v)}">${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}%</span>`;
+                    const atualCent = Math.round(e.custoUnit * 100), antCent = Math.round(anterior.custoUnit * 100);
+                    if (atualCent !== antCent) {
+                        const v = (atualCent - antCent) / antCent * 100;
+                        const pct = Math.abs(v) < 0.1 ? '<0,1' : fmtPct(Math.abs(v));
+                        varTxt = `<span class="ce-selo ${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'} ${pct}%</span>`;
+                    }
                 }
                 const preco = e.precoVenda > 0 ? e.precoVenda : p.precoVenda;
                 if (!(e.precoVenda > 0) && preco > 0) usouPrecoAtual = true;
@@ -698,7 +707,7 @@
                 return `<tr class="${k === 0 ? 'ult' : ''}">
                     <td>${esc(e.data.slice(0, 5))}<span class="sub">NF ${esc(e.numero)}</span></td>
                     <td class="forn"><span class="nome">${esc(e.fornecedor)}</span><span class="sub">${qtd}</span></td>
-                    <td class="r">${e.custoUnit > 0 ? 'R$ ' + n2(e.custoUnit) : '-'}${varTxt}</td>
+                    <td class="r"><span class="custo">${e.custoUnit > 0 ? 'R$ ' + n2(e.custoUnit) : '-'}</span>${varTxt}</td>
                     <td class="r">${mgTxt}</td>
                 </tr>`;
             }).join('');
@@ -706,7 +715,7 @@
             return `<div class="dash-panel">${kpis}</div>
                 <div class="dash-panel"><h3>Notas de entrada</h3>
                     <table class="ce-tab">
-                        <colgroup><col style="width:64px"><col><col style="width:84px"><col style="width:58px"></colgroup>
+                        <colgroup><col style="width:64px"><col><col style="width:86px"><col style="width:56px"></colgroup>
                         <tr><th>Data</th><th>Fornecedor</th><th class="r">Custo un.</th><th class="r">Margem</th></tr>
                         ${linhas}
                     </table>
