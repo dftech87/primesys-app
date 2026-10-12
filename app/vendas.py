@@ -121,8 +121,8 @@ async def pagamentos(client: MeuERPClient, inicio: date, fim: date) -> tuple[lis
     """Formas de pagamento do período, no total e por tipo de venda (NFC-e, NF-e, pré-venda), numa só consulta.
 
     O troco (lançado como valor negativo) é abatido do dinheiro e rótulos iguais são agrupados (o ERP grava
-    'Pix' e 'PIX', 'A Prazo' e 'A PRAZO' separados). Por tipo só é devolvido quando há mais de um tipo
-    vendendo no período: com um só, o bloco não acrescenta nada."""
+    'Pix' e 'PIX', 'A Prazo' e 'A PRAZO' separados). Por tipo é devolvido sempre que houver venda, mesmo com
+    um tipo só (o dono vê que está tudo como pré-venda, por exemplo)."""
     linhas = await executar(
         client,
         f"""select modelo, forma, grouping(forma) as agregado, count(distinct id) as vendas, round(sum(valor), 2) as total
@@ -149,7 +149,7 @@ async def pagamentos(client: MeuERPClient, inicio: date, fim: date) -> tuple[lis
 
     por_tipo: list[dict] = []
     soma_tipos = sum(t["total"] for t in tipos.values() if t["total"] > 0)
-    if len([t for t in tipos.values() if t["total"] > 0]) > 1:
+    if any(t["total"] > 0 for t in tipos.values()):   # sempre que houver venda, mesmo com um tipo só
         for modelo in sorted(tipos, key=lambda m: _ORDEM_TIPO.get(m, 9)):
             t = tipos[modelo]
             if t["total"] <= 0:

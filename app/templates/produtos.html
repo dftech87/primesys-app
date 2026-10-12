@@ -243,6 +243,7 @@
         .rosca { text-align: center; margin-bottom: 8px; }
         .rosca svg { max-width: 190px; width: 100%; height: auto; }
         .tipo-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .tipo-cards.um { grid-template-columns: 1fr; }   /* cliente que vende com um tipo só */
         .tipo-card { background: #f8fafc; border: 2px solid transparent; border-radius: 12px; padding: 12px; cursor: pointer;
             touch-action: manipulation; text-align: left; font: inherit; color: inherit; width: 100%; }
         .tipo-card.sel { background: #fff; border-color: var(--azul); }
@@ -1269,7 +1270,7 @@
         });
 
         // Vendas por tipo (NFC-e / pré-venda): rosca com o total, dois cartões e, ao tocar num cartão, as formas de pagamento.
-        // Só vem do servidor quando o cliente vendeu em mais de um tipo no período.
+        // Aparece sempre que houver venda no período, mesmo com um tipo só.
         const CORES_TIPO = { fiscal: '#0b3895', naoFiscal: '#f59e0b' };
         let tiposDados = [];
         let tipoAberto = null;
@@ -1309,7 +1310,7 @@
                 detalhe = `<div class="tipo-det">${t.formas.map((f) => `
                     <div class="linha-info"><span class="desc">${esc(f.forma)}</span><span class="val">${fmtMoney(f.valor)}</span></div>`).join('')}</div>`;
             }
-            alvo.innerHTML = `${rosca}<div class="tipo-cards">${cartoes}</div>${detalhe}`;
+            alvo.innerHTML = `${rosca}<div class="tipo-cards${tiposDados.length === 1 ? ' um' : ''}">${cartoes}</div>${detalhe}`;
         }
 
         document.getElementById('dashTipo').addEventListener('click', (e) => {
