@@ -213,6 +213,30 @@
         .fd-dif { display: inline-block; min-width: 56px; padding: 2px 5px; border-radius: 5px; text-align: right; }
         .fd-dif.dif-pos { background: #dcfce7; } .fd-dif.dif-neg { background: #fee2e2; } .fd-dif.dif-zero { background: #f1f5f9; }
         .fech-aviso { margin-top: 8px; padding: 8px 10px; background: #fffbeb; border-radius: 8px; font-size: 11.5px; line-height: 1.45; color: #92400e; }
+        /* Compras · produto: resumo, evolução do custo e lista das notas */
+        .ce-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .ce-k { background: #f8fafc; border-radius: 10px; padding: 8px 10px; }
+        .ce-k .r { font-size: 11px; color: #64748b; }
+        .ce-k .v { font-size: 15px; font-weight: 700; color: var(--azul); margin-top: 2px; white-space: nowrap; }
+        .ce-k .v.ok { color: #15803d; } .ce-k .v.ruim { color: #b91c1c; }
+        .ce-barras { display: flex; align-items: flex-end; gap: 6px; height: 110px; }
+        .ce-barras .col { flex: 1; min-width: 4px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+        .ce-barras i { display: block; width: 100%; max-width: 34px; background: #93c5fd; border-radius: 4px 4px 0 0; }
+        .ce-barras i.ult { background: var(--azul); }
+        .ce-rot { display: flex; gap: 6px; margin-top: 4px; }
+        .ce-rot span { flex: 1; min-width: 4px; text-align: center; font-size: 10px; color: #64748b; line-height: 1.25; white-space: nowrap; }
+        .ce-rot b { display: block; font-size: 10.5px; color: #0f172a; }
+        .ce-resumo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+        .ce-nota { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
+        .ce-nota:last-child { border-bottom: 0; }
+        .ce-nota.ult { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; }
+        .ce-nota .t { font-size: 13px; font-weight: 700; color: #0f172a; }
+        .ce-nota .t .nf { font-weight: 600; color: var(--azul); }
+        .ce-nota .s { font-size: 11.5px; color: #64748b; margin-top: 2px; line-height: 1.3; }
+        .ce-nota .dir { text-align: right; white-space: nowrap; font-size: 12px; font-weight: 700; }
+        .ce-nota .dir .mg { display: block; font-size: 11px; font-weight: 600; margin-top: 2px; }
+        .ce-sobe { color: #15803d; } .ce-desce { color: #b91c1c; } .ce-igual { color: #94a3b8; }
+        .ce-k .v.ce-sobe { color: #15803d; } .ce-k .v.ce-desce { color: #b91c1c; } .ce-k .v.ce-igual { color: #94a3b8; }
         .tab-ent .cab, .tab-ent .ent-linha { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
         .tab-ent .cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
         .tab-ent .ent-linha { padding: 9px 6px; font-size: 12px; border: 1px solid transparent; border-bottom: 1px solid #eef2f7; }
@@ -649,39 +673,77 @@
         // Últimas notas de entrada do produto. Só consulta o ERP quando a pessoa abre o bloco.
         const LIMITE_VARIACAO_CUSTO = 1; // % mínima para mostrar a seta de aumento/queda do custo
 
+        // Tela do produto em Compras: resumo, evolução do custo nota a nota e a lista das notas (com o número da NF).
+        // Custo que SOBE aparece em verde e que CAI em vermelho (escolha do dono para esta tela).
         function renderEntradas(entradas, p) {
             if (!entradas.length) return '<div class="indisponivel">Nenhuma nota de entrada encontrada para este produto.</div>';
             const n2 = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const pctTxt = (v) => `${v > 0 ? '▲' : '▼'} ${fmtPct(Math.abs(v))}%`;
+            const classeVar = (v) => (v >= LIMITE_VARIACAO_CUSTO ? 'ce-sobe' : v <= -LIMITE_VARIACAO_CUSTO ? 'ce-desce' : 'ce-igual');
+            const margemDe = (preco, custo) => (preco > 0 && custo > 0 ? (preco - custo) / preco * 100 : null);
+
+            // Resumo do topo: preço de hoje, último custo (a nota mais recente) e a margem com eles.
+            const ultimo = entradas[0].custoUnit;
+            const margemAtual = margemDe(p.precoVenda, ultimo);
+            const kpis = `<div class="ce-kpis">
+                <div class="ce-k"><div class="r">Preço de venda</div><div class="v">${p.precoVenda > 0 ? fmtMoney(p.precoVenda) : '-'}</div></div>
+                <div class="ce-k"><div class="r">Último custo</div><div class="v">${ultimo > 0 ? fmtMoney(ultimo) : '-'}</div></div>
+                <div class="ce-k"><div class="r">Margem atual</div><div class="v ${margemAtual == null ? '' : margemAtual < 0 ? 'ruim' : 'ok'}">${margemAtual == null ? '-' : fmtPct(margemAtual) + '%'}</div></div>
+            </div>`;
+
+            // Evolução do custo: da nota mais antiga (esquerda) para a mais recente (direita).
+            const comCusto = entradas.filter((e) => e.custoUnit > 0);
+            const cron = [...comCusto].reverse();
+            let evolucao = '';
+            if (cron.length >= 2) {
+                const custos = cron.map((e) => e.custoUnit);
+                const menor = Math.min(...custos), maior = Math.max(...custos);
+                const medio = custos.reduce((a, b) => a + b, 0) / custos.length;
+                const altura = (c) => (maior > menor ? 15 + 85 * (c - menor) / (maior - menor) : 60);
+                const passo = cron.length <= 10 ? 1 : Math.ceil(cron.length / 6);
+                const barras = cron.map((e, k) => `<div class="col"><i class="${k === cron.length - 1 ? 'ult' : ''}" style="height:${altura(e.custoUnit)}%"
+                    title="${esc(e.data)} · R$ ${n2(e.custoUnit)}"></i></div>`).join('');
+                const rotulos = cron.map((e, k) => (k % passo === 0 || k === cron.length - 1)
+                    ? `<span><b>${n2(e.custoUnit)}</b>${esc(e.data.slice(0, 5))}</span>` : '<span></span>').join('');
+                const total = (custos[custos.length - 1] - custos[0]) / custos[0] * 100;
+                const rotuloTotal = Math.abs(total) < LIMITE_VARIACAO_CUSTO ? 'Variação no período' : total > 0 ? 'Subiu no período' : 'Caiu no período';
+                evolucao = `<div class="dash-panel"><h3>Evolução do custo</h3>
+                    <div class="ce-barras">${barras}</div><div class="ce-rot">${rotulos}</div>
+                    <div class="ce-resumo">
+                        <div class="ce-k"><div class="r">Menor custo</div><div class="v">${fmtMoney(menor)}</div></div>
+                        <div class="ce-k"><div class="r">Maior custo</div><div class="v">${fmtMoney(maior)}</div></div>
+                        <div class="ce-k"><div class="r">Custo médio</div><div class="v">${fmtMoney(medio)}</div></div>
+                        <div class="ce-k"><div class="r">${rotuloTotal}</div><div class="v ${classeVar(total)}">${Math.abs(total) < LIMITE_VARIACAO_CUSTO ? '–' : pctTxt(total)}</div></div>
+                    </div></div>`;
+            }
+
+            // Lista das notas (mais recente primeiro), com o número da NF.
             let usouPrecoAtual = false;
-            const linhas = entradas.map((e, i) => {
-                // Seta ao lado do custo: sobe (vermelho) ou desce (verde) em relação à entrada anterior.
-                const anterior = entradas[i + 1];
-                // Sempre há um espaço fixo ao lado do custo (seta ou traço) para as linhas ficarem alinhadas.
-                let seta = ' <span class="seta sem">–</span>';
+            const notas = entradas.map((e, k) => {
+                const anterior = entradas[k + 1];
+                let varTxt = '<span class="ce-igual">–</span>';
                 if (anterior && anterior.custoUnit > 0 && e.custoUnit > 0) {
                     const v = (e.custoUnit - anterior.custoUnit) / anterior.custoUnit * 100;
-                    if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) {  // abaixo disso é só arredondamento da nota
-                        seta = ` <span class="seta ${v > 0 ? 'sobe' : 'desce'}">${v > 0 ? '▲' : '▼'}</span>`;
-                    }
+                    if (Math.abs(v) >= LIMITE_VARIACAO_CUSTO) varTxt = `<span class="${classeVar(v)}">${pctTxt(v)}</span>`;
                 }
                 const preco = e.precoVenda > 0 ? e.precoVenda : p.precoVenda;
                 if (!(e.precoVenda > 0) && preco > 0) usouPrecoAtual = true;
-                const margemPct = preco > 0 && e.custoUnit > 0 ? (preco - e.custoUnit) / preco * 100 : null;
-                const classeMargem = margemPct == null ? '' : margemPct < 0 ? 'mg-ruim' : margemPct > 0 ? 'mg-ok' : '';
-                const margem = margemPct == null ? '-' : `${fmtPct(margemPct)}%${e.precoVenda > 0 ? '' : '*'}`;
-                const dataCurta = e.data.slice(0, 6) + e.data.slice(8);
-                return `<div class="ent-linha ${i === 0 ? 'ultima' : ''}">
-                    <span>${esc(dataCurta)}</span><span>${esc(e.numero)}</span><span class="n">${fmtNum(e.qtdUnidades)}</span>
-                    <span class="n">${n2(e.custoUnit)}${seta}</span><span class="n ${classeMargem}">${margem}</span>
-                    <div class="ent-forn">${esc(e.fornecedor)}</div>
+                const mg = margemDe(preco, e.custoUnit);
+                const mgTxt = mg == null ? '' : `<span class="mg ${mg < 0 ? 'ce-desce' : 'ce-sobe'}">mg ${fmtPct(mg)}%${e.precoVenda > 0 ? '' : '*'}</span>`;
+                const qtd = `${fmtNum(e.qtdUnidades)} ${esc(e.unidade || '')}`.trim();
+                return `<div class="ce-nota ${k === 0 ? 'ult' : ''}">
+                    <div><div class="t">${esc(e.data.slice(0, 5))} · <span class="nf">NF ${esc(e.numero)}</span> · ${e.custoUnit > 0 ? 'R$ ' + n2(e.custoUnit) : '-'}</div>
+                        <div class="s">${esc(e.fornecedor)} · ${qtd}</div></div>
+                    <div class="dir">${varTxt}${mgTxt}</div>
                 </div>`;
             }).join('');
-            return `<div class="tab-ent">
-                <div class="legenda">A linha em destaque é a última entrada: o custo atual do produto.</div>
-                <div class="cab"><span>Data</span><span>NF</span><span class="n">Qtd</span><span class="n">Custo R$</span><span class="n">Mg.</span></div>
-                ${linhas}
-                ${usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual. Custo e margem por unidade.</div>' : ''}
-            </div>`;
+
+            return `<div class="dash-panel">${kpis}</div>${evolucao}
+                <div class="dash-panel"><h3>Notas de entrada</h3>
+                    <div class="tab-ent"><div class="legenda">A nota em destaque é a mais recente: é o custo atual do produto.</div></div>
+                    ${notas}
+                    ${usouPrecoAtual ? '<div class="nota">* margem calculada com o preço de venda atual. Custo e margem por unidade.</div>' : '<div class="nota">Custo e margem por unidade.</div>'}
+                </div>`;
         }
 
         // Aba Compras: busca de produto + últimas notas de entrada dele.
