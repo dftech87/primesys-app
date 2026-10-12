@@ -117,19 +117,26 @@ def criptografar_tokens_existentes() -> int:
     Idempotente: sem tokens em texto simples, não faz nada."""
     if not cripto.ativa():
         return 0
+    trocando = cripto.em_troca_de_chave()
     conn = get_connection()
     try:
-        pendentes = [l for l in conn.execute("SELECT id, api_token FROM empresas") if not cripto.protegido(l["api_token"])]
+        linhas = list(conn.execute("SELECT id, api_token FROM empresas"))
+        # Em texto simples: criptografa. Durante uma troca de chave: regrava todos com a chave nova.
+        pendentes = [l for l in linhas if trocando or not cripto.protegido(l["api_token"])]
         if not pendentes:
             return 0
         for linha in pendentes:
-            novo = cripto.proteger(linha["api_token"])
-            if cripto.revelar(novo) != linha["api_token"]:
+            original = cripto.revelar(linha["api_token"])
+            novo = cripto.regravar_com_chave_atual(linha["api_token"]) if cripto.protegido(linha["api_token"]) else cripto.proteger(original)
+            if cripto.revelar(novo) != original:
                 raise RuntimeError("conferência da criptografia falhou; nenhum token foi alterado")
             conn.execute("UPDATE empresas SET api_token = ? WHERE id = ?", (novo, linha["id"]))
         conn.commit()
         conn.execute("VACUUM")
-        logger.warning("%d token(s) de API passaram a ser gravados criptografados.", len(pendentes))
+        if trocando:
+            logger.warning("%d token(s) de API regravados com a chave nova. Já pode remover TOKEN_ENCRYPTION_KEY_ANTERIOR.", len(pendentes))
+        else:
+            logger.warning("%d token(s) de API passaram a ser gravados criptografados.", len(pendentes))
         return len(pendentes)
     except Exception:
         conn.rollback()

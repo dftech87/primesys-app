@@ -11,7 +11,7 @@ continuam sendo lidos normalmente; a migração os converte quando a chave exist
 import logging
 from functools import lru_cache
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from app.config import settings
 
@@ -24,16 +24,37 @@ class CriptoErro(Exception):
     """Não foi possível ler um valor protegido (chave ausente ou diferente da usada para gravar)."""
 
 
+def _carregar(nome: str, valor: str) -> Fernet:
+    try:
+        return Fernet(valor.encode())
+    except ValueError as erro:   # a mensagem não inclui a chave
+        raise RuntimeError(f"{nome} inválida: use uma chave gerada por Fernet.generate_key().") from erro
+
+
 @lru_cache(maxsize=1)
-def _fernet() -> Fernet | None:
+def _fernet() -> MultiFernet | None:
+    """Chave atual (grava e lê) e, só durante uma troca, a anterior (só lê). Ver docs/seguranca.md."""
     chave = (settings.token_encryption_key or "").strip()
+    anterior = (settings.token_encryption_key_anterior or "").strip()
     if not chave:
+        if anterior:
+            raise RuntimeError("TOKEN_ENCRYPTION_KEY_ANTERIOR definida sem TOKEN_ENCRYPTION_KEY.")
         logger.warning("TOKEN_ENCRYPTION_KEY não definida: os tokens continuam gravados em texto simples.")
         return None
-    try:
-        return Fernet(chave.encode())
-    except ValueError as erro:   # a mensagem não inclui a chave
-        raise RuntimeError("TOKEN_ENCRYPTION_KEY inválida: use uma chave gerada por Fernet.generate_key().") from erro
+    chaves = [_carregar("TOKEN_ENCRYPTION_KEY", chave)]
+    if anterior and anterior != chave:
+        chaves.append(_carregar("TOKEN_ENCRYPTION_KEY_ANTERIOR", anterior))
+    return MultiFernet(chaves)
+
+
+def em_troca_de_chave() -> bool:
+    anterior = (settings.token_encryption_key_anterior or "").strip()
+    return bool(anterior) and anterior != (settings.token_encryption_key or "").strip()
+
+
+def regravar_com_chave_atual(valor: str) -> str:
+    """Token protegido (com a chave atual ou a anterior) regravado com a chave atual."""
+    return PREFIXO + _fernet().rotate(valor[len(PREFIXO):].encode()).decode()
 
 
 def ativa() -> bool:

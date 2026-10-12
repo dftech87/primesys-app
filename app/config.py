@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     session_secret: str = "dev-secret-change-me"
     # Chave que criptografa os tokens de API no banco (gerada com Fernet.generate_key(); fica só na variável de ambiente).
     token_encryption_key: str | None = None
+    # Só durante a troca de chave: a chave antiga, para ler os tokens e regravá-los com a nova.
+    token_encryption_key_anterior: str | None = None
     database_path: str = "primesys.db"
 
     # Tenant seed (DFTECH) used by scripts/seed_tenant.py on first run.

@@ -30,6 +30,30 @@ app.add_middleware(
 app.add_middleware(_GZipSemServiceWorker, minimum_size=1024)
 
 
+# Cabeçalhos de segurança em TODAS as respostas. Sem restringir scripts (as telas usam código embutido),
+# mas impedindo o app de ser aberto dentro de outro site (golpe de clique), adivinhação de tipo de arquivo,
+# vazamento do endereço para outros sites e envio de formulários para fora. A câmera (leitor de código de
+# barras) continua liberada só para o próprio app.
+_CABECALHOS_SEGURANCA = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'",
+}
+
+
+@app.middleware("http")
+async def cabecalhos_de_seguranca(request, call_next):
+    resposta = await call_next(request)
+    for nome, valor in _CABECALHOS_SEGURANCA.items():
+        resposta.headers.setdefault(nome, valor)
+    if COOKIE_SEGURO:   # só na hospedagem (HTTPS): o navegador passa a recusar HTTP para este endereço
+        resposta.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return resposta
+
+
 @app.middleware("http")
 async def api_sem_cache(request, call_next):
     """Respostas de /api/* são de UMA empresa: nunca podem ficar guardadas no navegador ou em intermediários."""
