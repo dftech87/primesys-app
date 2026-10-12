@@ -9,8 +9,8 @@
     <link rel="icon" href="/static/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
     <style>
-        :root { color-scheme: light; }
-        * { box-sizing: border-box; }
+        :root { color-scheme: light; --azul: #0b3895; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100%; }
         body {
             margin: 0; overflow: hidden; overscroll-behavior: none; touch-action: manipulation;
@@ -21,125 +21,191 @@
            100dvh/100svh é a altura realmente visível. O conteúdo fica centralizado e só rola se não couber. */
         .pagina {
             height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: none;
-            display: flex; padding: 28px;
+            display: flex; padding: 24px 22px;
         }
-        .conteudo {
-            margin: auto; width: 100%; max-width: 380px;
-            display: flex; flex-direction: column; align-items: center;
+        .conteudo { margin: auto; width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; }
+        .selo {
+            width: 84px; height: 84px; border-radius: 50%; background: #fff; flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center; box-shadow: 0 16px 32px rgba(0,0,0,0.2);
         }
-        .badge {
-            width: 80px; height: 80px; border-radius: 50%; background: #fff;
-            display: flex; align-items: center; justify-content: center; margin-bottom: 22px;
-            box-shadow: 0 16px 32px rgba(0,0,0,0.2); flex: 0 0 auto;
-        }
-        .logo { display: block; width: 56px; height: 56px; }
+        .selo img { display: block; width: 58px; height: 58px; }
+        h1 { color: #fff; font-size: 24px; margin: 16px 0 2px; text-align: center; }
+        .slogan { color: #dbeafe; font-size: 14px; margin: 0 0 22px; text-align: center; }
         .card {
-            width: min(100%, 380px); background: rgba(255,255,255,0.94); border-radius: 20px;
-            padding: 28px 24px; border: 1px solid rgba(255,255,255,0.6);
+            width: 100%; background: #fff; border-radius: 22px; padding: 22px 20px 20px;
+            box-shadow: 0 20px 40px rgba(2, 6, 23, 0.25);
         }
-        h1 { margin: 0 0 4px; font-size: 20px; text-align: center; }
-        p.sub { margin: 0 0 22px; color: #64748b; font-size: 14px; text-align: center; }
-        label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
-        input {
-            width: 100%; border: 1px solid #cbd5e1; background: #fff; border-radius: 10px;
-            padding: 12px 14px; font-size: 16px; margin-bottom: 16px;
+        .erro { margin-bottom: 14px; padding: 10px 12px; border-radius: 10px; background: #fee2e2; color: #991b1b; font-size: 13px; line-height: 1.4; }
+        label.rot { display: block; margin: 14px 0 6px; font-size: 13px; font-weight: 600; color: #334155; }
+        label.rot:first-child { margin-top: 0; }
+        .campo {
+            display: flex; align-items: center; gap: 10px; height: 50px; border: 1px solid #cbd5e1; border-radius: 12px;
+            padding: 0 6px 0 14px; background: #fff; transition: border-color .15s ease, box-shadow .15s ease;
         }
-        button {
-            width: 100%; border: 0; border-radius: 10px; padding: 12px 16px;
-            font-size: 14px; font-weight: 700; color: #fff; background: #0b3895; cursor: pointer;
+        .campo:focus-within { border-color: var(--azul); box-shadow: 0 0 0 3px rgba(11, 56, 149, 0.12); }
+        .campo .ic { width: 20px; text-align: center; font-size: 16px; color: #64748b; flex: 0 0 auto; }
+        .campo input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font-size: 16px; color: #0f172a; }
+        .campo input::placeholder { color: #94a3b8; }
+        .olho { border: 0; background: none; font-size: 18px; color: #64748b; padding: 8px 10px; cursor: pointer; }
+        /* CNPJ guardado no aparelho: aparece como cartão, sem precisar digitar de novo */
+        .cnpj-salvo {
+            display: none; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 12px 14px; border-radius: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; font-size: 14px;
         }
-        .error {
-            margin-bottom: 16px; padding: 10px 12px; border-radius: 10px;
-            background: #fee2e2; color: #991b1b; font-size: 13px;
+        .cnpj-salvo button { border: 0; background: none; color: var(--azul); font-weight: 700; font-size: 14px; padding: 4px 2px; cursor: pointer; }
+        .lembrar { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; color: #475569; cursor: pointer; user-select: none; }
+        .lembrar input { position: absolute; opacity: 0; pointer-events: none; }
+        .chave { width: 36px; height: 22px; border-radius: 11px; background: #cbd5e1; position: relative; transition: background .15s ease; flex: 0 0 auto; }
+        .chave::after { content: ''; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s ease; }
+        .lembrar input:checked + .chave { background: var(--azul); }
+        .lembrar input:checked + .chave::after { left: 17px; }
+        .lembrar input:focus-visible + .chave { outline: 2px solid var(--azul); outline-offset: 2px; }
+        .entrar {
+            width: 100%; height: 50px; margin-top: 20px; border: 0; border-radius: 12px; background: var(--azul); color: #fff;
+            font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .15s ease, transform .1s ease;
         }
-        .empresa-salva {
-            display: none; align-items: center; justify-content: space-between;
-            margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: #f1f5f9;
-            font-size: 13px;
-        }
-        .empresa-salva button {
-            width: auto; background: none; color: #0b3895; font-weight: 700; padding: 0;
-            text-decoration: underline; cursor: pointer;
-        }
+        .entrar:active { transform: scale(.98); }
+        .entrar[disabled] { opacity: .7; cursor: default; }
+        .rodape { color: #e0f2fe; font-size: 12px; text-align: center; margin-top: 18px; line-height: 1.45; }
+        @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
 </head>
 <body>
 <div class="pagina"><div class="conteudo">
-    <div class="badge">
-        <img class="logo" src="/static/icons/icon-192.png" alt="PrimeSys" />
-    </div>
+    <div class="selo"><img src="/static/icons/icon-192.png" alt="PrimeSys" /></div>
+    <h1>PrimeSys Info</h1>
+    <p class="slogan">Os números da sua loja, na palma da mão</p>
+
     <main class="card">
-        <h1>PrimeSys Info</h1>
-        <p class="sub">Entre com o CNPJ da empresa e o seu usuário e senha do Meu ERP Online.</p>
-        {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        <div class="empresa-salva" id="empresaSalva">
-            <span>CNPJ: <b id="empresaSalvaCnpj"></b></span>
-            <button type="button" id="btnTrocarCnpj">Trocar</button>
-        </div>
-        <form method="post" action="/login" id="formLogin">
+        {% if error %}<div class="erro" role="alert">{{ error }}</div>{% endif %}
+        <form method="post" action="/login" id="formLogin" novalidate>
             <input type="hidden" name="next" value="{{ next }}" />
-            <div id="campoCnpj">
-                <label for="cnpj">CNPJ da empresa</label>
-                <input id="cnpj" name="cnpj" type="text" inputmode="numeric" autocomplete="off" required />
+
+            <div id="blocoCnpjSalvo" class="cnpj-salvo">
+                <span>&#127970; CNPJ <b id="cnpjSalvoTexto"></b></span>
+                <button type="button" id="btnTrocarCnpj">Trocar</button>
             </div>
-            <label for="email">E-mail (usuário do ERP)</label>
-            <input id="email" name="email" type="email" autocomplete="username" required />
-            <label for="senha">Senha</label>
-            <input id="senha" name="senha" type="password" autocomplete="current-password" required />
-            <button type="submit">Entrar</button>
+            <div id="blocoCnpj">
+                <label class="rot" for="cnpj">CNPJ da empresa</label>
+                <div class="campo">
+                    <span class="ic" aria-hidden="true">&#127970;</span>
+                    <input id="cnpj" name="cnpj" type="text" inputmode="numeric" autocomplete="off" placeholder="00.000.000/0000-00"
+                           value="{{ cnpj_digitado or '' }}" required />
+                </div>
+            </div>
+
+            <label class="rot" for="email">E-mail do ERP</label>
+            <div class="campo">
+                <span class="ic" aria-hidden="true">&#9993;</span>
+                <input id="email" name="email" type="email" autocomplete="username" placeholder="seu e-mail do Meu ERP"
+                       value="{{ email_digitado or '' }}" required />
+            </div>
+
+            <label class="rot" for="senha">Senha</label>
+            <div class="campo">
+                <span class="ic" aria-hidden="true">&#128274;</span>
+                <input id="senha" name="senha" type="password" autocomplete="current-password" placeholder="sua senha do Meu ERP" required />
+                <button type="button" class="olho" id="btnOlho" aria-label="Mostrar senha" aria-pressed="false">&#128065;</button>
+            </div>
+
+            <label class="lembrar" id="linhaLembrar">
+                <input type="checkbox" id="lembrar" checked />
+                <span class="chave" aria-hidden="true"></span>
+                Lembrar CNPJ neste aparelho
+            </label>
+
+            <button type="submit" class="entrar" id="btnEntrar">Entrar</button>
         </form>
     </main>
+    <p class="rodape">Use o mesmo e-mail e senha do Meu ERP.</p>
 </div></div>
-    <script>
-        // Lembra o CNPJ no aparelho (não sai daqui) depois do primeiro login, pra
-        // quem sempre acessa a mesma empresa não precisar redigitar toda vez.
-        const CHAVE_CNPJ = 'primesys_cnpj';
-        const elCampoCnpj = document.getElementById('campoCnpj');
-        const elCnpj = document.getElementById('cnpj');
-        const elEmpresaSalva = document.getElementById('empresaSalva');
-        const elEmpresaSalvaCnpj = document.getElementById('empresaSalvaCnpj');
-        const elEmail = document.getElementById('email');
-        const elFormLogin = document.getElementById('formLogin');
+<script>
+    // O CNPJ fica guardado só neste aparelho (não é segredo e é o campo mais longo de digitar). Na próxima vez
+    // ele aparece como cartão, e "Trocar" volta ao campo. Um CNPJ que deu "Empresa não encontrada" não é guardado.
+    const CHAVE_CNPJ = 'primesys_cnpj';
+    const ERRO_NO_CNPJ = {{ 'true' if erro_no_cnpj else 'false' }};
+    const elForm = document.getElementById('formLogin');
+    const elCnpj = document.getElementById('cnpj');
+    const elBlocoCnpj = document.getElementById('blocoCnpj');
+    const elBlocoSalvo = document.getElementById('blocoCnpjSalvo');
+    const elSalvoTexto = document.getElementById('cnpjSalvoTexto');
+    const elLembrar = document.getElementById('lembrar');
+    const elLinhaLembrar = document.getElementById('linhaLembrar');
+    const elEmail = document.getElementById('email');
+    const elSenha = document.getElementById('senha');
 
-        function formatarCnpj(cnpj) {
-            const d = (cnpj || '').replace(/\D/g, '');
-            if (d.length !== 14) return cnpj;
-            return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`;
+    const lerSalvo = () => { try { return localStorage.getItem(CHAVE_CNPJ); } catch (e) { return null; } };
+    const gravar = (v) => { try { localStorage.setItem(CHAVE_CNPJ, v); } catch (e) {} };
+    const apagar = () => { try { localStorage.removeItem(CHAVE_CNPJ); } catch (e) {} };
+
+    function formatarCnpj(cnpj) {
+        const d = (cnpj || '').replace(/\D/g, '');
+        if (d.length !== 14) return cnpj;
+        return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12, 14)}`;
+    }
+
+    function mostrarCnpjSalvo(cnpj) {
+        elCnpj.value = cnpj;
+        elSalvoTexto.textContent = formatarCnpj(cnpj);
+        elBlocoSalvo.style.display = 'flex';
+        elBlocoCnpj.style.display = 'none';
+        elLinhaLembrar.style.display = 'none';   // já está guardado
+    }
+
+    function mostrarCampoCnpj(focar) {
+        elBlocoSalvo.style.display = 'none';
+        elBlocoCnpj.style.display = 'block';
+        elLinhaLembrar.style.display = 'flex';
+        if (focar) elCnpj.focus();
+    }
+
+    if (ERRO_NO_CNPJ) {
+        apagar();                 // CNPJ inexistente: não fica guardado
+        mostrarCampoCnpj(false);
+    } else {
+        const salvo = lerSalvo();
+        if (salvo) mostrarCnpjSalvo(salvo); else mostrarCampoCnpj(false);
+    }
+
+    document.getElementById('btnTrocarCnpj').addEventListener('click', () => {
+        apagar();
+        elCnpj.value = '';
+        mostrarCampoCnpj(true);
+    });
+
+    // Máscara leve do CNPJ enquanto digita (o servidor aceita com ou sem pontuação).
+    elCnpj.addEventListener('input', () => {
+        const pos = elCnpj.selectionStart === elCnpj.value.length;
+        const formatado = formatarCnpj(elCnpj.value.replace(/\D/g, '').slice(0, 14));
+        if (formatado !== elCnpj.value && pos) elCnpj.value = formatado;
+    });
+
+    const elOlho = document.getElementById('btnOlho');
+    elOlho.addEventListener('click', () => {
+        const mostrar = elSenha.type === 'password';
+        elSenha.type = mostrar ? 'text' : 'password';
+        elOlho.setAttribute('aria-pressed', String(mostrar));
+        elOlho.setAttribute('aria-label', mostrar ? 'Esconder senha' : 'Mostrar senha');
+    });
+
+    elForm.addEventListener('submit', (e) => {
+        const campos = [elCnpj, elEmail, elSenha];
+        const vazio = campos.find((c) => !c.value.trim());
+        if (vazio) {
+            e.preventDefault();
+            if (vazio === elCnpj) mostrarCampoCnpj(true); else vazio.focus();
+            return;
         }
+        const cnpj = elCnpj.value.replace(/\D/g, '');
+        if (elBlocoSalvo.style.display === 'flex' || elLembrar.checked) gravar(cnpj); else apagar();
+        const botao = document.getElementById('btnEntrar');
+        botao.disabled = true;           // evita clique duplo (cada tentativa consulta o ERP)
+        botao.textContent = 'Entrando…';
+    });
 
-        function usarCnpjSalvo(cnpj) {
-            elCnpj.value = cnpj;
-            elCnpj.required = false;
-            elCampoCnpj.style.display = 'none';
-            elEmpresaSalvaCnpj.textContent = formatarCnpj(cnpj);
-            elEmpresaSalva.style.display = 'flex';
-        }
-
-        function mostrarCampoCnpj() {
-            elCnpj.value = '';
-            elCnpj.required = true;
-            elCampoCnpj.style.display = 'block';
-            elEmpresaSalva.style.display = 'none';
-            elCnpj.focus();
-        }
-
-        try {
-            const salvo = localStorage.getItem(CHAVE_CNPJ);
-            if (salvo) usarCnpjSalvo(salvo);
-        } catch (err) { /* localStorage indisponível — segue com o campo normal */ }
-
-        document.getElementById('btnTrocarCnpj').addEventListener('click', () => {
-            try { localStorage.removeItem(CHAVE_CNPJ); } catch (err) {}
-            mostrarCampoCnpj();
-        });
-
-        elFormLogin.addEventListener('submit', () => {
-            try { localStorage.setItem(CHAVE_CNPJ, elCnpj.value); } catch (err) {}
-        });
-
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/static/sw.js').catch(() => {});
-        }
-    </script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    }
+</script>
 </body>
 </html>

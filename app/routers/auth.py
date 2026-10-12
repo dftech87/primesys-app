@@ -39,7 +39,13 @@ async def login_submit(
     destino = _destino_seguro(next)
 
     def recusar(mensagem: str, status: int):
-        return templates.TemplateResponse(request, "login.html", {"error": mensagem, "next": destino}, status_code=status)
+        # Devolve o e-mail digitado (para não redigitar) e avisa a tela se o CNPJ é que estava errado,
+        # para ela não deixar um CNPJ inexistente guardado no aparelho. A senha nunca volta.
+        contexto = {
+            "error": mensagem, "next": destino, "email_digitado": email.strip(),
+            "cnpj_digitado": normalize_cnpj(cnpj), "erro_no_cnpj": mensagem.startswith("Empresa não encontrada"),
+        }
+        return templates.TemplateResponse(request, "login.html", contexto, status_code=status)
 
     # Limite de tentativas: por CNPJ+e-mail (principal) e por endereço de internet. Bloqueado, nem consulta o ERP.
     ip = limite.ip_do_cliente(request)
