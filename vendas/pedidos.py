@@ -305,7 +305,7 @@ async def receber(aparelho: dict, dados: dict) -> dict:
 
 def _para_celular(linha: dict) -> dict:
     return {"id": linha["id"], "tipo": linha["tipo"], "documento": linha["id_documento"], "situacao": linha["situacao"],
-            "mensagem": linha["mensagem"], "resumo": json.loads(linha["resumo"] or "{}"), "dados": json.loads(linha["dados"] or "{}")}
+            "mensagem": linha["mensagem"], "vendas": linha.get("vendas") or "", "resumo": json.loads(linha["resumo"] or "{}"), "dados": json.loads(linha["dados"] or "{}")}
 
 
 # ---- Situação no ERP (no caixa, finalizado, faturado, cancelado) -----------------------------------------------------
@@ -344,7 +344,7 @@ async def conferir_situacoes(tenant: dict) -> None:
     limite = (agora - timedelta(days=60)).strftime("%Y-%m-%d %H:%M:%S")
     with db_session() as conn:
         abertos = {int(r["id_documento"]): dict(r) for r in conn.execute(
-            "SELECT id, tipo, id_documento, situacao FROM pv_pedidos WHERE cnpj = ? AND id_documento IS NOT NULL "
+            "SELECT id, tipo, id_documento, situacao, vendas FROM pv_pedidos WHERE cnpj = ? AND id_documento IS NOT NULL "
             "AND situacao IN ('no_caixa', 'rascunho', 'finalizado') AND criado_em >= ?", (cnpj, limite))}
     if not abertos:
         return
@@ -360,18 +360,22 @@ async def conferir_situacoes(tenant: dict) -> None:
     except Exception:
         logger.warning("não foi possível conferir a situação dos pedidos da empresa %s", cnpj)
         return
-    vendas_do_pedido: dict[int, list[str]] = {}
+    vendas_do_pedido: dict[int, list[tuple[int, str]]] = {}
     for v in vendas:
         achado = _ORIGEM.search(v.get("observacao") or "")
         for origem in re.findall(r"\d+", achado.group(1)) if achado else []:
-            vendas_do_pedido.setdefault(int(origem), []).append(v["status"])
+            vendas_do_pedido.setdefault(int(origem), []).append((int(v["id"]), v["status"]))
 
     for l in linhas:
         pedido = abertos.get(int(l["id"]))
         if pedido is None:
             continue
         nova = _situacao(pedido["tipo"], l["status"], l["importado"])
-        situacoes_vendas = vendas_do_pedido.get(int(l["id"]), [])
+        geradas = sorted(vendas_do_pedido.get(int(l["id"]), []))
+        situacoes_vendas = [st for _, st in geradas]
+        # Código(s) da venda gerada: mostra as que valem; se todas foram canceladas, mostra mesmo assim (histórico).
+        validas = [str(v) for v, st in geradas if st not in ("C", "X")] or [str(v) for v, _ in geradas]
+        codigo_vendas = ",".join(validas)
         if nova == "finalizado" and situacoes_vendas and all(st in ("C", "X") for st in situacoes_vendas):
             try:
                 await _cancelar_no_erp(client, int(l["id"]))
@@ -379,8 +383,13 @@ async def conferir_situacoes(tenant: dict) -> None:
                 logger.info("pedido %s cancelado porque a venda gerada foi cancelada (empresa %s)", l["id"], cnpj)
             except Exception:
                 logger.warning("não foi possível cancelar o pedido %s (venda já cancelada)", l["id"])
+        mudancas = {}
         if nova != pedido["situacao"]:
-            _gravar(pedido["id"], situacao=nova, atualizado_em=agora_texto())
+            mudancas["situacao"] = nova
+        if codigo_vendas and codigo_vendas != (pedido.get("vendas") or ""):
+            mudancas["vendas"] = codigo_vendas
+        if mudancas:
+            _gravar(pedido["id"], atualizado_em=agora_texto(), **mudancas)
 
 
 async def cancelar(aparelho: dict, id_pedido: str) -> dict:
@@ -415,6 +424,15 @@ async def cancelar(aparelho: dict, id_pedido: str) -> dict:
     _gravar(linha["id"], situacao="cancelado", atualizado_em=agora_texto())
     logger.info("pedido %s (documento %s) cancelado pelo vendedor (empresa %s)", linha["id"], linha["id_documento"], aparelho["cnpj"])
     return _para_celular(_linha(linha["id"]))
+
+
+def empresas_com_pedidos_em_andamento() -> list[str]:
+    """CNPJs com pedidos dos últimos 60 dias ainda acompanhados (aguardando finalizar ou finalizados)."""
+    limite = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d %H:%M:%S")
+    with db_session() as conn:
+        return [r["cnpj"] for r in conn.execute(
+            "SELECT DISTINCT cnpj FROM pv_pedidos WHERE id_documento IS NOT NULL AND situacao IN ('no_caixa', 'finalizado') "
+            "AND criado_em >= ?", (limite,))]
 
 
 def do_vendedor(cnpj: str, id_funcionario: int, cursor: str, limite: int = 200) -> dict:

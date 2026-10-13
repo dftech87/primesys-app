@@ -5,9 +5,11 @@ as peças compartilhadas: cadastro das empresas (banco), criptografia dos tokens
 tentativas de login. Não tem tela de administração: isso fica no /admin do PrimeSys Info.
 """
 
+import asyncio
 import hashlib
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -51,7 +53,28 @@ def _versao() -> str:
 
 VERSAO = _versao()
 
-app = FastAPI(title="Prime Vendas", docs_url=None, redoc_url=None, openapi_url=None)
+async def _conferir_pedidos_sempre() -> None:
+    """A cada 2 minutos, para as empresas com pedidos em andamento: situação no ERP, código da venda gerada e
+    cancelamento do pedido cuja venda foi cancelada. Não depende de algum celular estar com o app aberto."""
+    while True:
+        await asyncio.sleep(120)
+        try:
+            for cnpj in pedidos.empresas_com_pedidos_em_andamento():
+                tenant = get_tenant_by_cnpj(cnpj)
+                if config.empresa_liberada(tenant):
+                    await pedidos.conferir_situacoes(tenant)
+        except Exception:
+            logger.exception("falha na conferência automática dos pedidos")
+
+
+@asynccontextmanager
+async def _ciclo_de_vida(app_):
+    tarefa = asyncio.create_task(_conferir_pedidos_sempre())
+    yield
+    tarefa.cancel()
+
+
+app = FastAPI(title="Prime Vendas", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_ciclo_de_vida)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 _CABECALHOS_SEGURANCA = {

@@ -1003,7 +1003,7 @@ async function enviarFila() {
             if (r.status !== 200) break;
             for (const s of r.corpo.itens) {
                 const local = pedidos.find((x) => x.id === s.id);
-                if (local) Object.assign(local, { situacao: s.situacao, documento: s.documento, mensagem: s.mensagem || local.mensagem });
+                if (local) Object.assign(local, { situacao: s.situacao, documento: s.documento, mensagem: s.mensagem || local.mensagem, vendas: s.vendas || '' });
                 else pedidos.push(pedidoDoServidor(s));
             }
             await gravarLinhas('pedidos', pedidos);
@@ -1020,7 +1020,7 @@ function pedidoDoServidor(s) {   // pedido feito em outro aparelho do mesmo vend
     const d = s.dados || {}, r = s.resumo || {};
     return { id: s.id, tipo: s.tipo, cliente: d.cliente, cliente_nome: r.cliente_nome || '', criado_em: r.criado_em || d.criado_em, total: r.total || 0,
              itens: (d.itens || []).map((i) => ({ ...i, descricao: (produtos.find((p) => p.id === i.produto) || {}).descricao || 'Produto ' + i.produto })),
-             pagamentos: d.pagamentos || [], observacao: d.observacao || '', situacao: s.situacao, documento: s.documento, mensagem: s.mensagem || '' };
+             pagamentos: d.pagamentos || [], observacao: d.observacao || '', situacao: s.situacao, documento: s.documento, mensagem: s.mensagem || '', vendas: s.vendas || '' };
 }
 function atualizarTelasDePedidos() {
     if (document.getElementById('telaPedidos').classList.contains('ativa')) desenharPedidos();
@@ -1041,8 +1041,10 @@ function desenharInicioPedidos() {
     document.getElementById('iniHojeTit').textContent = `Hoje · ${deHoje.length} ${deHoje.length === 1 ? 'pedido' : 'pedidos'}`;
     document.getElementById('iniHoje').innerHTML = deHoje.slice(0, 8).map(linhaPedido).join('') || '<div class="rodape-lista">Nenhum pedido hoje.</div>';
 }
+function textoVendas(p) { return (p.vendas || '').split(',').filter(Boolean).join(', '); }
 function linhaPedido(p) {
-    const [rotulo, cls] = SITUACOES[p.situacao] || [p.situacao, ''];
+    let [rotulo, cls] = SITUACOES[p.situacao] || [p.situacao, ''];
+    if (p.situacao === 'finalizado' && textoVendas(p)) rotulo += ' · venda ' + textoVendas(p);
     const hora = (p.criado_em || '').slice(11, 16);
     return `<button type="button" class="ped" data-pedido="${esc(p.id)}"><span class="num"><span class="tag ${p.tipo === 'PA' ? 'tpa' : 'tpv'}">${p.tipo === 'PA' ? 'PED' : 'PRÉ'}</span><b>${p.documento ? 'nº ' + p.documento : 'nº —'}</b></span>
         <span class="n"><b>${esc(p.cliente_nome)}</b><small>${hora} · ${p.itens.length} ${p.itens.length === 1 ? 'item' : 'itens'}</small></span>
@@ -1083,7 +1085,7 @@ function abrirDetalhe(id) {
     document.getElementById('detSub').textContent = `${(p.criado_em || '').slice(0, 10).split('-').reverse().join('/')} ${(p.criado_em || '').slice(11, 16)} · ${p.documento ? 'nº no ERP ' + p.documento : 'ainda sem número'}`;
     const [rotulo, cls] = SITUACOES[p.situacao] || [p.situacao, ''];
     const explica = { fila: 'Guardado no aparelho. É enviado sozinho quando houver internet.', no_caixa: 'No ERP, aguardando finalizar: o caixa importa no PDV ou a loja finaliza na nuvem.',
-        rascunho: 'Na nuvem, aguardando a loja faturar como NFC-e ou NF-e.', finalizado: 'Finalizado: virou venda (pré-venda ou NFC-e, conforme escolhido na finalização).', faturado: 'Faturado pela loja.',
+        rascunho: 'Na nuvem, aguardando a loja faturar como NFC-e ou NF-e.', finalizado: textoVendas(p) ? `Finalizado na venda nº ${textoVendas(p)} (pré-venda ou NFC-e, conforme escolhido na finalização).` : 'Finalizado: virou venda (pré-venda ou NFC-e, conforme escolhido na finalização).', faturado: 'Faturado pela loja.',
         cancelado: 'Cancelado no ERP.', recusado: p.mensagem || 'O pedido não foi aceito.' }[p.situacao] || '';
     document.getElementById('detSituacao').innerHTML = `<b class="${cls}">${rotulo}</b><small>${esc(explica)}</small>`;
     document.getElementById('detItens').innerHTML = p.itens.map((i) => `<div class="item"><span class="n"><b>${esc(i.descricao)}</b><small>${fmtQtd(i.qtd)} × ${fmtMoeda(i.preco)}${i.desconto ? ' · desconto ' + fmtMoeda(i.desconto) : ''}</small></span><span class="p">${fmtMoeda(centavos(i.qtd * i.preco - (i.desconto || 0)))}</span></div>`).join('')

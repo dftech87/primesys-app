@@ -78,7 +78,18 @@ def texto_para_data(texto: str) -> datetime:
     return datetime.strptime(texto, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
 
 
+# Colunas acrescentadas depois que a tabela já existia na hospedagem (tabela, coluna, definição).
+COLUNAS_NOVAS = [
+    ("pv_pedidos", "vendas", "TEXT NOT NULL DEFAULT ''"),   # código(s) da venda gerada ao finalizar o pedido
+]
+
+
 def criar_tabelas() -> None:
     with db_session() as conn:
         for comando in SCHEMA:
             conn.execute(comando)
+        for tabela, coluna, definicao in COLUNAS_NOVAS:   # nomes fixos, definidos acima
+            if USANDO_POSTGRES:
+                conn.execute(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {coluna} {definicao}")
+            elif coluna not in {r["name"] for r in conn.execute(f"PRAGMA table_info({tabela})")}:
+                conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
