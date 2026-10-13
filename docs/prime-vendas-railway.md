@@ -5,12 +5,12 @@ Mesmo repositório do GitHub; cada serviço só publica quando muda o código de
 
 | Serviço | Código | Comando |
 |---|---|---|
-| `web` (PrimeSys Info) | `app/` | `Procfile` (uvicorn app.main:app) |
+| `Prime Sys Infor` (PrimeSys Info, antes `web`) | `app/` | `Procfile` (uvicorn app.main:app) |
 | `vendas` (Prime Vendas) | `vendas/` + peças compartilhadas de `app/` | `vendas/railway.json` (uvicorn vendas.main:app) |
 
-## 1. Watch Paths do `web` (antes de publicar o Vendas)
+## 1. Watch Paths do PrimeSys Info (antes de publicar o Vendas)
 
-Serviço **web → Settings → Build → Watch Paths**, um por linha:
+Serviço **Prime Sys Infor → Settings → Build → Watch Paths**, um por linha:
 
 ```
 /app/**
@@ -28,7 +28,7 @@ Assim, mudar só o Vendas não reinicia o PrimeSys Info.
    (define o comando de início, o `/saude` e as pastas observadas).
 4. **Variables** do `vendas`:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
-   - `TOKEN_ENCRYPTION_KEY` = `${{web.TOKEN_ENCRYPTION_KEY}}` (a mesma chave do web; é ela que abre os tokens do ERP)
+   - `TOKEN_ENCRYPTION_KEY` = referência ao serviço do PrimeSys Info (digite `${{` e escolha na lista; mesma chave, é ela que abre os tokens do ERP)
    - `VENDAS_CNPJS_LIBERADOS` = `29970763000147` (fase de testes: só a DFTECH; separar CNPJs por vírgula)
 5. **Settings → Networking → Generate Domain.** Se der, editar o nome para algo como `prime-vendas`.
 6. Deploy. Nos logs não pode haver erro vermelho; `https://<domínio>/saude` deve responder `{"ok": true}`.
