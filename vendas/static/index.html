@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#047857">
+<title>Prime Vendas</title>
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icons/icon-192.png">
+<style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; min-height: 100%; font-family: 'Segoe UI', Roboto, Tahoma, sans-serif; color: #0f172a; background: #f1f5f9; }
+    button { font: inherit; }
+    .tela { display: none; min-height: 100vh; position: relative; }
+    .tela.ativa { display: block; }
+    .net { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,.18); color: #fff; }
+    .net::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.3); }
+    .net.off::before { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.3); }
+    .net.claro { background: #ecfdf5; color: #065f46; }
+    .net.claro.off { background: #fffbeb; color: #92400e; }
+    .net-canto { position: absolute; right: 14px; top: 14px; z-index: 3; }
+
+    /* Login (primeiro acesso): topo em curva + cartão */
+    .topo-curva { position: relative; height: 270px; background: linear-gradient(150deg, #065f46, #059669 70%, #6ee7b7); border-bottom-left-radius: 50% 60px; border-bottom-right-radius: 50% 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
+    .topo-curva img { width: 70px; height: 70px; background: #fff; border-radius: 22px; padding: 10px; box-shadow: 0 12px 24px rgba(0,0,0,.2); }
+    .topo-curva .t { font-size: 24px; font-weight: 700; margin-top: 12px; }
+    .topo-curva .st { font-size: 14px; color: #d1fae5; }
+    .cartao { position: relative; z-index: 2; margin: -36px 18px 0; background: #fff; border-radius: 20px; padding: 6px 18px 20px; box-shadow: 0 12px 30px rgba(15,23,42,.12); }
+    .lbl { display: block; font-size: 13px; font-weight: 600; color: #334155; margin: 14px 0 6px; }
+    .campo { display: flex; align-items: center; gap: 10px; height: 48px; border: 1px solid #cbd5e1; border-radius: 12px; padding: 0 14px; background: #fff; }
+    .campo:focus-within { border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,.15); }
+    .campo input { flex: 1; border: 0; outline: 0; font-size: 16px; background: transparent; min-width: 0; color: #0f172a; }
+    .campo .ic { width: 18px; text-align: center; color: #64748b; }
+    .campo .olho { border: 0; background: none; color: #64748b; padding: 6px; cursor: pointer; }
+    .chip { display: flex; justify-content: space-between; align-items: center; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 10px 12px; font-size: 14px; color: #065f46; margin-top: 14px; }
+    .chip button { border: 0; background: none; color: #047857; font-weight: 700; font-size: 13px; cursor: pointer; }
+    .lembrar { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; margin-top: 12px; }
+    .btn { display: flex; align-items: center; justify-content: center; width: 100%; height: 50px; border: 0; border-radius: 12px; background: #047857; color: #fff; font-weight: 700; font-size: 16px; margin-top: 20px; cursor: pointer; }
+    .btn:disabled { background: #a7f3d0; color: #065f46; }
+    .erro { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #fef2f2; color: #991b1b; font-size: 13px; line-height: 1.4; }
+    .erro.mostrar { display: block; }
+    .nota { font-size: 12px; color: #64748b; text-align: center; line-height: 1.45; margin: 16px 18px; }
+
+    /* PIN (criar e desbloquear) */
+    .pin-tela { background: linear-gradient(180deg, #064e3b, #047857); color: #fff; display: none; flex-direction: column; align-items: center; padding: 64px 24px 24px; min-height: 100vh; }
+    .pin-tela.ativa { display: flex; }
+    .av { width: 82px; height: 82px; border-radius: 50%; background: #d1fae5; color: #065f46; font-size: 30px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 4px solid rgba(255,255,255,.35); }
+    .pin-tela .oi { font-size: 22px; font-weight: 700; margin-top: 14px; text-align: center; }
+    .pin-tela .sub { font-size: 13px; color: #d1fae5; margin-top: 4px; text-align: center; line-height: 1.4; }
+    .bolinhas { display: flex; gap: 14px; margin: 26px 0 8px; }
+    .bolinhas i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #a7f3d0; }
+    .bolinhas i.on { background: #fff; border-color: #fff; }
+    .bolinhas.treme { animation: treme .35s; }
+    @keyframes treme { 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+    .pin-msg { min-height: 20px; font-size: 13px; color: #fde68a; text-align: center; }
+    .teclado { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px 26px; margin-top: 14px; }
+    .teclado button { width: 72px; height: 58px; border-radius: 16px; border: 0; background: rgba(255,255,255,.12); color: #fff; font-size: 24px; font-weight: 600; cursor: pointer; }
+    .teclado button:active { background: rgba(255,255,255,.28); }
+    .teclado .vazio { background: none; }
+    .link { margin-top: 22px; font-size: 13px; color: #a7f3d0; text-decoration: underline; background: none; border: 0; cursor: pointer; }
+
+    /* Início (resumo do mês, sem comissão) */
+    .ini-topo { background: linear-gradient(160deg, #064e3b, #047857); color: #fff; padding: 18px; }
+    .ini-topo .l1 { display: flex; justify-content: space-between; align-items: center; }
+    .ini-topo .oi { font-size: 12px; color: #a7f3d0; }
+    .ini-topo .nm { font-size: 19px; font-weight: 700; }
+    .ini-topo .mes { margin-top: 14px; font-size: 12px; color: #a7f3d0; }
+    .ini-topo .vm { font-size: 30px; font-weight: 700; }
+    .kpis { display: flex; gap: 8px; margin-top: 10px; }
+    .kpis div { flex: 1; background: rgba(255,255,255,.12); border-radius: 12px; padding: 9px 11px; font-size: 11px; color: #a7f3d0; }
+    .kpis b { display: block; font-size: 16px; color: #fff; }
+    .wrap { padding: 0 16px 90px; }
+    .aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 14px; padding: 12px 14px; font-size: 13px; line-height: 1.45; margin-top: 14px; }
+    .nav { position: fixed; left: 0; right: 0; bottom: 0; height: 64px; background: #fff; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-around; align-items: center; font-size: 11px; color: #64748b; }
+    .nav div { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .nav b { font-size: 20px; font-weight: 400; }
+    .nav .on { color: #047857; font-weight: 700; }
+    .sair { background: none; border: 0; color: #a7f3d0; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0; margin-top: 6px; }
+    .nav { z-index: 20; }
+    .nav button { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #64748b; cursor: pointer; padding: 6px 10px; }
+    .nav button.on { color: #047857; font-weight: 700; }
+    .nav button b { font-size: 20px; font-weight: 400; }
+    .sync-linha { font-size: 12px; color: #64748b; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .sync-linha button { border: 0; background: none; color: #047857; font-weight: 700; font-size: 12px; cursor: pointer; white-space: nowrap; }
+
+    /* Primeira sincronização (logo após criar o PIN) */
+    .sync-topo { background: linear-gradient(180deg, #047857 0 230px, #f1f5f9 230px); padding: 48px 20px 30px; min-height: 100vh; }
+    .sync-topo .h { color: #fff; font-size: 22px; font-weight: 700; }
+    .sync-topo .s { color: #d1fae5; font-size: 13px; margin-top: 4px; }
+    .sync-card { background: #fff; border-radius: 20px; padding: 6px 18px; margin-top: 26px; box-shadow: 0 12px 30px rgba(15,23,42,.12); }
+    .sync-item { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .sync-item:last-child { border: 0; }
+    .sync-item .i { width: 36px; height: 36px; border-radius: 10px; background: #ecfdf5; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .sync-item .n { flex: 1; }
+    .sync-item small { display: block; color: #64748b; font-size: 12px; margin-top: 2px; }
+    .sync-item .v { font-weight: 700; color: #047857; min-width: 34px; text-align: right; }
+    .barra { height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; margin-top: 6px; }
+    .barra i { display: block; height: 100%; width: 0; background: #10b981; transition: width .3s; }
+
+    /* Listas (produtos e clientes) */
+    .cab-lista { background: linear-gradient(160deg, #064e3b, #047857); color: #fff; padding: 16px 16px 14px; position: sticky; top: 0; z-index: 10; }
+    .cab-lista .l1 { display: flex; justify-content: space-between; align-items: center; }
+    .cab-lista .nm { font-size: 19px; font-weight: 700; }
+    .cab-lista small { font-size: 12px; color: #a7f3d0; }
+    .busca { display: flex; align-items: center; gap: 8px; height: 44px; border-radius: 12px; background: #fff; padding: 0 12px; margin-top: 12px; }
+    .busca input { flex: 1; border: 0; outline: 0; font-size: 16px; min-width: 0; }
+    .busca .limpar { border: 0; background: none; color: #94a3b8; font-size: 18px; cursor: pointer; }
+    .lista { background: #fff; border-radius: 16px; padding: 0 14px; margin-top: 12px; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
+    .lista:empty { display: none; }
+    .item { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid #f1f5f9; }
+    .item:last-child { border: 0; }
+    .item .n { flex: 1; min-width: 0; }
+    .item .n b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .n small { display: block; font-size: 12px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .p { font-weight: 700; font-size: 15px; text-align: right; white-space: nowrap; }
+    .est { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
+    .est.ok { background: #dcfce7; color: #166534; } .est.pouco { background: #fef3c7; color: #92400e; } .est.sem { background: #fee2e2; color: #991b1b; }
+    .rodape-lista { font-size: 12px; color: #64748b; text-align: center; padding: 12px; }
+    .av-p { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex: none; background: #dbeafe; color: #1e40af; }
+    .av-p.cf { background: #ede9fe; color: #5b21b6; }
+    .letra { font-size: 12px; font-weight: 700; color: #047857; margin: 14px 4px 2px; }
+    .indice { position: fixed; right: 2px; top: 150px; bottom: 140px; display: flex; flex-direction: column; justify-content: space-between; z-index: 15; }
+    .indice button { border: 0; background: none; font-size: 10px; font-weight: 700; color: #047857; padding: 0 5px; cursor: pointer; }
+    .indice button:disabled { color: #cbd5e1; }
+    .com-indice { padding-right: 24px; }
+    .btn-fixo { position: fixed; left: 16px; right: 16px; bottom: 76px; z-index: 18; height: 50px; border: 0; border-radius: 14px; background: #047857; color: #fff; font-weight: 700; font-size: 15px; box-shadow: 0 8px 20px rgba(4,120,87,.35); }
+    .btn-fixo:disabled { background: #94a3b8; box-shadow: none; }
+</style>
+</head>
+<body>
+
+<!-- Primeiro acesso: CNPJ (guardado) + e-mail e senha do ERP -->
+<section class="tela" id="telaLogin">
+    <div class="topo-curva">
+        <span class="net net-canto" data-net>Online</span>
+        <img src="/static/icons/logo.png" alt="">
+        <div class="t">Prime Vendas</div>
+        <div class="st">Seus pedidos, mesmo sem internet</div>
+    </div>
+    <form class="cartao" id="formLogin" autocomplete="on" novalidate>
+        <div class="chip" id="chipCnpj" hidden><span id="chipCnpjTexto"></span><button type="button" id="btnTrocarCnpj">Trocar</button></div>
+        <div id="blocoCnpj">
+            <label class="lbl" for="cnpj">CNPJ da empresa</label>
+            <div class="campo"><span class="ic">🏢</span><input id="cnpj" inputmode="numeric" autocomplete="organization" placeholder="00.000.000/0000-00" maxlength="18"></div>
+        </div>
+        <label class="lbl" for="email">E-mail do ERP</label>
+        <div class="campo"><span class="ic">✉</span><input id="email" type="email" autocomplete="username" placeholder="seu e-mail do Meu ERP" autocapitalize="off"></div>
+        <label class="lbl" for="senha">Senha</label>
+        <div class="campo"><span class="ic">🔒</span><input id="senha" type="password" autocomplete="current-password"><button type="button" class="olho" id="btnOlho" aria-label="Mostrar senha">👁</button></div>
+        <label class="lembrar"><input type="checkbox" id="lembrarCnpj" checked> Lembrar CNPJ neste aparelho</label>
+        <div class="erro" id="erroLogin" role="alert"></div>
+        <button class="btn" id="btnEntrar" type="submit">Entrar</button>
+    </form>
+    <div class="nota">Use o mesmo e-mail e senha do Meu ERP. O primeiro acesso precisa de internet.</div>
+</section>
+
+<!-- Criar PIN (logo após o primeiro login) e desbloquear (dia a dia): mesma tela -->
+<section class="pin-tela" id="telaPin">
+    <span class="net net-canto" data-net>Online</span>
+    <div class="av" id="pinAvatar">?</div>
+    <div class="oi" id="pinTitulo">Olá</div>
+    <div class="sub" id="pinSub"></div>
+    <div class="bolinhas" id="pinBolinhas"></div>
+    <div class="pin-msg" id="pinMsg"></div>
+    <div class="teclado" id="teclado"></div>
+    <button class="link" id="btnOutroUsuario" type="button">Entrar com outro usuário</button>
+</section>
+
+<!-- Início -->
+<section class="tela" id="telaInicio">
+    <div class="ini-topo">
+        <div class="l1"><div><div class="oi" id="iniMes">Seu mês</div><div class="nm" id="iniNome">Olá</div></div><span class="net" data-net>Online</span></div>
+        <div class="mes">Vendido no mês (finalizado/faturado)</div>
+        <div class="vm">R$ 0,00</div>
+        <div class="kpis"><div>Pedidos<b>0</b></div><div>Ticket médio<b>R$ 0,00</b></div><div>Clientes<b>0</b></div></div>
+        <button class="sair" id="btnSair" type="button">Sair deste aparelho</button>
+    </div>
+    <div class="wrap">
+        <div class="sync-linha"><span id="iniSync">Dados do aparelho: —</span><button type="button" id="btnSyncAgora">Atualizar agora</button></div>
+        <div class="aviso">🚧 <b>Em construção.</b> Prontos: login, PIN, produtos, clientes e estoque no aparelho. Próxima parte: o pedido.</div>
+        <div class="aviso" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46" id="iniPermissoes"></div>
+    </div>
+</section>
+
+<!-- Primeira sincronização -->
+<section class="tela" id="telaSync">
+    <div class="sync-topo">
+        <span class="net net-canto" data-net>Online</span>
+        <div class="h" id="syncTitulo">Preparando o aparelho</div>
+        <div class="s">Baixando o que precisa para vender sem internet</div>
+        <div class="sync-card">
+            <div class="sync-item"><span class="i">📦</span><span class="n">Produtos e preços<small id="syncProdutos">aguardando</small><div class="barra"><i id="barProdutos"></i></div></span><span class="v" id="okProdutos"></span></div>
+            <div class="sync-item"><span class="i">👥</span><span class="n">Clientes<small id="syncClientes">aguardando</small><div class="barra"><i id="barClientes"></i></div></span><span class="v" id="okClientes"></span></div>
+            <div class="sync-item"><span class="i">📊</span><span class="n">Estoque<small id="syncEstoque">aguardando</small><div class="barra"><i id="barEstoque"></i></div></span><span class="v" id="okEstoque"></span></div>
+        </div>
+        <div class="erro" id="erroSync" role="alert"></div>
+        <button class="btn" id="btnComecar" type="button" disabled>Começar a vender</button>
+        <div class="nota" style="margin:14px 0 0">Só acontece no primeiro acesso. Depois o app baixa apenas o que mudou.</div>
+    </div>
+</section>
+
+<!-- Produtos -->
+<section class="tela" id="telaProdutos">
+    <div class="cab-lista">
+        <div class="l1"><span><span class="nm">Produtos</span><br><small id="prodInfo"></small></span><span class="net" data-net>Online</span></div>
+        <div class="busca"><span>🔍</span><input id="buscaProduto" placeholder="Nome, código ou código de barras" autocomplete="off" enterkeyhint="search"><button class="limpar" type="button" data-limpar="buscaProduto">✕</button></div>
+    </div>
+    <div class="wrap"><div class="lista" id="listaProdutos"></div><div class="rodape-lista" id="rodapeProdutos"></div></div>
+</section>
+
+<!-- Clientes -->
+<section class="tela" id="telaClientes">
+    <div class="cab-lista">
+        <div class="l1"><span><span class="nm">Clientes</span><br><small id="cliInfo"></small></span><span class="net" data-net>Online</span></div>
+        <div class="busca"><span>🔍</span><input id="buscaCliente" placeholder="Nome, fantasia ou CNPJ" autocomplete="off" enterkeyhint="search"><button class="limpar" type="button" data-limpar="buscaCliente">✕</button></div>
+    </div>
+    <div class="wrap com-indice" style="padding-bottom:150px"><div id="listaClientes"></div></div>
+    <div class="indice" id="indiceClientes"></div>
+    <button class="btn-fixo" type="button" disabled>＋ Cadastrar novo cliente (próxima parte)</button>
+</section>
+
+<!-- Pedidos -->
+<section class="tela" id="telaPedidos">
+    <div class="cab-lista"><div class="l1"><span class="nm">Meus pedidos</span><span class="net" data-net>Online</span></div></div>
+    <div class="wrap"><div class="aviso">🚧 Os pedidos chegam na próxima parte.</div></div>
+</section>
+
+<nav class="nav" id="nav" hidden>
+    <button type="button" data-aba="telaInicio" class="on"><b>🏠</b>Início</button>
+    <button type="button" data-aba="telaPedidos"><b>🧾</b>Pedidos</button>
+    <button type="button" data-aba="telaClientes"><b>👥</b>Clientes</button>
+    <button type="button" data-aba="telaProdutos"><b>📦</b>Produtos</button>
+</nav>
+
+<script>
+'use strict';
+// ============================================================================================================
+// Armazenamento local (IndexedDB). Nada sensível em texto aberto: o token do aparelho fica cifrado com uma
+// chave derivada do PIN (PBKDF2 + AES-GCM). Sem o PIN certo, o token guardado não serve para nada.
+// ============================================================================================================
+const BANCO = 'primevendas', LOJA = 'kv';
+const TABELAS = ['produtos', 'clientes', 'estoque'];   // cópia local do catálogo (uma loja por tabela, chave = id)
+let bancoAberto = null;
+function abrirBanco() {
+    if (bancoAberto) return Promise.resolve(bancoAberto);
+    return new Promise((ok, falha) => {
+        const req = indexedDB.open(BANCO, 2);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(LOJA)) db.createObjectStore(LOJA);
+            TABELAS.forEach((n) => { if (!db.objectStoreNames.contains(n)) db.createObjectStore(n, { keyPath: 'id' }); });
+        };
+        req.onsuccess = () => { bancoAberto = req.result; ok(bancoAberto); };
+        req.onerror = () => falha(req.error);
+    });
+}
+async function gravarLinhas(loja, itens) {
+    if (!itens.length) return;
+    const db = await abrirBanco();
+    return new Promise((ok, falha) => { const t = db.transaction(loja, 'readwrite'); const st = t.objectStore(loja); itens.forEach((i) => st.put(i)); t.oncomplete = ok; t.onerror = () => falha(t.error); });
+}
+async function lerTodos(loja) {
+    const db = await abrirBanco();
+    return new Promise((ok, falha) => { const r = db.transaction(loja).objectStore(loja).getAll(); r.onsuccess = () => ok(r.result || []); r.onerror = () => falha(r.error); });
+}
+async function limparCatalogo() {
+    const db = await abrirBanco();
+    return new Promise((ok, falha) => { const t = db.transaction(TABELAS, 'readwrite'); TABELAS.forEach((n) => t.objectStore(n).clear()); t.oncomplete = ok; t.onerror = () => falha(t.error); });
+}
+async function lerLocal(chave) {
+    const db = await abrirBanco();
+    return new Promise((ok, falha) => { const r = db.transaction(LOJA).objectStore(LOJA).get(chave); r.onsuccess = () => ok(r.result); r.onerror = () => falha(r.error); });
+}
+async function gravarLocal(chave, valor) {
+    const db = await abrirBanco();
+    return new Promise((ok, falha) => { const t = db.transaction(LOJA, 'readwrite'); t.objectStore(LOJA).put(valor, chave); t.oncomplete = ok; t.onerror = () => falha(t.error); });
+}
+async function apagarLocal(chaves) {
+    const db = await abrirBanco();
+    return new Promise((ok, falha) => { const t = db.transaction(LOJA, 'readwrite'); chaves.forEach((c) => t.objectStore(LOJA).delete(c)); t.oncomplete = ok; t.onerror = () => falha(t.error); });
+}
+
+const ITERACOES_PIN = 310000;   // deixa lento testar PINs em massa, mesmo copiando os dados do aparelho
+const TAMANHO_PIN = 4;   // padrão definido pela DFTECH; a proteção extra vem do limite de 5 tentativas e do servidor
+const MAX_TENTATIVAS_PIN = 5;
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const deB64 = (txt) => Uint8Array.from(atob(txt), (c) => c.charCodeAt(0));
+
+async function chaveDoPin(pin, sal) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: sal, iterations: ITERACOES_PIN, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function guardarCofre(pin, token) {
+    const sal = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await chaveDoPin(pin, sal), new TextEncoder().encode(token));
+    await gravarLocal('cofre', { sal: b64(sal), iv: b64(iv), dado: b64(cifrado), tam: pin.length });
+}
+async function abrirCofre(pin) {   // PIN errado = a decifragem falha (o AES-GCM confere a integridade)
+    const cofre = await lerLocal('cofre');
+    if (!cofre) return null;
+    try {
+        const claro = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deB64(cofre.iv) }, await chaveDoPin(pin, deB64(cofre.sal)), deB64(cofre.dado));
+        return new TextDecoder().decode(claro);
+    } catch (e) { return null; }
+}
+async function esquecerAparelho() {
+    // Outro usuário pode ser de outra empresa: o catálogo guardado sai junto.
+    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'ultimaSync', ...TABELAS.map((n) => 'cursor_' + n)]);
+    await limparCatalogo();
+    tokenEmUso = null; conta = null; produtos = []; clientes = []; estoque = new Map();
+}
+
+// ============================================================================================================
+// Estado, rede e chamadas ao servidor
+// ============================================================================================================
+let tokenEmUso = null;   // token aberto só em memória, depois do PIN
+let conta = null;        // empresa, vendedor, permissões (sem e-mail, sem senha)
+
+function marcarRede() {
+    const online = navigator.onLine;
+    document.querySelectorAll('[data-net]').forEach((el) => { el.textContent = online ? 'Online' : 'Offline'; el.classList.toggle('off', !online); });
+}
+window.addEventListener('online', marcarRede);
+window.addEventListener('offline', marcarRede);
+
+async function api(caminho, opcoes = {}) {
+    const cab = { 'Content-Type': 'application/json' };
+    if (tokenEmUso) cab.Authorization = 'Bearer ' + tokenEmUso;
+    const resp = await fetch(caminho, { ...opcoes, headers: cab, cache: 'no-store' });
+    let corpo = {};
+    try { corpo = await resp.json(); } catch (e) {}
+    return { status: resp.status, corpo };
+}
+
+const ABAS = ['telaInicio', 'telaPedidos', 'telaClientes', 'telaProdutos'];
+function mostrar(id) {
+    document.querySelectorAll('.tela, .pin-tela').forEach((t) => t.classList.toggle('ativa', t.id === id));
+    document.getElementById('nav').hidden = !ABAS.includes(id);
+    document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.aba === id));
+    window.scrollTo(0, 0);
+    marcarRede();
+}
+
+// ============================================================================================================
+// Login
+// ============================================================================================================
+const elCnpj = document.getElementById('cnpj');
+function mascaraCnpj(v) {
+    const d = v.replace(/\D/g, '').slice(0, 14);
+    return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+}
+elCnpj.addEventListener('input', () => { elCnpj.value = mascaraCnpj(elCnpj.value); });
+document.getElementById('btnOlho').addEventListener('click', () => {
+    const s = document.getElementById('senha'); s.type = s.type === 'password' ? 'text' : 'password';
+});
+
+function prepararLogin(mensagem) {
+    let lembrado = null;
+    try { lembrado = localStorage.getItem('pv_cnpj'); } catch (e) {}
+    const temCnpj = !!lembrado;
+    document.getElementById('chipCnpj').hidden = !temCnpj;
+    document.getElementById('blocoCnpj').hidden = temCnpj;
+    if (temCnpj) {
+        let nome = '';
+        try { nome = localStorage.getItem('pv_empresa') || ''; } catch (e) {}
+        document.getElementById('chipCnpjTexto').textContent = '🏢 ' + (nome ? nome + ' · ' : '') + mascaraCnpj(lembrado);
+        elCnpj.value = mascaraCnpj(lembrado);
+    }
+    document.getElementById('senha').value = '';
+    const erro = document.getElementById('erroLogin');
+    erro.textContent = mensagem || '';
+    erro.classList.toggle('mostrar', !!mensagem);
+    mostrar('telaLogin');
+}
+document.getElementById('btnTrocarCnpj').addEventListener('click', () => {
+    try { localStorage.removeItem('pv_cnpj'); localStorage.removeItem('pv_empresa'); } catch (e) {}
+    elCnpj.value = '';
+    prepararLogin();
+    elCnpj.focus();
+});
+
+let tokenRecebido = null;   // entre o login e a criação do PIN (só em memória)
+document.getElementById('formLogin').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const erro = document.getElementById('erroLogin'), btn = document.getElementById('btnEntrar');
+    const cnpj = elCnpj.value.replace(/\D/g, ''), email = document.getElementById('email').value.trim(), senha = document.getElementById('senha').value;
+    const falhar = (m) => { erro.textContent = m; erro.classList.add('mostrar'); };
+    erro.classList.remove('mostrar');
+    if (cnpj.length !== 14) return falhar('Informe o CNPJ completo da empresa.');
+    if (!email || !senha) return falhar('Informe o e-mail e a senha do ERP.');
+    if (!navigator.onLine) return falhar('Sem internet. O primeiro acesso precisa de conexão.');
+    btn.disabled = true; btn.textContent = 'Entrando…';
+    try {
+        const { status, corpo } = await api('/api/entrar', { method: 'POST', body: JSON.stringify({ cnpj, email, senha }) });
+        if (status !== 200) return falhar(corpo.erro || 'Não foi possível entrar agora. Tente novamente.');
+        try {
+            if (document.getElementById('lembrarCnpj').checked) { localStorage.setItem('pv_cnpj', cnpj); localStorage.setItem('pv_empresa', corpo.empresa.nome); }
+            else { localStorage.removeItem('pv_cnpj'); localStorage.removeItem('pv_empresa'); }
+        } catch (e) {}
+        tokenRecebido = corpo.token;
+        conta = { empresa: corpo.empresa, vendedor: corpo.vendedor, permissoes: corpo.permissoes, pinOfflineDias: corpo.pin_offline_dias };
+        document.getElementById('senha').value = '';
+        iniciarCriacaoPin();
+    } catch (e) {
+        falhar('Sem resposta do servidor. Confira a internet e tente de novo.');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Entrar';
+    }
+});
+
+// ============================================================================================================
+// PIN: criar (2 vezes) e desbloquear
+// ============================================================================================================
+let modoPin = 'desbloquear', pinDigitado = '', pinPrimeiro = '', pinOcupado = false, tamanhoPin = TAMANHO_PIN;
+const teclas = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+const elTeclado = document.getElementById('teclado');
+teclas.forEach((t) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = t;
+    if (!t) { b.className = 'vazio'; b.disabled = true; }
+    b.addEventListener('click', () => teclaPin(t));
+    elTeclado.appendChild(b);
+});
+document.addEventListener('keydown', (ev) => {
+    if (!document.getElementById('telaPin').classList.contains('ativa')) return;
+    if (/^\d$/.test(ev.key)) teclaPin(ev.key);
+    else if (ev.key === 'Backspace') teclaPin('⌫');
+});
+function desenharBolinhas() {
+    document.getElementById('pinBolinhas').innerHTML = Array.from({ length: tamanhoPin }, (_, i) => `<i class="${i < pinDigitado.length ? 'on' : ''}"></i>`).join('');
+}
+function avisoPin(texto, tremer) {
+    document.getElementById('pinMsg').textContent = texto || '';
+    if (tremer) { const b = document.getElementById('pinBolinhas'); b.classList.remove('treme'); void b.offsetWidth; b.classList.add('treme'); }
+}
+function cabecalhoPin(titulo, sub) {
+    const nome = conta && conta.vendedor ? conta.vendedor.nome : '';
+    document.getElementById('pinAvatar').textContent = nome.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('') || '?';
+    document.getElementById('pinTitulo').textContent = titulo;
+    document.getElementById('pinSub').textContent = sub;
+}
+function iniciarCriacaoPin() {
+    modoPin = 'criar'; pinDigitado = ''; pinPrimeiro = ''; tamanhoPin = TAMANHO_PIN;
+    cabecalhoPin(`Bem-vindo, ${conta.vendedor.primeiro_nome}!`, `Crie um PIN de ${TAMANHO_PIN} números para abrir o app no dia a dia, mesmo sem internet.`);
+    document.getElementById('btnOutroUsuario').hidden = true;
+    desenharBolinhas(); avisoPin('');
+    mostrar('telaPin');
+}
+async function iniciarDesbloqueio() {
+    modoPin = 'desbloquear'; pinDigitado = '';
+    tamanhoPin = ((await lerLocal('cofre')) || {}).tam || 6;   // cofres sem 'tam' foram criados quando o PIN era de 6
+    cabecalhoPin(`Olá, ${conta.vendedor.primeiro_nome}`, `${conta.empresa.nome} · digite seu PIN`);
+    document.getElementById('btnOutroUsuario').hidden = false;
+    desenharBolinhas(); avisoPin('');
+    mostrar('telaPin');
+}
+
+async function teclaPin(t) {
+    if (pinOcupado) return;
+    if (t === '⌫') { pinDigitado = pinDigitado.slice(0, -1); desenharBolinhas(); return; }
+    if (pinDigitado.length >= tamanhoPin) return;
+    pinDigitado += t; desenharBolinhas();
+    if (pinDigitado.length < tamanhoPin) return;
+    pinOcupado = true;
+    try { modoPin === 'criar' ? await concluirCriacao() : await concluirDesbloqueio(); }
+    finally { pinOcupado = false; }
+}
+
+function pinFraco(p) { return /^(\d)\1+$/.test(p) || '0123456789'.includes(p) || '9876543210'.includes(p); }
+
+async function concluirCriacao() {
+    if (!pinPrimeiro) {
+        if (pinFraco(pinDigitado)) { pinDigitado = ''; desenharBolinhas(); return avisoPin('PIN muito fácil (repetido ou em sequência). Escolha outro.', true); }
+        pinPrimeiro = pinDigitado; pinDigitado = ''; desenharBolinhas();
+        document.getElementById('pinSub').textContent = 'Digite o mesmo PIN de novo para confirmar.';
+        return avisoPin('');
+    }
+    if (pinDigitado !== pinPrimeiro) {
+        pinPrimeiro = ''; pinDigitado = ''; desenharBolinhas();
+        document.getElementById('pinSub').textContent = `Crie um PIN de ${TAMANHO_PIN} números.`;
+        return avisoPin('Os dois PINs não conferem. Comece de novo.', true);
+    }
+    avisoPin('Guardando…');
+    await guardarCofre(pinDigitado, tokenRecebido);
+    await gravarLocal('conta', conta);
+    await gravarLocal('tentativas', 0);
+    await gravarLocal('ultimoOnline', Date.now());
+    tokenEmUso = tokenRecebido; tokenRecebido = null; pinDigitado = ''; pinPrimeiro = '';
+    primeiraSincronizacao();
+}
+
+async function concluirDesbloqueio() {
+    avisoPin('Conferindo…');
+    const token = await abrirCofre(pinDigitado);
+    pinDigitado = ''; desenharBolinhas();
+    if (!token) {
+        const tentativas = ((await lerLocal('tentativas')) || 0) + 1;
+        if (tentativas >= MAX_TENTATIVAS_PIN) {
+            await esquecerAparelho();
+            return prepararLogin(`PIN errado ${MAX_TENTATIVAS_PIN} vezes: por segurança, o acesso salvo foi apagado. Entre com seu e-mail e senha do ERP.`);
+        }
+        await gravarLocal('tentativas', tentativas);
+        const restam = MAX_TENTATIVAS_PIN - tentativas;
+        return avisoPin(`PIN incorreto. ${restam} ${restam === 1 ? 'tentativa restante' : 'tentativas restantes'}.`, true);
+    }
+    await gravarLocal('tentativas', 0);
+    tokenEmUso = token;
+    // Com internet, confirma no servidor que o acesso continua valendo (vendedor ativo, aparelho não desconectado).
+    if (navigator.onLine) {
+        try {
+            const { status, corpo } = await api('/api/eu');
+            if (status === 401 || status === 403) {
+                await esquecerAparelho();
+                return prepararLogin(corpo.detail || 'Seu acesso neste aparelho foi encerrado. Entre de novo.');
+            }
+            if (status === 200) {
+                await gravarLocal('ultimoOnline', Date.now());
+                conta.empresa = corpo.empresa;
+                conta.pinOfflineDias = corpo.pin_offline_dias;
+                await gravarLocal('conta', conta);
+            }
+        } catch (e) { /* servidor fora: segue como offline */ }
+    }
+    const ultimo = (await lerLocal('ultimoOnline')) || 0;
+    const limiteDias = conta.pinOfflineDias || 7;
+    if (Date.now() - ultimo > limiteDias * 86400000) {
+        tokenEmUso = null;
+        return avisoPin(`Faz mais de ${limiteDias} dias sem conectar. Ligue a internet para continuar.`, true);
+    }
+    await carregarCatalogo();
+    if (!produtos.length && navigator.onLine) return primeiraSincronizacao();   // nunca terminou de baixar
+    abrirInicio();
+    sincronizarEmSegundoPlano();
+}
+
+document.getElementById('btnOutroUsuario').addEventListener('click', async () => {
+    if (!confirm('Sair deste usuário? Para entrar de novo será preciso e-mail, senha do ERP e internet. Pedidos ainda não enviados serão perdidos.')) return;
+    await esquecerAparelho();
+    prepararLogin();
+});
+
+// ============================================================================================================
+// Início
+// ============================================================================================================
+function abrirInicio() {
+    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    document.getElementById('iniMes').textContent = `${meses[new Date().getMonth()]} · ${conta.empresa.nome}`;
+    document.getElementById('iniNome').textContent = `Olá, ${conta.vendedor.primeiro_nome}`;
+    const p = conta.permissoes || {};
+    const desc = p.desconto_item || p.desconto_documento ? 'pode dar desconto' : 'sem permissão de desconto';
+    document.getElementById('iniPermissoes').innerHTML = `Conectado como <b>${esc(conta.vendedor.nome)}</b> · ${desc}.`;
+    mostrarUltimaSync();
+    mostrar('telaInicio');
+}
+document.getElementById('btnSair').addEventListener('click', async () => {
+    if (!confirm('Desconectar este aparelho? Para entrar de novo será preciso e-mail, senha do ERP e internet.')) return;
+    if (navigator.onLine && tokenEmUso) { try { await api('/api/sair', { method: 'POST' }); } catch (e) {} }
+    await esquecerAparelho();
+    prepararLogin();
+});
+
+// ============================================================================================================
+// Catálogo no aparelho: produtos, clientes e estoque (baixados do servidor, só o que mudou)
+// ============================================================================================================
+let produtos = [], clientes = [], estoque = new Map();
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const fmtMoeda = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtQtd = (v) => Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const POUCO_ESTOQUE = 5;   // amarelo com 5 ou menos; vermelho com 0 ou negativo (a venda não é bloqueada)
+
+async function carregarCatalogo() {
+    const [p, c, e] = await Promise.all([lerTodos('produtos'), lerTodos('clientes'), lerTodos('estoque')]);
+    produtos = p.filter((x) => x.ativo).map((x) => ({ ...x, _busca: semAcento(`${x.descricao} ${x.id} ${x.barras}`) }))
+        .sort((a, b) => a.descricao.localeCompare(b.descricao, 'pt-BR'));
+    clientes = c.filter((x) => x.ativo).map((x) => {
+        const nome = x.fantasia || x.nome;
+        return { ...x, exibir: nome, _busca: semAcento(`${x.nome} ${x.fantasia} ${x.documento} ${x.documento.replace(/\D/g, '')}`) };
+    }).sort((a, b) => a.exibir.localeCompare(b.exibir, 'pt-BR'));
+    estoque = new Map(e.map((x) => [x.id, x.saldo]));
+}
+
+class AcessoEncerrado extends Error {}
+
+// Pede ao servidor para atualizar a cópia (ele lê do ERP só o que estiver vencido) e baixa o que mudou.
+async function sincronizar(aoProgredir) {
+    const avisar = aoProgredir || (() => {});
+    const chamar = async (caminho, opcoes) => {
+        const r = await api(caminho, opcoes);
+        if (r.status === 401 || r.status === 403) throw new AcessoEncerrado(r.corpo.detail || 'Acesso encerrado.');
+        if (r.status !== 200) throw new Error('servidor respondeu ' + r.status);
+        return r.corpo;
+    };
+    let est = await chamar('/api/sincronizar', { method: 'POST' });
+    const inicio = Date.now();
+    // Primeira vez da empresa: espera o servidor terminar de ler o ERP (pode levar alguns minutos em catálogos grandes).
+    while (est.lendo_erp && TABELAS.some((n) => !est.tabelas[n].pronta) && Date.now() - inicio < 10 * 60000) {
+        avisar('erp', est);
+        await esperar(2000);
+        est = await chamar('/api/sincronizar/estado');
+    }
+    for (const n of TABELAS) {
+        let cursor = (await lerLocal('cursor_' + n)) || '', baixados = 0;
+        for (;;) {
+            const pag = await chamar(`/api/dados/${n}?cursor=${encodeURIComponent(cursor)}`);
+            await gravarLinhas(n, pag.itens);
+            baixados += pag.itens.length;
+            cursor = pag.cursor;
+            await gravarLocal('cursor_' + n, cursor);
+            avisar(n, { baixados, total: est.tabelas[n].total, mais: pag.mais });
+            if (!pag.mais) break;
+        }
+    }
+    await gravarLocal('ultimaSync', Date.now());
+    await gravarLocal('ultimoOnline', Date.now());
+    await carregarCatalogo();
+    return est;
+}
+
+const NOMES_SYNC = { produtos: 'Produtos', clientes: 'Clientes', estoque: 'Estoque' };
+async function primeiraSincronizacao() {
+    mostrar('telaSync');
+    document.getElementById('syncTitulo').textContent = `Bem-vindo, ${conta.vendedor.primeiro_nome}!`;
+    const erro = document.getElementById('erroSync'), btn = document.getElementById('btnComecar');
+    erro.classList.remove('mostrar'); btn.disabled = true; btn.textContent = 'Começar a vender';
+    TABELAS.forEach((n) => {
+        const N = NOMES_SYNC[n];
+        document.getElementById('sync' + N).textContent = 'aguardando';
+        document.getElementById('bar' + N).style.width = '0';
+        document.getElementById('ok' + N).textContent = '';
+    });
+    try {
+        await sincronizar((fase, info) => {
+            if (fase === 'erp') {
+                TABELAS.forEach((n) => { if (!info.tabelas[n].pronta) document.getElementById('sync' + NOMES_SYNC[n]).textContent = 'o servidor está lendo do ERP…'; });
+                return;
+            }
+            const N = NOMES_SYNC[fase], total = Math.max(info.total, info.baixados);
+            document.getElementById('sync' + N).textContent = info.mais ? `baixando… ${info.baixados} de ${total}` : `${info.baixados} ${fase === 'estoque' ? 'saldos' : 'itens'}`;
+            document.getElementById('bar' + N).style.width = (total ? Math.min(100, info.baixados / total * 100) : 100) + '%';
+            if (!info.mais) document.getElementById('ok' + N).textContent = '✓';
+        });
+        // No fim, mostra o que vale para vender (só ativos), não o total baixado.
+        document.getElementById('syncProdutos').textContent = `${produtos.length} produtos ativos`;
+        document.getElementById('syncClientes').textContent = `${clientes.length} clientes ativos`;
+        document.getElementById('syncEstoque').textContent = `${estoque.size} saldos do local padrão`;
+        btn.disabled = false;
+    } catch (e) {
+        if (e instanceof AcessoEncerrado) { await esquecerAparelho(); return prepararLogin(e.message); }
+        erro.textContent = 'Não foi possível terminar de baixar. Confira a internet.';
+        erro.classList.add('mostrar');
+        btn.disabled = false; btn.textContent = 'Tentar de novo';
+    }
+}
+document.getElementById('btnComecar').addEventListener('click', () => {
+    if (document.getElementById('btnComecar').textContent === 'Tentar de novo') return primeiraSincronizacao();
+    abrirInicio();
+});
+
+let sincronizando = false;
+async function sincronizarEmSegundoPlano() {
+    if (sincronizando || !navigator.onLine || !tokenEmUso) return;
+    sincronizando = true;
+    document.getElementById('iniSync').textContent = 'Atualizando dados…';
+    try {
+        await sincronizar();
+        if (document.getElementById('telaProdutos').classList.contains('ativa')) desenharProdutos();
+        if (document.getElementById('telaClientes').classList.contains('ativa')) desenharClientes();
+    } catch (e) {
+        if (e instanceof AcessoEncerrado) { await esquecerAparelho(); sincronizando = false; return prepararLogin(e.message); }
+    } finally {
+        sincronizando = false;
+        mostrarUltimaSync();
+    }
+}
+async function mostrarUltimaSync() {
+    const quando = await lerLocal('ultimaSync');
+    const txt = quando ? new Date(quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'nunca';
+    document.getElementById('iniSync').textContent = `${produtos.length} produtos · ${clientes.length} clientes · atualizado ${txt}`;
+    document.getElementById('prodInfo').textContent = `${produtos.length} itens · atualizados ${txt}`;
+    document.getElementById('cliInfo').textContent = `${clientes.length} clientes`;
+}
+document.getElementById('btnSyncAgora').addEventListener('click', sincronizarEmSegundoPlano);
+window.addEventListener('online', sincronizarEmSegundoPlano);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizarEmSegundoPlano(); });
+setInterval(sincronizarEmSegundoPlano, 5 * 60000);
+
+// ---- Produtos: lista + busca (nome, código, código de barras) e estoque colorido ----
+const MAX_LISTA = 150;
+function seloEstoque(id) {
+    const saldo = estoque.has(id) ? estoque.get(id) : 0;
+    const classe = saldo <= 0 ? 'sem' : saldo <= POUCO_ESTOQUE ? 'pouco' : 'ok';
+    return `<span class="est ${classe}">${saldo === 0 ? 'sem estoque' : saldo < 0 ? 'sem estoque (' + fmtQtd(saldo) + ')' : fmtQtd(saldo) + ' em estoque'}</span>`;
+}
+function desenharProdutos() {
+    const termo = semAcento(document.getElementById('buscaProduto').value.trim());
+    const partes = termo.split(/\s+/).filter(Boolean);
+    const achados = partes.length ? produtos.filter((p) => partes.every((x) => p._busca.includes(x))) : produtos;
+    const lista = achados.slice(0, MAX_LISTA);
+    document.getElementById('listaProdutos').innerHTML = lista.map((p) => `
+        <div class="item"><span class="n"><b>${esc(p.descricao)}</b><small>cód. ${p.id}${p.embalagem ? ' · ' + esc(p.embalagem) : ''} · ${seloEstoque(p.id)}</small></span>
+        <span class="p">${fmtMoeda(p.preco)}</span></div>`).join('');
+    document.getElementById('rodapeProdutos').textContent = !achados.length ? 'Nenhum produto encontrado.'
+        : achados.length > MAX_LISTA ? `Mostrando ${MAX_LISTA} de ${achados.length}. Digite mais para filtrar.` : `${achados.length} produto(s)`;
+}
+document.getElementById('buscaProduto').addEventListener('input', desenharProdutos);
+
+// ---- Clientes: lista A–Z com índice lateral; Consumidor final fixo no topo ----
+const ehConsumidorFinal = (c) => semAcento(c.nome) === 'consumidor final';
+function iniciais(t) { return t.split(' ').filter((p) => /[a-z0-9]/i.test(p)).slice(0, 2).map((p) => p[0]).join('').toUpperCase(); }
+function letraDe(c) { const l = semAcento(c.exibir).charAt(0).toUpperCase(); return /[A-Z]/.test(l) ? l : '#'; }
+function linhaCliente(c) {
+    const sub = [c.bairro, c.documento].filter(Boolean).join(' · ');
+    return `<div class="item"><span class="av-p${ehConsumidorFinal(c) ? ' cf' : ''}">${ehConsumidorFinal(c) ? '👤' : esc(iniciais(c.exibir))}</span>
+        <span class="n"><b>${esc(c.exibir)}</b><small>${esc(sub || c.nome)}</small></span></div>`;
+}
+function desenharClientes() {
+    const termo = semAcento(document.getElementById('buscaCliente').value.trim());
+    const partes = termo.split(/\s+/).filter(Boolean);
+    const filtro = (c) => !partes.length || partes.every((x) => c._busca.includes(x));
+    const cf = clientes.find(ehConsumidorFinal);
+    const demais = clientes.filter((c) => c !== cf && filtro(c));
+    let html = cf && !partes.length ? `<div class="lista">${linhaCliente(cf)}</div>` : '';
+    const grupos = new Map();
+    demais.slice(0, 600).forEach((c) => { const l = letraDe(c); if (!grupos.has(l)) grupos.set(l, []); grupos.get(l).push(c); });
+    grupos.forEach((itens, l) => { html += `<div class="letra" id="letra-${l}">${l}</div><div class="lista">${itens.map(linhaCliente).join('')}</div>`; });
+    if (!demais.length && partes.length) html += '<div class="rodape-lista">Nenhum cliente encontrado.</div>';
+    document.getElementById('listaClientes').innerHTML = html;
+    document.getElementById('indiceClientes').innerHTML = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+        .map((l) => `<button type="button" data-letra="${l}" ${grupos.has(l) ? '' : 'disabled'}>${l}</button>`).join('');
+}
+document.getElementById('buscaCliente').addEventListener('input', desenharClientes);
+document.getElementById('indiceClientes').addEventListener('click', (ev) => {
+    const l = ev.target.dataset && ev.target.dataset.letra;
+    const alvo = l && document.getElementById('letra-' + l);
+    if (alvo) window.scrollTo({ top: alvo.getBoundingClientRect().top + window.scrollY - 150, behavior: 'smooth' });
+});
+document.querySelectorAll('[data-limpar]').forEach((b) => b.addEventListener('click', () => {
+    const campo = document.getElementById(b.dataset.limpar);
+    campo.value = ''; campo.dispatchEvent(new Event('input')); campo.focus();
+}));
+
+// ---- Navegação pelas abas de baixo ----
+document.getElementById('nav').addEventListener('click', (ev) => {
+    const botao = ev.target.closest('button');
+    if (!botao) return;
+    const aba = botao.dataset.aba;
+    if (aba === 'telaProdutos') desenharProdutos();
+    if (aba === 'telaClientes') desenharClientes();
+    if (aba === 'telaInicio') return abrirInicio();
+    mostrar(aba);
+});
+
+// ============================================================================================================
+// Abertura do app
+// ============================================================================================================
+(async function abrir() {
+    marcarRede();
+    if (!window.crypto || !crypto.subtle) {
+        return prepararLogin('Este navegador não tem a proteção necessária (abra pelo app instalado ou por https).');
+    }
+    try {
+        conta = await lerLocal('conta');
+        const cofre = await lerLocal('cofre');
+        if (conta && cofre) return iniciarDesbloqueio();
+    } catch (e) {}
+    prepararLogin();
+})();
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

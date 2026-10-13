@@ -1,0 +1,26 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "watchPatterns": [
+      "/vendas/**",
+      "/app/__init__.py",
+      "/app/config.py",
+      "/app/database.py",
+      "/app/cripto.py",
+      "/app/tenants.py",
+      "/app/cache.py",
+      "/app/meuerp_client.py",
+      "/app/security.py",
+      "/app/limite.py",
+      "/app/sqlquery.py",
+      "/requirements.txt"
+    ]
+  },
+  "deploy": {
+    "startCommand": "uvicorn vendas.main:app --host 0.0.0.0 --port $PORT",
+    "healthcheckPath": "/saude",
+    "healthcheckTimeout": 60,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
+  }
+}
