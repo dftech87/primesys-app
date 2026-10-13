@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.primesys.vendas",
+        "sha256_cert_fingerprints": ["27:84:83:B0:09:60:50:2E:74:F7:1F:DE:D8:4E:7D:F7:6D:DA:23:B9:E5:96:00:98:1A:3E:34:F9:C5:AF:05:90"]
+      }
+    }]
