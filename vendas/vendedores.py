@@ -1,8 +1,12 @@
 """Quem é o vendedor: o usuário do ERP (e-mail e senha) ligado a um funcionário ativo.
 
-O ERP não diz qual usuário acabou de validar o login, então montamos o mapa e-mail -> funcionário a partir dos
-funcionários ativos que têm usuário vinculado (1 chamada para a lista + 1 por funcionário vinculado). O mapa fica
-em memória por algumas horas, por empresa. O e-mail nunca vai para o celular: só nome e primeiro nome.
+O ERP não diz qual usuário acabou de validar o login, então montamos o mapa e-mail -> funcionário, em duas fontes:
+  1. o usuário vinculado ao funcionário (1 chamada para a lista + 1 por funcionário vinculado);
+  2. se o e-mail não estiver lá, o e-mail do CONTATO no cadastro do funcionário (1 consulta SQL). Cobre quem não
+     vinculou o usuário e usuários que o ERP não mostra (ex.: usuário de suporte/revenda). E-mail de contato
+     repetido em dois funcionários ativos não vale (ambíguo).
+A senha continua sendo conferida pelo ERP; o mapa só diz QUAL funcionário é. Fica em memória por algumas horas,
+por empresa. O e-mail nunca vai para o celular: só nome e primeiro nome.
 """
 
 import logging
@@ -10,6 +14,7 @@ import time
 
 from app.cache import cached, descartar
 from app.meuerp_client import MeuERPClient
+from app.sqlquery import executar
 from vendas import config
 
 logger = logging.getLogger(__name__)
@@ -31,12 +36,42 @@ async def _todas_as_paginas(client: MeuERPClient, caminho: str, maximo_paginas: 
     return itens
 
 
+_SQL_EMAIL_CONTATO = """
+    select distinct f._idpessoa as id, lower(trim(c.email)) as email
+    from pessoa_funcionario f
+    join pessoa_contato c on c._idpessoa = f._idpessoa
+    where coalesce(f.flaginativo, 'F') <> 'T' and coalesce(trim(c.email), '') <> ''"""
+
+
 async def _montar_mapa(token: str) -> dict[str, dict]:
     client = MeuERPClient(token)
     mapa: dict[str, dict] = {}
-    for f in await _todas_as_paginas(client, "/api/funcionario/v1"):
+    funcionarios = [f for f in await _todas_as_paginas(client, "/api/funcionario/v1") if f.get("ativo") == "S"]
+
+    # Fonte 2 (menor prioridade): e-mail de contato do cadastro do funcionário.
+    por_id = {int(f["codigoPessoa"]): f for f in funcionarios}
+    try:
+        contatos = await executar(client, _SQL_EMAIL_CONTATO, max_paginas=20)
+    except Exception:
+        logger.warning("e-mails de contato dos funcionários indisponíveis; só o vínculo de usuário vale agora")
+        contatos = []
+    donos: dict[str, set[int]] = {}
+    for c in contatos:
+        if int(c["id"]) in por_id:
+            donos.setdefault(c["email"], set()).add(int(c["id"]))
+    for email, ids in donos.items():
+        if len(ids) != 1:
+            logger.warning("e-mail de contato repetido em %d funcionários ativos: ignorado", len(ids))
+            continue
+        f = por_id[next(iter(ids))]
+        mapa[email] = {"id_funcionario": int(f["codigoPessoa"]), "id_usuario": int(f.get("idUsuario") or 0),
+                       "id_perfil": None, "per_comissao": float(f.get("perComissao") or 0), "nome_usuario": "",
+                       "origem": "contato"}
+
+    # Fonte 1 (vale mais): usuário do ERP vinculado ao funcionário.
+    for f in funcionarios:
         id_usuario = f.get("idUsuario")
-        if not id_usuario or f.get("ativo") != "S":
+        if not id_usuario:
             continue
         try:
             usuario = await client.get(f"/api/usuario/v1/{id_usuario}")
@@ -51,6 +86,7 @@ async def _montar_mapa(token: str) -> dict[str, dict]:
                 "id_perfil": usuario.get("idPerfil"),
                 "per_comissao": float(f.get("perComissao") or 0),
                 "nome_usuario": usuario.get("nome") or "",
+                "origem": "usuario",
             }
     return mapa
 
