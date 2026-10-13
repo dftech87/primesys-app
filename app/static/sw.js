@@ -4,7 +4,7 @@ const CACHE_NAME = "primesys-produtos-v3";
 // e as chamadas de API — vai direto pra rede, sem nenhum cache no meio.
 // Um app de consulta de preço/estoque mostrando dado desatualizado é pior
 // do que ele demorar meio segundo a mais pra carregar.
-const ICONES = ["/static/icons/icon-192.png", "/static/icons/icon-512.png"];
+const ICONES = ["/static/icons/app-192.png", "/static/icons/app-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ICONES)));
