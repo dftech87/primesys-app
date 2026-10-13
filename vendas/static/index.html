@@ -129,6 +129,15 @@
     .com-indice { padding-right: 24px; }
     .btn-fixo { position: fixed; left: 16px; right: 16px; bottom: 76px; z-index: 18; height: 50px; border: 0; border-radius: 14px; background: #047857; color: #fff; font-weight: 700; font-size: 15px; box-shadow: 0 8px 20px rgba(4,120,87,.35); }
     .btn-fixo:disabled { background: #94a3b8; box-shadow: none; }
+    /* Faixa "Nova versão disponível" (igual ao PrimeSys Info), logo acima da barra de baixo */
+    .aviso-versao { display: none; position: fixed; left: 0; right: 0; bottom: 64px; z-index: 25; max-width: 520px; margin: 0 auto;
+        align-items: center; gap: 10px; padding: 10px 14px; background: #065f46; color: #fff; font-size: 13px; box-shadow: 0 -4px 14px rgba(15,23,42,.18); }
+    .aviso-versao.mostrar { display: flex; }
+    .aviso-versao.sem-nav { bottom: 0; }
+    .aviso-versao .texto { flex: 1; line-height: 1.35; }
+    .aviso-versao button { border: 0; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; }
+    .aviso-versao .atualizar { background: #fff; color: #065f46; padding: 8px 14px; }
+    .aviso-versao .dispensar { background: none; color: #a7f3d0; padding: 6px 4px; font-size: 16px; }
     /* Telas largas: barra de baixo, botão fixo e índice acompanham a coluna central de 520px. */
     .nav { max-width: 520px; margin: 0 auto; }
     @media (min-width: 521px) {
@@ -234,6 +243,12 @@
     <div class="cab-lista"><div class="l1"><span class="nm">Meus pedidos</span><span class="net" data-net>Online</span></div></div>
     <div class="wrap"><div class="aviso">🚧 Os pedidos chegam na próxima parte.</div></div>
 </section>
+
+<div class="aviso-versao" id="avisoVersao" role="status" aria-live="polite">
+    <span class="texto"><b>Nova versão disponível.</b> Atualize para ver as novidades.</span>
+    <button type="button" class="atualizar" id="btnAtualizarApp">Atualizar</button>
+    <button type="button" class="dispensar" id="btnDispensarAviso" aria-label="Agora não">&#10005;</button>
+</div>
 
 <nav class="nav" id="nav" hidden>
     <button type="button" data-aba="telaInicio" class="on"><b>🏠</b>Início</button>
@@ -347,6 +362,7 @@ const ABAS = ['telaInicio', 'telaPedidos', 'telaClientes', 'telaProdutos'];
 function mostrar(id) {
     document.querySelectorAll('.tela, .pin-tela').forEach((t) => t.classList.toggle('ativa', t.id === id));
     document.getElementById('nav').hidden = !ABAS.includes(id);
+    document.getElementById('avisoVersao').classList.toggle('sem-nav', !ABAS.includes(id));
     document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.aba === id));
     window.scrollTo(0, 0);
     marcarRede();
@@ -764,6 +780,54 @@ document.getElementById('nav').addEventListener('click', (ev) => {
 });
 
 // ============================================================================================================
+// Aviso de nova versão (igual ao PrimeSys Info): o app pergunta ao servidor qual versão está no ar (ao voltar para
+// o app e a cada 30 s com ele na tela). Se mudou desde que esta tela abriu, mostra a faixa; "Atualizar" recarrega.
+// ============================================================================================================
+const VERSAO_DA_TELA = '__VERSAO__';
+const elAvisoVersao = document.getElementById('avisoVersao');
+let versaoDispensada = null;
+async function verificarVersao() {
+    if (!navigator.onLine || VERSAO_DA_TELA.startsWith('__')) return;
+    try {
+        const r = await fetch('/api/versao', { cache: 'no-store' });
+        if (!r.ok) return;
+        const { versao } = await r.json();
+        if (versao && versao !== VERSAO_DA_TELA && versao !== versaoDispensada) elAvisoVersao.classList.add('mostrar');
+    } catch (e) { /* sem internet agora: tenta na próxima */ }
+}
+document.getElementById('btnAtualizarApp').addEventListener('click', () => {
+    const botao = document.getElementById('btnAtualizarApp');
+    botao.textContent = 'Atualizando...'; botao.disabled = true;
+    // Depois de recarregar, volta para a mesma aba sem pedir o PIN de novo (só nesta aba do navegador e por 1 minuto).
+    try {
+        const aba = (document.querySelector('.tela.ativa') || {}).id;
+        if (tokenEmUso && ABAS.includes(aba)) sessionStorage.setItem('pv_retomar', JSON.stringify({ token: tokenEmUso, aba, ate: Date.now() + 60000 }));
+    } catch (e) {}
+    window.location.reload();
+});
+document.getElementById('btnDispensarAviso').addEventListener('click', async () => {
+    elAvisoVersao.classList.remove('mostrar');
+    try { versaoDispensada = (await (await fetch('/api/versao', { cache: 'no-store' })).json()).versao; } catch (e) {}
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') verificarVersao(); });
+window.addEventListener('focus', verificarVersao);
+window.addEventListener('online', verificarVersao);
+setInterval(() => { if (document.visibilityState === 'visible') verificarVersao(); }, 30 * 1000);
+setTimeout(verificarVersao, 4000);
+
+async function retomarDepoisDeAtualizar() {
+    let dados = null;
+    try { dados = JSON.parse(sessionStorage.getItem('pv_retomar') || 'null'); sessionStorage.removeItem('pv_retomar'); } catch (e) {}
+    if (!dados || !dados.token || Date.now() > dados.ate) return false;
+    tokenEmUso = dados.token;
+    await carregarCatalogo();
+    abrirInicio();
+    if (dados.aba !== 'telaInicio') document.querySelector(`#nav [data-aba="${dados.aba}"]`).click();
+    sincronizarEmSegundoPlano();
+    return true;
+}
+
+// ============================================================================================================
 // Abertura do app
 // ============================================================================================================
 (async function abrir() {
@@ -774,6 +838,7 @@ document.getElementById('nav').addEventListener('click', (ev) => {
     try {
         conta = await lerLocal('conta');
         const cofre = await lerLocal('cofre');
+        if (conta && cofre && await retomarDepoisDeAtualizar()) return;
         if (conta && cofre) return iniciarDesbloqueio();
     } catch (e) {}
     prepararLogin();

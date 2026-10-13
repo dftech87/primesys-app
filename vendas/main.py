@@ -7,6 +7,7 @@ tentativas de login. Não tem tela de administração: isso fica no /admin do Pr
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -32,17 +33,23 @@ meuerp_client.RESERVA_PARA_INTERATIVAS = 2
 ESTATICOS = Path(__file__).parent / "static"
 
 
-def _versao_dos_arquivos() -> str:
-    """Muda sempre que um arquivo do app muda: o service worker usa para trocar o cache do celular."""
-    resumo = hashlib.sha256()
-    for arquivo in sorted(ESTATICOS.rglob("*")):
-        if arquivo.is_file():
-            resumo.update(str(arquivo.relative_to(ESTATICOS)).encode())
-            resumo.update(arquivo.read_bytes())
-    return resumo.hexdigest()[:12]
+def _versao() -> str:
+    """Muda a cada publicação do Vendas: no Railway vem do commit publicado; fora dele, de um resumo dos arquivos.
+    O app compara com a versão da tela aberta e mostra a faixa "Nova versão disponível" (igual ao PrimeSys Info);
+    o service worker usa o mesmo número para trocar a cópia guardada no celular. Só um hash curto (não revela nada)."""
+    base = os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA")
+    if not base:
+        resumo = hashlib.sha256()
+        pasta = Path(__file__).parent
+        for arquivo in sorted(pasta.rglob("*")):
+            if arquivo.is_file() and arquivo.suffix in {".py", ".html", ".js", ".json", ".png"} and "__pycache__" not in arquivo.parts:
+                resumo.update(str(arquivo.relative_to(pasta)).encode())
+                resumo.update(arquivo.read_bytes())
+        base = resumo.hexdigest()
+    return hashlib.sha256(f"primevendas:{base}".encode()).hexdigest()[:12]
 
 
-VERSAO = _versao_dos_arquivos()
+VERSAO = _versao()
 
 app = FastAPI(title="Prime Vendas", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -84,7 +91,7 @@ async def saude():
 
 @app.get("/api/versao")
 async def versao():
-    return {"versao": VERSAO}
+    return JSONResponse({"versao": VERSAO}, headers={"Cache-Control": "no-store"})
 
 
 class Entrada(BaseModel):
@@ -133,8 +140,8 @@ async def entrar(dados: Entrada, request: Request):
         logger.exception("falha ao identificar o vendedor (empresa %s)", cnpj)
         return _erro(503, "Não foi possível consultar o ERP agora. Tente novamente em instantes.")
     if vendedor is None:
-        return _erro(403, "Seu usuário do ERP não está ligado a um funcionário ativo. "
-                          "No ERP, informe o seu usuário no cadastro de funcionário.")
+        return _erro(403, "Seu login está certo, mas não achamos o seu cadastro de funcionário. No ERP, vincule o seu "
+                          "usuário ao funcionário ou coloque este e-mail no contato dele. Depois aguarde até 10 minutos.")
     permissoes = await vendedores.permissoes(tenant, vendedor["id_perfil"])
     token = sessao.criar(cnpj, vendedor, aparelho=request.headers.get("user-agent", ""))
     logger.info("aparelho conectado: empresa %s, funcionário %s", cnpj, vendedor["id_funcionario"])
@@ -203,7 +210,9 @@ async def assetlinks():
 
 @app.get("/")
 async def inicio():
-    return FileResponse(ESTATICOS / "index.html", headers={"Cache-Control": "no-cache"})
+    # A tela leva o número da versão para saber quando há uma nova publicação.
+    pagina = (ESTATICOS / "index.html").read_text(encoding="utf-8").replace("__VERSAO__", VERSAO)
+    return Response(pagina, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-cache"})
 
 
 app.mount("/static", StaticFiles(directory=ESTATICOS), name="static")
