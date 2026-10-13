@@ -72,7 +72,7 @@ def _com_token_aberto(linha: Mapping) -> dict:
 def list_tenants() -> list[dict]:
     with db_session() as conn:
         linhas = conn.execute(
-            "SELECT id, cnpj, nome_fantasia, ativo, criado_em, api_token FROM empresas ORDER BY criado_em DESC"
+            "SELECT id, cnpj, nome_fantasia, ativo, criado_em, api_token, vendas_liberado FROM empresas ORDER BY criado_em DESC"
         ).fetchall()
     resultado = []
     for linha in linhas:
@@ -89,6 +89,15 @@ def set_tenant_ativo(cnpj: str, ativo: bool) -> None:
         conn.execute(
             "UPDATE empresas SET ativo = ? WHERE cnpj = ?",
             (1 if ativo else 0, normalize_cnpj(cnpj)),
+        )
+
+
+def set_vendas_liberado(cnpj: str, liberado: bool) -> None:
+    """Libera ou bloqueia o Prime Vendas para a empresa (o app de vendas confere a cada chamada)."""
+    with db_session() as conn:
+        conn.execute(
+            "UPDATE empresas SET vendas_liberado = ? WHERE cnpj = ?",
+            (1 if liberado else 0, normalize_cnpj(cnpj)),
         )
 
 

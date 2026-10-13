@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS empresas (
     nome_fantasia TEXT NOT NULL,
     api_token TEXT NOT NULL,
     ativo INTEGER NOT NULL DEFAULT 1,
-    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    vendas_liberado INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -39,7 +40,8 @@ CREATE TABLE IF NOT EXISTS empresas (
     nome_fantasia TEXT NOT NULL,
     api_token TEXT NOT NULL,
     ativo INTEGER NOT NULL DEFAULT 1,
-    criado_em TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+    criado_em TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+    vendas_liberado INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -95,6 +97,8 @@ def init_db() -> None:
     if USANDO_POSTGRES:
         with db_session() as conn:
             conn.execute(SCHEMA_POSTGRES)
+            # Prime Vendas liberado para a empresa (botão no /admin). Bancos anteriores ganham a coluna desligada.
+            conn.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS vendas_liberado INTEGER NOT NULL DEFAULT 0")
             _importar_do_sqlite_se_vazio(conn)
         return
     with get_connection() as conn:
@@ -104,6 +108,8 @@ def init_db() -> None:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(empresas)")}
         if "senha_hash" in columns:
             conn.execute("ALTER TABLE empresas DROP COLUMN senha_hash")
+        if "vendas_liberado" not in columns:   # Prime Vendas liberado para a empresa (botão no /admin)
+            conn.execute("ALTER TABLE empresas ADD COLUMN vendas_liberado INTEGER NOT NULL DEFAULT 0")
 
 
 def _importar_do_sqlite_se_vazio(conn) -> None:

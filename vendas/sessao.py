@@ -69,11 +69,11 @@ async def aparelho_atual(authorization: str = Header(default="")) -> dict:
     if agora - texto_para_data(aparelho["ultimo_uso"]) > timedelta(days=config.APARELHO_VENCE_DIAS):
         _revogar_id(aparelho["id"])
         raise NAO_AUTORIZADO
-    if aparelho["cnpj"] not in config.CNPJS_LIBERADOS:
-        raise HTTPException(status_code=403, detail="O Prime Vendas não está liberado para esta empresa.")
     tenant = get_tenant_by_cnpj(aparelho["cnpj"])
     if tenant is None:   # empresa desativada no /admin
         raise NAO_AUTORIZADO
+    if not config.empresa_liberada(tenant):   # Prime Vendas bloqueado no /admin: desconecta na hora
+        raise HTTPException(status_code=403, detail="O Prime Vendas não está liberado para esta empresa.")
 
     mudancas = {}
     if agora - texto_para_data(aparelho["conferido_em"]) > timedelta(hours=config.RECONFERIR_VENDEDOR_HORAS):

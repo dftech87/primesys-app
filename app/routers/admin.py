@@ -8,7 +8,7 @@ import secrets
 from app import limite
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
-from app.tenants import create_tenant, empresa_do_token, list_tenants, set_tenant_ativo
+from app.tenants import create_tenant, empresa_do_token, list_tenants, set_tenant_ativo, set_vendas_liberado
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/templates")
@@ -127,6 +127,18 @@ async def admin_desativar_tenant(request: Request, cnpj: str):
     return templates.TemplateResponse(
         request, "admin.html", {"tenants": await _tenants_view(), "message": "Cliente desativado."}
     )
+
+
+@router.post("/tenants/{cnpj}/vendas/{acao}")
+async def admin_prime_vendas(request: Request, cnpj: str, acao: str):
+    """Liga/desliga o Prime Vendas da empresa. Bloquear desconecta na hora os celulares dela."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    if acao not in ("liberar", "bloquear"):
+        return RedirectResponse("/admin", status_code=303)
+    set_vendas_liberado(cnpj, liberado=acao == "liberar")
+    mensagem = "Prime Vendas liberado para a empresa." if acao == "liberar" else "Prime Vendas bloqueado para a empresa."
+    return templates.TemplateResponse(request, "admin.html", {"tenants": await _tenants_view(), "message": mensagem})
 
 
 @router.post("/tenants/{cnpj}/reativar")

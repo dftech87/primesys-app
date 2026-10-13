@@ -4,9 +4,13 @@ import os
 
 from app.security import normalize_cnpj
 
-# Empresas com o Prime Vendas liberado (CNPJs separados por vírgula). Fase de testes: só a DFTECH.
-# Depois a liberação passa para o /admin do PrimeSys Info.
+# A liberação de cada empresa é o botão "Prime Vendas" no /admin do PrimeSys Info (coluna vendas_liberado).
+# Opcional: CNPJs liberados também por variável (separados por vírgula), útil em testes locais.
 CNPJS_LIBERADOS = {normalize_cnpj(c) for c in os.getenv("VENDAS_CNPJS_LIBERADOS", "").split(",") if normalize_cnpj(c)}
+
+
+def empresa_liberada(tenant: dict | None) -> bool:
+    return bool(tenant) and (tenant["cnpj"] in CNPJS_LIBERADOS or bool(tenant.get("vendas_liberado")))
 
 # O ERP deixa 20 chamadas por minuto por token, somando os dois apps. O Vendas fica com uma parte menor
 # (quase tudo dele é sincronização em segundo plano) para nunca deixar o PrimeSys Info lento.

@@ -19,7 +19,7 @@ from app import limite, meuerp_client
 from app.config import COOKIE_SEGURO
 from app.database import db_session
 from app.security import normalize_cnpj
-from app.tenants import authenticate
+from app.tenants import authenticate, get_tenant_by_cnpj
 from vendas import catalogo, config, sessao, vendedores
 from vendas.db import criar_tabelas
 
@@ -70,8 +70,6 @@ async def cabecalhos(request: Request, call_next):
 
 
 criar_tabelas()
-if not config.CNPJS_LIBERADOS:
-    logger.warning("VENDAS_CNPJS_LIBERADOS vazia: nenhuma empresa consegue entrar no Prime Vendas.")
 
 
 @app.api_route("/saude", methods=["GET", "HEAD"])
@@ -119,7 +117,7 @@ async def entrar(dados: Entrada, request: Request):
         if chave_ip:
             limite.registrar_falha(chave_ip)
 
-    if cnpj not in config.CNPJS_LIBERADOS:
+    if not config.empresa_liberada(get_tenant_by_cnpj(cnpj)):   # confere no banco, antes de gastar chamada no ERP
         falhou()
         return _erro(403, "O Prime Vendas não está liberado para esta empresa. Fale com a DFTECH.")
 

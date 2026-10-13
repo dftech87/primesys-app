@@ -29,7 +29,7 @@ Assim, mudar só o Vendas não reinicia o PrimeSys Info.
 4. **Variables** do `vendas`:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
    - `TOKEN_ENCRYPTION_KEY` = referência ao serviço do PrimeSys Info (digite `${{` e escolha na lista; mesma chave, é ela que abre os tokens do ERP)
-   - `VENDAS_CNPJS_LIBERADOS` = `29970763000147` (fase de testes: só a DFTECH; separar CNPJs por vírgula)
+   - (opcional) `VENDAS_CNPJS_LIBERADOS`: só para testes. A liberação normal é o botão **Prime Vendas → Liberar** de cada empresa no `/admin` do PrimeSys Info (bloquear desconecta os celulares da empresa na hora).
 5. **Settings → Networking → Generate Domain.** Se der, editar o nome para algo como `prime-vendas`.
 6. Deploy. Nos logs não pode haver erro vermelho; `https://<domínio>/saude` deve responder `{"ok": true}`.
 
