@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Só durante a troca de chave: a chave antiga, para ler os tokens e regravá-los com a nova.
     token_encryption_key_anterior: str | None = None
     database_path: str = "primesys.db"
+    # Postgres na hospedagem (o Railway cria ao adicionar o banco). Vazia: usa o arquivo SQLite de database_path.
+    database_url: str | None = None
 
     # Tenant seed (DFTECH) used by scripts/seed_tenant.py on first run.
     meuerp_cnpj: str | None = None

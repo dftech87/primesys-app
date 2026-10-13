@@ -1,11 +1,11 @@
 import logging
-import sqlite3
+from collections.abc import Mapping
 
 import httpx
 
 from app import cripto
 from app.cache import cached
-from app.database import db_session, get_connection
+from app.database import USANDO_POSTGRES, db_session, get_connection
 from app.meuerp_client import MeuERPClient
 from app.security import normalize_cnpj
 
@@ -61,7 +61,7 @@ async def token_confere_com_cnpj(tenant: dict) -> bool:
     return dono is None or dono == tenant["cnpj"]
 
 
-def _com_token_aberto(linha: sqlite3.Row) -> dict:
+def _com_token_aberto(linha: Mapping) -> dict:
     """Linha do banco com o token já descriptografado (só em memória, para chamar o ERP)."""
     dados = dict(linha)
     if "api_token" in dados:
@@ -113,36 +113,34 @@ def criptografar_tokens_existentes() -> int:
     """Converte para criptografado os tokens ainda em texto simples (precisa de TOKEN_ENCRYPTION_KEY).
 
     Tudo numa única transação e cada token é conferido (descriptografa e compara) antes de gravar: se algo
-    não bater, nada muda. Depois roda VACUUM para apagar do arquivo os restos do texto simples antigo.
+    não bater, nada muda. No SQLite roda VACUUM depois, para apagar do arquivo os restos do texto simples antigo.
     Idempotente: sem tokens em texto simples, não faz nada."""
     if not cripto.ativa():
         return 0
     trocando = cripto.em_troca_de_chave()
-    conn = get_connection()
-    try:
+    with db_session() as conn:
         linhas = list(conn.execute("SELECT id, api_token FROM empresas"))
         # Em texto simples: criptografa. Durante uma troca de chave: regrava todos com a chave nova.
         pendentes = [l for l in linhas if trocando or not cripto.protegido(l["api_token"])]
-        if not pendentes:
-            return 0
         for linha in pendentes:
             original = cripto.revelar(linha["api_token"])
             novo = cripto.regravar_com_chave_atual(linha["api_token"]) if cripto.protegido(linha["api_token"]) else cripto.proteger(original)
             if cripto.revelar(novo) != original:
                 raise RuntimeError("conferência da criptografia falhou; nenhum token foi alterado")
             conn.execute("UPDATE empresas SET api_token = ? WHERE id = ?", (novo, linha["id"]))
-        conn.commit()
-        conn.execute("VACUUM")
-        if trocando:
-            logger.warning("%d token(s) de API regravados com a chave nova. Já pode remover TOKEN_ENCRYPTION_KEY_ANTERIOR.", len(pendentes))
-        else:
-            logger.warning("%d token(s) de API passaram a ser gravados criptografados.", len(pendentes))
-        return len(pendentes)
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    if not pendentes:
+        return 0
+    if not USANDO_POSTGRES:
+        conn = get_connection()
+        try:
+            conn.execute("VACUUM")
+        finally:
+            conn.close()
+    if trocando:
+        logger.warning("%d token(s) de API regravados com a chave nova. Já pode remover TOKEN_ENCRYPTION_KEY_ANTERIOR.", len(pendentes))
+    else:
+        logger.warning("%d token(s) de API passaram a ser gravados criptografados.", len(pendentes))
+    return len(pendentes)
 
 
 async def authenticate(cnpj: str, email: str, senha: str) -> tuple[dict | None, str | None]:

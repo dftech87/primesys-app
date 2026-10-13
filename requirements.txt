@@ -14,6 +14,9 @@ idna==3.20
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
+psycopg-binary==3.3.6
+psycopg-pool==3.3.3
+psycopg==3.3.6
 pycparser==3.1
 pydantic==2.13.5
 pydantic-settings==2.15.0
@@ -23,4 +26,5 @@ python-multipart==0.0.32
 starlette==1.7.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
+tzdata==2026.5; sys_platform == "win32"
 uvicorn==0.54.0
