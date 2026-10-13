@@ -23,7 +23,7 @@ from app.config import COOKIE_SEGURO
 from app.database import db_session
 from app.security import normalize_cnpj
 from app.tenants import authenticate, get_tenant_by_cnpj
-from vendas import catalogo, config, pedidos, sessao, vendedores
+from vendas import catalogo, clientes, config, pedidos, sessao, vendedores
 from vendas.db import criar_tabelas
 
 logger = logging.getLogger(__name__)
@@ -251,6 +251,45 @@ async def pedido_cancelar(id_pedido: str, aparelho: dict = Depends(sessao.aparel
         return _erro(422, str(erro))
     except pedidos.ErpIndisponivel:
         return _erro(503, "ERP indisponível agora. Tente de novo em instantes.")
+
+
+@app.get("/api/cep/{cep}")
+async def consulta_cep(cep: str, aparelho: dict = Depends(sessao.aparelho_atual)):
+    """Endereço pelo CEP (ViaCEP, chamado pelo servidor)."""
+    try:
+        achado = await clientes.buscar_cep(aparelho["cnpj"], cep)
+    except clientes.CadastroRecusado as erro:
+        return _erro(422, str(erro))
+    except clientes.ServicoIndisponivel:
+        return _erro(503, "Consulta de CEP indisponível agora. Digite o endereço.")
+    return achado or _erro(404, "CEP não encontrado.")
+
+
+@app.get("/api/cnpj/{cnpj}")
+async def consulta_cnpj(cnpj: str, aparelho: dict = Depends(sessao.aparelho_atual)):
+    """Já existe no ERP? + dados públicos da Receita (BrasilAPI). Só CNPJ: CPF nunca vai a serviço externo."""
+    try:
+        return await clientes.buscar_cnpj(aparelho, cnpj)
+    except clientes.CadastroRecusado as erro:
+        return _erro(422, str(erro))
+    except clientes.ServicoIndisponivel:
+        return _erro(503, "ERP indisponível agora. Tente de novo.")
+
+
+@app.post("/api/clientes")
+async def cliente_cadastrar(request: Request, aparelho: dict = Depends(sessao.aparelho_atual)):
+    try:
+        dados = await request.json()
+    except Exception:
+        return _erro(400, "Cadastro inválido.")
+    if not isinstance(dados, dict) or len(await request.body()) > 20_000:
+        return _erro(400, "Cadastro inválido.")
+    try:
+        return await clientes.cadastrar(aparelho, dados)
+    except clientes.CadastroRecusado as erro:
+        return _erro(422, str(erro))
+    except clientes.ServicoIndisponivel:
+        return _erro(503, "ERP indisponível agora. O cadastro fica guardado e é enviado depois.")
 
 
 @app.get("/api/pedidos")

@@ -203,6 +203,20 @@
     .tt { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 14px; color: #64748b; }
     .tt b { font-size: 20px; color: #0f172a; }
     .btn-sec { height: 50px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; color: #334155; font-weight: 700; font-size: 15px; cursor: pointer; }
+    .form-cli { padding: 0 16px 120px; }
+    .form-cli .lbl { margin: 12px 2px 5px; }
+    .form-cli .campo { height: 46px; }
+    .tg-tipo { display: flex; gap: 6px; margin-top: 14px; }
+    .tg-tipo button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; font-size: 14px; cursor: pointer; }
+    .tg-tipo button.on { background: #047857; color: #fff; border-color: #047857; font-weight: 700; }
+    .sec-form { font-size: 12px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: .05em; margin: 18px 2px 0; }
+    .campo .acao { border: 0; background: none; color: #047857; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .msg-cli { display: none; font-size: 13px; border-radius: 10px; padding: 9px 11px; margin-top: 8px; line-height: 1.4; }
+    .msg-cli.ok { display: block; color: #065f46; background: #ecfdf5; } .msg-cli.ruim { display: block; color: #991b1b; background: #fef2f2; }
+    .msg-cli.info { display: block; color: #1e3a8a; background: #eff6ff; }
+    .msg-cli button { margin-top: 8px; border: 0; border-radius: 8px; background: #047857; color: #fff; font-weight: 700; padding: 8px 12px; cursor: pointer; }
+    .duas-campos { display: flex; gap: 10px; } .duas-campos > div { flex: 1; min-width: 0; }
+    .pendente-tag { font-size: 10px; font-weight: 700; color: #b45309; background: #fffbeb; border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
     .btn-cancelar { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; margin-top: 12px; border: 1px solid #fecaca; border-radius: 12px; background: #fef2f2; color: #b91c1c; font-weight: 700; font-size: 15px; cursor: pointer; }
     .btn-cancelar:disabled { opacity: .6; }
     .situacao-card { background: #fff; border-radius: 16px; padding: 14px; margin-top: 14px; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
@@ -315,7 +329,7 @@
     </div>
     <div class="wrap com-indice" style="padding-bottom:150px"><div id="listaClientes"></div></div>
     <div class="indice" id="indiceClientes"></div>
-    <button class="btn-fixo" type="button" disabled>＋ Cadastrar novo cliente (próxima parte)</button>
+    <button class="btn-fixo" type="button" id="btnNovoClienteAba">＋ Cadastrar novo cliente</button>
 </section>
 
 <!-- Pedidos -->
@@ -343,7 +357,7 @@
             <div id="listaPedClientes"></div>
         </div>
         <div class="indice" id="indicePedClientes"></div>
-        <button class="btn-fixo" type="button" disabled>＋ Cadastrar novo cliente (próxima parte)</button>
+        <button class="btn-fixo" type="button" id="btnNovoClientePedido">＋ Cadastrar novo cliente</button>
     </div>
 
     <div id="passo2" class="passo">
@@ -367,6 +381,43 @@
         </div>
         <div class="barra-ped"><span class="tot"><small id="barraResumoInfo"></small><b id="barraResumoTotal">R$ 0,00</b></span><button type="button" class="btn-barra" id="btnEnviarPedido" disabled>Enviar</button></div>
     </div>
+</section>
+
+<!-- Cadastro de cliente -->
+<section class="tela" id="telaCliente">
+    <div class="cab-ped pa" id="cabCliente">
+        <div class="l1"><button type="button" class="voltar" id="btnVoltarCliente">←</button>
+            <span class="t"><b>Novo cliente</b><small id="cliOrigem">Cadastro no ERP</small></span><span class="net" data-net>Online</span></div>
+    </div>
+    <form class="form-cli" id="formCliente" autocomplete="off" novalidate>
+        <div class="tg-tipo" id="tgTipoPessoa"><button type="button" data-tp="J" class="on">Empresa (CNPJ)</button><button type="button" data-tp="F">Pessoa (CPF)</button></div>
+        <label class="lbl" for="cliDoc" id="cliDocRotulo">CNPJ</label>
+        <div class="campo"><input id="cliDoc" inputmode="numeric" maxlength="18" placeholder="00.000.000/0000-00"><button type="button" class="acao" id="btnBuscarCnpj">Buscar dados</button></div>
+        <div class="msg-cli" id="cliMsgDoc"></div>
+        <label class="lbl" for="cliNome" id="cliNomeRotulo">Razão social</label>
+        <div class="campo"><input id="cliNome" maxlength="120" autocapitalize="characters"></div>
+        <div id="blocoFantasia"><label class="lbl" for="cliFantasia">Nome fantasia</label>
+        <div class="campo"><input id="cliFantasia" maxlength="120" autocapitalize="characters"></div></div>
+        <div class="sec-form">Contato</div>
+        <div class="duas-campos">
+            <div><label class="lbl" for="cliCelular">Celular</label><div class="campo"><input id="cliCelular" inputmode="tel" maxlength="16" placeholder="(91) 9 0000-0000"></div></div>
+            <div><label class="lbl" for="cliEmail">E-mail</label><div class="campo"><input id="cliEmail" type="email" inputmode="email" maxlength="120" placeholder="opcional" autocapitalize="off"></div></div>
+        </div>
+        <div class="sec-form">Endereço</div>
+        <div class="duas-campos">
+            <div><label class="lbl" for="cliCep">CEP</label><div class="campo"><input id="cliCep" inputmode="numeric" maxlength="9" placeholder="00000-000"></div></div>
+            <div><label class="lbl" for="cliNumero">Número</label><div class="campo"><input id="cliNumero" maxlength="20" placeholder="S/N"></div></div>
+        </div>
+        <div class="msg-cli" id="cliMsgCep"></div>
+        <label class="lbl" for="cliRua">Rua</label><div class="campo"><input id="cliRua" maxlength="120"></div>
+        <div class="duas-campos">
+            <div><label class="lbl" for="cliBairro">Bairro</label><div class="campo"><input id="cliBairro" maxlength="60"></div></div>
+            <div><label class="lbl" for="cliComplemento">Complemento</label><div class="campo"><input id="cliComplemento" maxlength="60" placeholder="opcional"></div></div>
+        </div>
+        <label class="lbl">Cidade / UF</label><div class="campo"><input id="cliCidade" readonly placeholder="preenchido pelo CEP"></div>
+        <div class="erro" id="erroCliente" role="alert"></div>
+    </form>
+    <div class="barra-ped"><span class="tot"><small id="cliBarraInfo">Confere no ERP se já existe</small></span><button type="button" class="btn-barra" id="btnSalvarCliente">Salvar cliente</button></div>
 </section>
 
 <!-- Item do pedido: quantidade, preço e desconto -->
@@ -493,7 +544,7 @@ async function abrirCofre(pin) {   // PIN errado = a decifragem falha (o AES-GCM
 }
 async function esquecerAparelho() {
     // Outro usuário pode ser de outra empresa: o catálogo guardado sai junto.
-    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'ultimaSync', 'configPedido', 'cursor_pedidos', ...TABELAS.map((n) => 'cursor_' + n)]);
+    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'ultimaSync', 'configPedido', 'cursor_pedidos', 'clientesFila', ...TABELAS.map((n) => 'cursor_' + n)]);
     await limparCatalogo();
     tokenEmUso = null; conta = null; produtos = []; clientes = []; estoque = new Map(); pedidos = []; configPedido = null;
 }
@@ -908,7 +959,7 @@ function letraDe(c) { const l = semAcento(c.exibir).charAt(0).toUpperCase(); ret
 function linhaCliente(c) {
     const sub = [c.bairro, c.documento].filter(Boolean).join(' · ');
     return `<div class="item"><span class="av-p${ehConsumidorFinal(c) ? ' cf' : ''}">${ehConsumidorFinal(c) ? '👤' : esc(iniciais(c.exibir))}</span>
-        <span class="n"><b>${esc(c.exibir)}</b><small>${esc(sub || c.nome)}</small></span></div>`;
+        <span class="n"><b>${esc(c.exibir)}${c.pendente ? '<span class="pendente-tag">aguardando envio</span>' : ''}</b><small>${esc(sub || c.nome)}</small></span></div>`;
 }
 function desenharClientes() {
     const termo = semAcento(document.getElementById('buscaCliente').value.trim());
@@ -983,7 +1034,8 @@ async function enviarFila() {
     if (enviando || !navigator.onLine || !tokenEmUso) return;
     enviando = true;
     try {
-        for (const p of pedidos.filter((x) => x.situacao === 'fila')) {
+        await enviarClientesPendentes();
+        for (const p of pedidos.filter((x) => x.situacao === 'fila' && x.cliente > 0)) {
             let r;
             try {
                 r = await api('/api/pedidos', { method: 'POST', body: JSON.stringify({
@@ -1086,7 +1138,7 @@ function abrirDetalhe(id) {
     const [rotulo, cls] = SITUACOES[p.situacao] || [p.situacao, ''];
     const explica = { fila: 'Guardado no aparelho. É enviado sozinho quando houver internet.', no_caixa: 'No ERP, aguardando finalizar: o caixa importa no PDV ou a loja finaliza na nuvem.',
         rascunho: 'Na nuvem, aguardando a loja faturar como NFC-e ou NF-e.', finalizado: textoVendas(p) ? `Finalizado na venda nº ${textoVendas(p)} (pré-venda ou NFC-e, conforme escolhido na finalização).` : 'Finalizado: virou venda (pré-venda ou NFC-e, conforme escolhido na finalização).', faturado: 'Faturado pela loja.',
-        cancelado: 'Cancelado no ERP.', recusado: p.mensagem || 'O pedido não foi aceito.' }[p.situacao] || '';
+        cancelado: textoVendas(p) ? `Cancelado no ERP (a venda nº ${textoVendas(p)} também foi cancelada).` : 'Cancelado no ERP.', recusado: p.mensagem || 'O pedido não foi aceito.' }[p.situacao] || '';
     document.getElementById('detSituacao').innerHTML = `<b class="${cls}">${rotulo}</b><small>${esc(explica)}</small>`;
     document.getElementById('detItens').innerHTML = p.itens.map((i) => `<div class="item"><span class="n"><b>${esc(i.descricao)}</b><small>${fmtQtd(i.qtd)} × ${fmtMoeda(i.preco)}${i.desconto ? ' · desconto ' + fmtMoeda(i.desconto) : ''}</small></span><span class="p">${fmtMoeda(centavos(i.qtd * i.preco - (i.desconto || 0)))}</span></div>`).join('')
         + `<div class="item"><span class="n"><b>Total</b></span><span class="p">${fmtMoeda(p.total)}</span></div>`;
@@ -1372,6 +1424,191 @@ document.getElementById('btnEnviarPedido').addEventListener('click', async () =>
     try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) { await esquecerAparelho(); return prepararLogin(e.message); } }
     abrirDetalhe(pedido.id);
 });
+
+
+// ============================================================================================================
+// Cadastro de cliente: confere no ERP se já existe, CEP e CNPJ preenchem sozinhos (consultas feitas pelo servidor),
+// e sem internet o cadastro fica guardado e sai antes dos pedidos desse cliente.
+// ============================================================================================================
+let cadOrigem = 'aba', cadTipo = 'J', cadIbge = null;
+const digitos = (t) => String(t || '').replace(/\D/g, '');
+function mascaraCpf(v) { const d = digitos(v).slice(0, 11); return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2'); }
+function mascaraCep(v) { const d = digitos(v).slice(0, 8); return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d; }
+function mascaraFone(v) { const d = digitos(v).slice(0, 11); if (d.length <= 2) return d; if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`; if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`; return `(${d.slice(0, 2)}) ${d[2]} ${d.slice(3, 7)}-${d.slice(7)}`; }
+function cpfOk(c) { const d = digitos(c); if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false; for (const n of [9, 10]) { let s = 0; for (let i = 0; i < n; i++) s += +d[i] * (n + 1 - i); if ((s * 10 % 11) % 10 !== +d[n]) return false; } return true; }
+function cnpjOk(c) { const d = digitos(c); if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false; for (const n of [12, 13]) { const pesos = n === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]; let s = 0; for (let i = 0; i < n; i++) s += +d[i] * pesos[i]; const dv = 11 - s % 11; if ((dv >= 10 ? 0 : dv) !== +d[n]) return false; } return true; }
+function msgCli(id, texto, tipo, extra) { const el = document.getElementById(id); el.className = 'msg-cli' + (texto ? ' ' + (tipo || 'info') : ''); el.innerHTML = texto ? esc(texto) + (extra || '') : ''; }
+
+function abrirCadastro(origem) {
+    cadOrigem = origem; cadIbge = null;
+    document.getElementById('formCliente').reset();
+    ['cliMsgDoc', 'cliMsgCep'].forEach((id) => msgCli(id, ''));
+    document.getElementById('erroCliente').classList.remove('mostrar');
+    const termo = origem === 'pedido' ? document.getElementById('buscaPedCliente').value.trim() : document.getElementById('buscaCliente').value.trim();
+    if (termo && !/^\d/.test(termo)) document.getElementById('cliNome').value = termo.toUpperCase();   // veio da busca sem resultado
+    document.getElementById('cliOrigem').textContent = origem === 'pedido' ? 'Para o pedido de venda' : 'Cadastro no ERP';
+    escolherTipoPessoa(termo && digitos(termo).length === 11 ? 'F' : 'J');
+    if (termo && /^\d/.test(termo)) document.getElementById('cliDoc').value = digitos(termo).length === 11 ? mascaraCpf(termo) : mascaraCnpj(termo);
+    mostrar('telaCliente');
+}
+function escolherTipoPessoa(tp) {
+    cadTipo = tp;
+    document.querySelectorAll('#tgTipoPessoa button').forEach((b) => b.classList.toggle('on', b.dataset.tp === tp));
+    document.getElementById('cliDocRotulo').textContent = tp === 'J' ? 'CNPJ' : 'CPF (opcional)';
+    document.getElementById('cliDoc').placeholder = tp === 'J' ? '00.000.000/0000-00' : '000.000.000-00';
+    document.getElementById('cliDoc').value = '';
+    document.getElementById('btnBuscarCnpj').style.display = tp === 'J' ? '' : 'none';
+    document.getElementById('cliNomeRotulo').textContent = tp === 'J' ? 'Razão social' : 'Nome completo';
+    document.getElementById('blocoFantasia').style.display = tp === 'J' ? '' : 'none';
+    msgCli('cliMsgDoc', '');
+}
+document.getElementById('tgTipoPessoa').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (b) escolherTipoPessoa(b.dataset.tp); });
+document.getElementById('btnNovoClientePedido').addEventListener('click', () => abrirCadastro('pedido'));
+document.getElementById('btnNovoClienteAba').addEventListener('click', () => abrirCadastro('aba'));
+document.getElementById('btnVoltarCliente').addEventListener('click', () => {
+    if (cadOrigem === 'pedido') { mostrar('telaPedido'); irPasso(1); } else { mostrar('telaClientes'); desenharClientes(); }
+});
+document.getElementById('cliDoc').addEventListener('input', (ev) => { ev.target.value = cadTipo === 'J' ? mascaraCnpj(ev.target.value) : mascaraCpf(ev.target.value); msgCli('cliMsgDoc', ''); });
+document.getElementById('cliCelular').addEventListener('input', (ev) => { ev.target.value = mascaraFone(ev.target.value); });
+document.getElementById('cliCep').addEventListener('input', async (ev) => {
+    ev.target.value = mascaraCep(ev.target.value); cadIbge = null;
+    if (digitos(ev.target.value).length === 8) await completarCep(digitos(ev.target.value));
+});
+async function completarCep(cep) {
+    if (!navigator.onLine) return msgCli('cliMsgCep', 'Sem internet: digite rua e bairro. A cidade é completada pelo CEP quando o cadastro for enviado.', 'info');
+    msgCli('cliMsgCep', 'Buscando o CEP…', 'info');
+    try {
+        const r = await api('/api/cep/' + cep);
+        if (r.status !== 200) return msgCli('cliMsgCep', r.corpo.erro || 'CEP não encontrado. Confira os números.', 'ruim');
+        const e = r.corpo;
+        if (e.logradouro) document.getElementById('cliRua').value = e.logradouro;
+        if (e.bairro) document.getElementById('cliBairro').value = e.bairro;
+        document.getElementById('cliCidade').value = `${e.cidade} / ${e.uf}`;
+        cadIbge = { ibge: e.ibge, cidade: e.cidade, uf: e.uf };
+        msgCli('cliMsgCep', e.logradouro ? '✓ Endereço preenchido pelo CEP. Confira o número.' : '✓ Cidade encontrada. Este CEP é geral: digite a rua.', 'ok');
+    } catch (err) { msgCli('cliMsgCep', 'Não foi possível consultar o CEP agora. Digite o endereço.', 'info'); }
+}
+document.getElementById('btnBuscarCnpj').addEventListener('click', async () => {
+    const doc = digitos(document.getElementById('cliDoc').value);
+    if (!cnpjOk(doc)) return msgCli('cliMsgDoc', 'CNPJ inválido. Confira os números.', 'ruim');
+    if (!navigator.onLine) return msgCli('cliMsgDoc', 'Sem internet: preencha os dados à mão.', 'info');
+    msgCli('cliMsgDoc', 'Consultando…', 'info');
+    try {
+        const r = await api('/api/cnpj/' + doc);
+        if (r.status !== 200) return msgCli('cliMsgDoc', r.corpo.erro || 'Não foi possível consultar agora.', 'ruim');
+        if (r.corpo.existente) return mostrarJaExiste(r.corpo.existente);
+        const d = r.corpo.dados;
+        if (!d) return msgCli('cliMsgDoc', 'Não existe no ERP. Dados da Receita indisponíveis: preencha à mão.', 'info');
+        document.getElementById('cliNome').value = d.razao_social || '';
+        document.getElementById('cliFantasia').value = d.fantasia || '';
+        if (d.fone) document.getElementById('cliCelular').value = mascaraFone(d.fone);
+        if (d.email) document.getElementById('cliEmail').value = d.email;
+        if (d.cep) document.getElementById('cliCep').value = mascaraCep(d.cep);
+        document.getElementById('cliRua').value = d.logradouro || '';
+        document.getElementById('cliNumero').value = d.numero || '';
+        document.getElementById('cliComplemento').value = d.complemento || '';
+        document.getElementById('cliBairro').value = d.bairro || '';
+        if (d.ibge) { cadIbge = { ibge: d.ibge, cidade: d.cidade, uf: d.uf }; document.getElementById('cliCidade').value = `${d.cidade} / ${d.uf}`; }
+        msgCli('cliMsgDoc', `✓ Não existe no ERP. Dados públicos preenchidos${d.situacao && d.situacao !== 'ATIVA' ? ' (atenção: CNPJ ' + d.situacao + ' na Receita)' : ''}. Confira.`, d.situacao && d.situacao !== 'ATIVA' ? 'ruim' : 'ok');
+    } catch (err) { msgCli('cliMsgDoc', 'Sem resposta do servidor. Preencha à mão.', 'info'); }
+});
+function mostrarJaExiste(ex) {
+    msgCli('cliMsgDoc', `Este documento já está cadastrado no ERP: ${ex.nome || 'cliente ' + ex.codigo} (cód. ${ex.codigo}).`, 'info',
+        cadOrigem === 'pedido' ? `<br><button type="button" id="btnUsarExistente" data-cod="${ex.codigo}" data-nome="${esc(ex.nome)}">Usar este cliente</button>` : '');
+}
+document.getElementById('cliMsgDoc').addEventListener('click', (ev) => {
+    const b = ev.target.closest('#btnUsarExistente');
+    if (b) usarClienteNoPedido(+b.dataset.cod, b.dataset.nome);
+});
+function usarClienteNoPedido(id, nome) {
+    rascunho.cliente = id; rascunho.cliente_nome = nome || ('Cliente ' + id);
+    mostrar('telaPedido'); irPasso(2);
+}
+
+function lerFormulario() {
+    return {
+        id: crypto.randomUUID(), tipo_pessoa: cadTipo, documento: digitos(document.getElementById('cliDoc').value),
+        nome: document.getElementById('cliNome').value.trim(), fantasia: cadTipo === 'J' ? document.getElementById('cliFantasia').value.trim() : '',
+        celular: digitos(document.getElementById('cliCelular').value), email: document.getElementById('cliEmail').value.trim(),
+        cep: digitos(document.getElementById('cliCep').value), logradouro: document.getElementById('cliRua').value.trim(),
+        numero: document.getElementById('cliNumero').value.trim(), complemento: document.getElementById('cliComplemento').value.trim(),
+        bairro: document.getElementById('cliBairro').value.trim(),
+        cidade: cadIbge ? cadIbge.cidade : '', uf: cadIbge ? cadIbge.uf : '', ibge: cadIbge ? cadIbge.ibge : null,
+    };
+}
+function validarFormulario(d) {
+    if (d.tipo_pessoa === 'J' && !cnpjOk(d.documento)) return 'Informe um CNPJ válido.';
+    if (d.tipo_pessoa === 'F' && d.documento && !cpfOk(d.documento)) return 'CPF inválido. Confira os números (ou deixe em branco).';
+    if (d.nome.length < 2) return d.tipo_pessoa === 'J' ? 'Informe a razão social.' : 'Informe o nome.';
+    if (d.celular && ![10, 11].includes(d.celular.length)) return 'Celular inválido: DDD + número.';
+    if (d.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) return 'E-mail inválido.';
+    if (d.cep && d.cep.length !== 8) return 'CEP incompleto.';
+    if (d.cep && !d.logradouro) return 'Informe a rua (ou apague o CEP).';
+    return '';
+}
+function clienteLocal(c, pendente) {
+    const nome = c.fantasia || c.nome;
+    return { ...c, ativo: 1, pendente: !!pendente, exibir: nome, _busca: semAcento(`${c.nome} ${c.fantasia} ${c.documento || ''} ${digitos(c.documento)}`) };
+}
+document.getElementById('btnSalvarCliente').addEventListener('click', async () => {
+    const d = lerFormulario(), erro = document.getElementById('erroCliente'), btn = document.getElementById('btnSalvarCliente');
+    const problema = validarFormulario(d);
+    erro.classList.toggle('mostrar', !!problema); erro.textContent = problema;
+    if (problema) return;
+    btn.disabled = true; btn.textContent = 'Salvando…';
+    try {
+        if (navigator.onLine) {
+            const r = await api('/api/clientes', { method: 'POST', body: JSON.stringify(d) });
+            if (r.status === 200) return await clienteSalvo(r.corpo.cliente, r.corpo.existente);
+            if (r.status === 422 || r.status === 400) { erro.textContent = r.corpo.erro || 'Cadastro recusado.'; erro.classList.add('mostrar'); return; }
+            if (r.status === 401 || r.status === 403) { await esquecerAparelho(); return prepararLogin(r.corpo.detail || 'Acesso encerrado.'); }
+        }
+        // Sem internet (ou ERP fora): guarda o cadastro; o pedido desse cliente espera ele ser enviado.
+        const tempId = -Date.now();
+        const fila = (await lerLocal('clientesFila')) || [];
+        fila.push({ temp: tempId, dados: d });
+        await gravarLocal('clientesFila', fila);
+        const c = clienteLocal({ id: tempId, nome: d.nome, fantasia: d.fantasia, documento: d.documento ? (d.tipo_pessoa === 'J' ? mascaraCnpj(d.documento) : '***.' + d.documento.slice(3, 6) + '.' + d.documento.slice(6, 9) + '-**') : '', bairro: d.bairro, cidade: d.cidade, uf: d.uf, fone: d.celular }, true);
+        await gravarLinhas('clientes', [c]);
+        await carregarCatalogo();
+        alert('Sem internet: o cliente foi guardado no aparelho e será cadastrado no ERP assim que a conexão voltar.');
+        await clienteSalvo(c, false, true);
+    } catch (e) {
+        erro.textContent = 'Sem resposta do servidor. Tente de novo.'; erro.classList.add('mostrar');
+    } finally { btn.disabled = false; btn.textContent = 'Salvar cliente'; }
+});
+async function clienteSalvo(cliente, existente, jaLocal) {
+    if (!jaLocal) { await gravarLinhas('clientes', [cliente]); await carregarCatalogo(); }
+    const c = clientes.find((x) => x.id === cliente.id) || clienteLocal(cliente);
+    if (existente) alert(`Este cliente já existia no ERP (cód. ${cliente.id}). Vamos usar o cadastro existente.`);
+    if (cadOrigem === 'pedido') return usarClienteNoPedido(c.id, c.exibir);
+    mostrar('telaClientes'); desenharClientes();
+}
+
+// Cadastros guardados sem internet: enviados antes dos pedidos; o pedido passa a apontar para o código real.
+async function enviarClientesPendentes() {
+    const fila = (await lerLocal('clientesFila')) || [];
+    if (!fila.length || !navigator.onLine || !tokenEmUso) return;
+    const restantes = [];
+    for (const item of fila) {
+        let r;
+        try { r = await api('/api/clientes', { method: 'POST', body: JSON.stringify(item.dados) }); } catch (e) { restantes.push(item); continue; }
+        if (r.status === 200) {
+            const real = r.corpo.cliente;
+            await gravarLinhas('clientes', [real]);
+            const db = await abrirBanco();
+            await new Promise((ok) => { const tx = db.transaction('clientes', 'readwrite'); tx.objectStore('clientes').delete(item.temp); tx.oncomplete = ok; tx.onerror = ok; });
+            for (const p of pedidos.filter((x) => x.cliente === item.temp)) { p.cliente = real.id; p.cliente_nome = real.fantasia || real.nome; }
+            await gravarLinhas('pedidos', pedidos.filter((x) => x.cliente === real.id));
+        } else if (r.status === 422) {
+            // Cadastro recusado (ex.: dado inválido): o pedido desse cliente fica parado com o aviso.
+            for (const p of pedidos.filter((x) => x.cliente === item.temp && x.situacao === 'fila')) { p.situacao = 'recusado'; p.mensagem = 'Cadastro do cliente recusado: ' + (r.corpo.erro || ''); }
+            await gravarLinhas('pedidos', pedidos.filter((x) => x.cliente === item.temp));
+        } else restantes.push(item);
+    }
+    await gravarLocal('clientesFila', restantes);
+    await carregarCatalogo();
+}
 
 // ============================================================================================================
 // Aviso de nova versão (igual ao PrimeSys Info): o app pergunta ao servidor qual versão está no ar (ao voltar para

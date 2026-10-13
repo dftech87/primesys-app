@@ -56,6 +56,11 @@ SCHEMA = [
         id_documento INTEGER, criado_em TEXT NOT NULL, enviado_em TEXT, atualizado_em TEXT NOT NULL, carimbo TEXT NOT NULL
     )""",
     "CREATE INDEX IF NOT EXISTS pv_pedidos_vendedor ON pv_pedidos (cnpj, id_funcionario, carimbo)",
+    # Clientes cadastrados pelo app (id criado no celular: reenviar o mesmo cadastro não cria outro cliente).
+    """CREATE TABLE IF NOT EXISTS pv_cadastros (
+        id TEXT PRIMARY KEY, cnpj TEXT NOT NULL, id_funcionario INTEGER NOT NULL, id_pessoa INTEGER NOT NULL,
+        resultado TEXT NOT NULL, criado_em TEXT NOT NULL
+    )""",
     # Controle da leitura do ERP por empresa e tabela: até onde já leu (marca do ERP) e quando.
     """CREATE TABLE IF NOT EXISTS pv_sincronizacao (
         cnpj TEXT NOT NULL, tabela TEXT NOT NULL, marca_erp TEXT NOT NULL DEFAULT '',
