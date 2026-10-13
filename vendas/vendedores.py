@@ -113,6 +113,15 @@ async def do_email(tenant: dict, email: str) -> dict | None:
     return {**vendedor, "nome": nome, "primeiro_nome": nome.split(" ")[0] if nome else ""}
 
 
+async def do_funcionario(tenant: dict, id_funcionario: int) -> dict | None:
+    """Dados atuais do vendedor (comissão, perfil) pelo código do funcionário, para conferir cada pedido."""
+    mapa = await cached((tenant["cnpj"], "vendas-mapa-vendedores"), TTL_MAPA, lambda: _montar_mapa(tenant["api_token"]))
+    candidatos = [v for v in mapa.values() if v["id_funcionario"] == int(id_funcionario)]
+    # Se o mesmo funcionário aparece pelas duas fontes, vale a do usuário vinculado (tem o perfil).
+    candidatos.sort(key=lambda v: v.get("origem") != "usuario")
+    return candidatos[0] if candidatos else None
+
+
 async def ainda_ativo(tenant: dict, id_usuario: int, id_funcionario: int) -> bool | None:
     """Reconferência periódica: o vendedor continua ativo e com o mesmo usuário? None se o ERP não respondeu."""
     try:

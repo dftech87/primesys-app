@@ -21,7 +21,7 @@ from app.config import COOKIE_SEGURO
 from app.database import db_session
 from app.security import normalize_cnpj
 from app.tenants import authenticate, get_tenant_by_cnpj
-from vendas import catalogo, config, sessao, vendedores
+from vendas import catalogo, config, pedidos, sessao, vendedores
 from vendas.db import criar_tabelas
 
 logger = logging.getLogger(__name__)
@@ -188,6 +188,45 @@ async def dados(tabela: str, cursor: str = "", aparelho: dict = Depends(sessao.a
     if tabela not in catalogo.TABELAS or len(cursor) > 80:
         return _erro(404, "Tabela desconhecida.")
     return catalogo.mudancas(aparelho["cnpj"], tabela, cursor)
+
+
+# ---- Pedidos ----------------------------------------------------------------------------------------------------
+@app.get("/api/pedido/config")
+async def pedido_config(aparelho: dict = Depends(sessao.aparelho_atual)):
+    """Formas de pagamento permitidas em cada tipo de documento (o celular guarda para montar pedidos sem internet)."""
+    try:
+        return await pedidos.config_da_empresa(aparelho["tenant"])
+    except Exception:
+        logger.exception("configuração de pedidos indisponível (empresa %s)", aparelho["cnpj"])
+        return _erro(503, "ERP indisponível agora.")
+
+
+@app.post("/api/pedidos")
+async def pedido_enviar(request: Request, aparelho: dict = Depends(sessao.aparelho_atual)):
+    try:
+        dados = await request.json()
+    except Exception:
+        return _erro(400, "Pedido inválido.")
+    if not isinstance(dados, dict) or len(await request.body()) > 200_000:
+        return _erro(400, "Pedido inválido.")
+    try:
+        return await pedidos.receber(aparelho, dados)
+    except pedidos.PedidoRecusado as erro:
+        return _erro(422, str(erro))
+    except pedidos.ErpIndisponivel:
+        return _erro(503, "ERP indisponível agora. O pedido fica guardado e é enviado depois.")
+
+
+@app.get("/api/pedidos")
+async def pedido_lista(cursor: str = "", aparelho: dict = Depends(sessao.aparelho_atual)):
+    """Situação dos pedidos do vendedor (no caixa, finalizado, faturado...). Confere o ERP no máximo a cada 2 min."""
+    if len(cursor) > 120:
+        return _erro(400, "Cursor inválido.")
+    try:
+        await pedidos.conferir_situacoes(aparelho["tenant"])
+    except Exception:
+        logger.exception("falha conferindo situação dos pedidos")
+    return pedidos.do_vendedor(aparelho["cnpj"], aparelho["id_funcionario"], cursor)
 
 
 # ---- App (PWA) -------------------------------------------------------------------------------------------------
