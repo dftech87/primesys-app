@@ -1,8 +1,10 @@
 """Pedidos do Prime Vendas: o celular monta o pedido (mesmo sem internet) e envia; o servidor confere tudo de novo
 e lança no ERP.
 
-  - Pedido de venda (PA): natureza "PEDIDO VENDA", status E -> aparece no PDV para o caixa importar e finalizar.
-  - Pré-venda (PV): natureza "PRE-VENDA", status R (rascunho) -> a loja fatura na nuvem como NFC-e/NF-e.
+  - Pedido de venda (PA): natureza "PEDIDO VENDA", status E -> o caixa importa no PDV ou a loja finaliza na nuvem;
+    na finalização é que se escolhe pré-venda (não fiscal) ou NFC-e (fiscal).
+  - Pré-venda (PV) como tipo de documento saiu do app (decisão de 13/10/2026): o pedido de venda já cobre os dois
+    caminhos. O código continua aceitando ler pré-vendas antigas, mas não cria novas (TIPOS_ATIVOS).
 Nada vindo do celular é aceito sem conferência: cliente e produtos têm que existir na cópia do catálogo, o preço é
 o do servidor, desconto respeita o produto e o perfil do vendedor, a comissão vem do cadastro do funcionário e as
 formas de pagamento têm que ser as permitidas para aquele tipo de documento (configuradas na natureza, no ERP).
@@ -29,6 +31,7 @@ TIPOS = {
     "PA": {"nome": "Pedido de venda", "natureza_padrao": 530, "descricao": "PEDIDO VENDA", "status": "E"},
     "PV": {"nome": "Pré-venda", "natureza_padrao": 500, "descricao": "PRE-VENDA", "status": "R"},
 }
+TIPOS_ATIVOS = ("PA",)
 TTL_CONFIG = 6 * 3600
 FUSO_LOJA = timezone(timedelta(hours=-3))   # horário de Brasília (sem horário de verão desde 2019)
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -51,7 +54,8 @@ async def _ler_config(token: str) -> dict:
                   if p.get("ativo") == "S"}
     parcelamentos: dict[int, list] = {}
     config = {}
-    for tipo, regra in TIPOS.items():
+    for tipo in TIPOS_ATIVOS:
+        regra = TIPOS[tipo]
         ativas = [n for n in naturezas if n.get("ativo") == "S" and n.get("tipoMovimento") == "S"]
         natureza = next((n for n in ativas if int(n["codigo"]) == regra["natureza_padrao"]), None) \
             or next((n for n in ativas if (n.get("descricao") or "").strip().upper() == regra["descricao"]), None)
@@ -109,8 +113,8 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
     Devolve o corpo pronto para o ERP + o resumo para gravar. Levanta PedidoRecusado com a explicação."""
     tenant, cnpj = aparelho["tenant"], aparelho["cnpj"]
     tipo = dados.get("tipo")
-    if tipo not in TIPOS:
-        raise PedidoRecusado("Tipo de documento inválido.")
+    if tipo not in TIPOS_ATIVOS:
+        raise PedidoRecusado("O app envia só pedido de venda. Refaça como pedido de venda.")
     config = (await config_da_empresa(tenant))[tipo]
     if not config.get("disponivel"):
         raise PedidoRecusado(f"A natureza de operação de {TIPOS[tipo]['nome']} não foi encontrada no ERP.")

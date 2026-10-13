@@ -191,9 +191,6 @@
     .folha .alca { width: 40px; height: 5px; border-radius: 3px; background: #cbd5e1; margin: 0 auto 12px; }
     .folha h3 { margin: 0 0 6px; font-size: 17px; }
     .folha .sub { font-size: 12px; color: #64748b; }
-    .op-tipo { display: flex; gap: 12px; align-items: center; width: 100%; border: 1px solid #e2e8f0; border-radius: 14px; padding: 13px; margin-top: 10px; background: #fff; text-align: left; font: inherit; cursor: pointer; }
-    .op-tipo .ic { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex: none; }
-    .op-tipo b { display: block; font-size: 15px; } .op-tipo small { color: #64748b; font-size: 12px; }
     .duas { display: flex; gap: 10px; margin-top: 14px; } .duas > * { flex: 1; min-width: 0; }
     .lb { font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; }
     .cx { width: 100%; height: 46px; border: 1px solid #cbd5e1; border-radius: 12px; display: flex; align-items: center; padding: 0 12px; font-size: 16px; font-weight: 600; background: #fff; }
@@ -322,23 +319,13 @@
 <!-- Pedidos -->
 <section class="tela" id="telaPedidos">
     <div class="cab-lista"><div class="l1"><span class="nm">Meus pedidos</span><span class="net" data-net>Online</span></div>
-        <div class="abas" id="abasPedidos"><button type="button" data-tipo="PA" class="on">🧾 Pedido de venda</button><button type="button" data-tipo="PV">📝 Pré-venda</button></div></div>
+</div>
     <div class="wrap">
         <div class="resumo3" id="resumoPedidos"></div>
         <div class="busca contorno"><span>🔍</span><input id="buscaPedido" placeholder="Nº do pedido ou cliente" autocomplete="off"><button class="limpar" type="button" data-limpar="buscaPedido">✕</button></div>
         <div id="listaPedidos"></div>
     </div>
 </section>
-
-<!-- Escolha do tipo de documento -->
-<div class="vela" id="velaTipo" hidden></div>
-<div class="folha" id="folhaTipo" hidden>
-    <div class="alca"></div>
-    <h3>Que tipo de pedido?</h3>
-    <button type="button" class="op-tipo" data-tipo="PA"><span class="ic" style="background:#dbeafe">🧾</span><span><b>Pedido de venda</b><small>O caixa importa no PDV e finaliza</small></span></button>
-    <button type="button" class="op-tipo" data-tipo="PV"><span class="ic" style="background:#fef3c7">📝</span><span><b>Pré-venda</b><small>Fica como rascunho na nuvem para faturar NFC-e/NF-e</small></span></button>
-    <div class="nota" id="tipoAviso" style="margin:6px 0 0"></div>
-</div>
 
 <!-- Novo pedido: passo a passo Cliente > Produtos > Resumo -->
 <section class="tela" id="telaPedido">
@@ -963,14 +950,13 @@ document.getElementById('nav').addEventListener('click', (ev) => {
 // ============================================================================================================
 const NOMES_TIPO = { PA: 'Pedido de venda', PV: 'Pré-venda' };
 const SITUACOES = {
-    fila: ['⏳ aguardando envio', 's-fila'], recusado: ['⚠ recusado pelo ERP', 's-err'], no_caixa: ['🧾 no caixa', 's-cx'],
-    finalizado: ['✓ finalizado no caixa', 's-ok'], rascunho: ['☁ rascunho na nuvem', 's-nuv'], faturado: ['✓ faturado', 's-ok'],
+    fila: ['⏳ aguardando envio', 's-fila'], recusado: ['⚠ recusado pelo ERP', 's-err'], no_caixa: ['🧾 aguardando finalizar', 's-cx'],
+    finalizado: ['✓ finalizado', 's-ok'], rascunho: ['☁ rascunho na nuvem', 's-nuv'], faturado: ['✓ faturado', 's-ok'],
     cancelado: ['✕ cancelado', 's-can'],
 };
 let pedidos = [];            // todos os pedidos guardados no aparelho
 let configPedido = null;     // formas de pagamento permitidas por tipo (vindas do ERP, guardadas para usar sem internet)
 let rascunho = null;         // pedido sendo montado agora
-let abaPedidos = 'PA';
 
 async function carregarPedidos() {
     pedidos = (await lerTodos('pedidos')).sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || ''));
@@ -1061,14 +1047,11 @@ function linhaPedido(p) {
 
 // ---- Aba Pedidos: Pedido de venda | Pré-venda ----
 function desenharPedidos() {
-    document.querySelectorAll('#abasPedidos button').forEach((b) => b.classList.toggle('on', b.dataset.tipo === abaPedidos));
     const termo = semAcento(document.getElementById('buscaPedido').value.trim());
-    const doTipo = pedidos.filter((p) => p.tipo === abaPedidos);
+    const doTipo = pedidos;
     const conta = (lista) => doTipo.filter((p) => lista.includes(p.situacao)).length;
     const problema = conta(['recusado']) + conta(['fila']);
-    document.getElementById('resumoPedidos').innerHTML = abaPedidos === 'PA'
-        ? `<div>No caixa<b>${conta(['no_caixa'])}</b></div><div>Finalizados<b>${conta(['finalizado'])}</b></div><div>Pendentes<b class="${problema ? 'vermelho' : ''}">${problema}</b></div>`
-        : `<div>Rascunho<b>${conta(['rascunho'])}</b></div><div>Faturadas<b>${conta(['faturado'])}</b></div><div>Pendentes<b class="${problema ? 'vermelho' : ''}">${problema}</b></div>`;
+    document.getElementById('resumoPedidos').innerHTML = `<div>Aguardando finalizar<b>${conta(['no_caixa'])}</b></div><div>Finalizados<b>${conta(['finalizado', 'faturado'])}</b></div><div>Pendentes<b class="${problema ? 'vermelho' : ''}">${problema}</b></div>`;
     const lista = doTipo.filter((p) => !termo || semAcento(`${p.cliente_nome} ${p.documento || ''}`).includes(termo));
     const grupos = new Map();
     lista.forEach((p) => { const d = (p.criado_em || '').slice(0, 10); if (!grupos.has(d)) grupos.set(d, []); grupos.get(d).push(p); });
@@ -1079,9 +1062,8 @@ function desenharPedidos() {
         const rotulo = d === hoje ? 'Hoje' : d.split('-').reverse().join('/');
         html += `<div class="tit"><span>${rotulo}</span><span>${fmtMoeda(total)}</span></div><div class="lista">${itens.map(linhaPedido).join('')}</div>`;
     });
-    document.getElementById('listaPedidos').innerHTML = html || `<div class="rodape-lista">Nenhum ${abaPedidos === 'PA' ? 'pedido de venda' : 'pré-venda'} ainda.</div>`;
+    document.getElementById('listaPedidos').innerHTML = html || '<div class="rodape-lista">Nenhum pedido ainda.</div>';
 }
-document.getElementById('abasPedidos').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (b) { abaPedidos = b.dataset.tipo; desenharPedidos(); } });
 document.getElementById('buscaPedido').addEventListener('input', desenharPedidos);
 document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-pedido]'); if (b) abrirDetalhe(b.dataset.pedido); });
 
@@ -1096,8 +1078,8 @@ function abrirDetalhe(id) {
     document.getElementById('detTitulo').textContent = `${NOMES_TIPO[p.tipo]} · ${p.cliente_nome}`;
     document.getElementById('detSub').textContent = `${(p.criado_em || '').slice(0, 10).split('-').reverse().join('/')} ${(p.criado_em || '').slice(11, 16)} · ${p.documento ? 'nº no ERP ' + p.documento : 'ainda sem número'}`;
     const [rotulo, cls] = SITUACOES[p.situacao] || [p.situacao, ''];
-    const explica = { fila: 'Guardado no aparelho. É enviado sozinho quando houver internet.', no_caixa: 'O caixa importa no PDV e finaliza.',
-        rascunho: 'Na nuvem, aguardando a loja faturar como NFC-e ou NF-e.', finalizado: 'Virou venda no caixa.', faturado: 'Faturado pela loja.',
+    const explica = { fila: 'Guardado no aparelho. É enviado sozinho quando houver internet.', no_caixa: 'No ERP, aguardando finalizar: o caixa importa no PDV ou a loja finaliza na nuvem.',
+        rascunho: 'Na nuvem, aguardando a loja faturar como NFC-e ou NF-e.', finalizado: 'Finalizado: virou venda (pré-venda ou NFC-e, conforme escolhido na finalização).', faturado: 'Faturado pela loja.',
         cancelado: 'Cancelado no ERP.', recusado: p.mensagem || 'O pedido não foi aceito.' }[p.situacao] || '';
     document.getElementById('detSituacao').innerHTML = `<b class="${cls}">${rotulo}</b><small>${esc(explica)}</small>`;
     document.getElementById('detItens').innerHTML = p.itens.map((i) => `<div class="item"><span class="n"><b>${esc(i.descricao)}</b><small>${fmtQtd(i.qtd)} × ${fmtMoeda(i.preco)}${i.desconto ? ' · desconto ' + fmtMoeda(i.desconto) : ''}</small></span><span class="p">${fmtMoeda(centavos(i.qtd * i.preco - (i.desconto || 0)))}</span></div>`).join('')
@@ -1111,23 +1093,20 @@ document.getElementById('btnVoltarDetalhe').addEventListener('click', () => { mo
 document.getElementById('btnReenviar').addEventListener('click', async () => { await enviarFila(); abrirDetalhe(detalheAtual.id); });
 document.getElementById('btnRepetir').addEventListener('click', () => {   // pedido novo, igual (o enviado não se edita)
     const p = detalheAtual;
-    iniciarPedido(p.tipo, { cliente: p.cliente, cliente_nome: p.cliente_nome, itens: p.itens.map((i) => ({ ...i })), observacao: p.observacao });
+    iniciarPedido('PA', { cliente: p.cliente, cliente_nome: p.cliente_nome, itens: p.itens.map((i) => ({ ...i })), observacao: p.observacao });
 });
 
 // ---- Novo pedido ----
-function abrirFolha(id) { document.getElementById(id).hidden = false; document.getElementById(id === 'folhaTipo' ? 'velaTipo' : 'velaItem').hidden = false; }
-function fecharFolha(id) { document.getElementById(id).hidden = true; document.getElementById(id === 'folhaTipo' ? 'velaTipo' : 'velaItem').hidden = true; }
+function abrirFolha(id) { document.getElementById(id).hidden = false; document.getElementById('velaItem').hidden = false; }
+function fecharFolha(id) { document.getElementById(id).hidden = true; document.getElementById('velaItem').hidden = true; }
 document.getElementById('btnNovoPedido').addEventListener('click', () => {
     if (!configPedido) {
         alert('Para o primeiro pedido o aparelho precisa baixar as formas de pagamento. Conecte à internet e toque em "Atualizar agora".');
         return;
     }
-    document.querySelectorAll('.op-tipo').forEach((b) => { b.hidden = !(configPedido[b.dataset.tipo] || {}).disponivel; });
-    document.getElementById('tipoAviso').textContent = 'Cliente e produtos você escolhe nas próximas telas.';
-    abrirFolha('folhaTipo');
+    if (!(configPedido.PA || {}).disponivel) return alert('A natureza "Pedido de venda" não foi encontrada no ERP desta empresa.');
+    iniciarPedido('PA');   // só pedido de venda: pré-venda ou NFC-e é escolhido na finalização (caixa ou nuvem)
 });
-document.getElementById('velaTipo').addEventListener('click', () => fecharFolha('folhaTipo'));
-document.querySelectorAll('.op-tipo').forEach((b) => b.addEventListener('click', () => { fecharFolha('folhaTipo'); iniciarPedido(b.dataset.tipo); }));
 
 function iniciarPedido(tipo, base) {
     rascunho = { id: crypto.randomUUID(), tipo, cliente: null, cliente_nome: '', itens: [], pagamentos: [], observacao: '', ...(base || {}) };
@@ -1316,7 +1295,7 @@ function desenharPagamentos() {
     const el = document.getElementById('resumoFalta');
     el.className = 'falta' + (falta === 0 ? '' : ' ruim');
     el.innerHTML = falta === 0 ? `<span>Pagamento completo</span><span>✓ ${fmtMoeda(soma)}</span>` : falta > 0 ? `<span>Falta</span><span>${fmtMoeda(falta)}</span>` : `<span>Passou do total</span><span>${fmtMoeda(-falta)}</span>`;
-    document.getElementById('barraResumoInfo').textContent = rascunho.tipo === 'PA' ? 'vai para o caixa' : 'vai como rascunho para faturar';
+    document.getElementById('barraResumoInfo').textContent = 'finaliza no caixa ou na nuvem';
     document.getElementById('btnEnviarPedido').disabled = falta !== 0 || !rascunho.itens.length || !rascunho.pagamentos.length;
 }
 document.getElementById('resumoItens').addEventListener('click', (ev) => { const el = ev.target.closest('[data-editar]'); if (el) abrirItem(+el.dataset.editar); });
@@ -1352,7 +1331,6 @@ document.getElementById('btnEnviarPedido').addEventListener('click', async () =>
     };
     await salvarPedido(pedido);
     rascunho = null;
-    abaPedidos = pedido.tipo;
     document.querySelector('#nav [data-aba="telaPedidos"]').click();
     try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) { await esquecerAparelho(); return prepararLogin(e.message); } }
     abrirDetalhe(pedido.id);
