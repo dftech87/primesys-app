@@ -203,6 +203,8 @@
     .tt { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 14px; color: #64748b; }
     .tt b { font-size: 20px; color: #0f172a; }
     .btn-sec { height: 50px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; color: #334155; font-weight: 700; font-size: 15px; cursor: pointer; }
+    .btn-cancelar { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; margin-top: 12px; border: 1px solid #fecaca; border-radius: 12px; background: #fef2f2; color: #b91c1c; font-weight: 700; font-size: 15px; cursor: pointer; }
+    .btn-cancelar:disabled { opacity: .6; }
     .situacao-card { background: #fff; border-radius: 16px; padding: 14px; margin-top: 14px; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
     .situacao-card b { display: block; font-size: 16px; } .situacao-card small { display: block; color: #64748b; font-size: 13px; margin-top: 4px; line-height: 1.4; }
     /* Faixa "Nova versão disponível" (igual ao PrimeSys Info), logo acima da barra de baixo */
@@ -398,6 +400,8 @@
         <div class="tit">Pagamento</div><div class="lista" id="detPagamentos"></div>
         <div id="detObs"></div>
         <div class="duas" style="margin-top:14px"><button type="button" class="btn-sec" id="btnRepetir">Repetir pedido</button><button type="button" class="btn" style="margin:0" id="btnReenviar" hidden>Tentar enviar agora</button></div>
+        <button type="button" class="btn-cancelar" id="btnCancelarPedido" hidden>Cancelar pedido</button>
+        <div class="nota" id="detNotaCancelar" style="margin:12px 4px 0;text-align:left"></div>
     </div>
 </section>
 
@@ -1087,9 +1091,40 @@ function abrirDetalhe(id) {
     document.getElementById('detPagamentos').innerHTML = p.pagamentos.map((g) => `<div class="item"><span class="n"><b>${esc(g.forma_nome || 'Forma ' + g.forma)}</b>${g.parcelamento_nome ? `<small>${esc(g.parcelamento_nome)}</small>` : ''}</span><span class="p">${fmtMoeda(g.valor)}</span></div>`).join('');
     document.getElementById('detObs').innerHTML = p.observacao ? `<div class="tit">Observação</div><div class="lista" style="padding:12px 14px;font-size:14px">${esc(p.observacao)}</div>` : '';
     document.getElementById('btnReenviar').hidden = p.situacao !== 'fila';
+    // Cancelar: só o que ainda não virou venda. Na fila (nem chegou ao ERP) é só excluir do aparelho.
+    const btnCancelar = document.getElementById('btnCancelarPedido');
+    btnCancelar.hidden = !['no_caixa', 'fila', 'recusado'].includes(p.situacao);
+    btnCancelar.disabled = false;
+    btnCancelar.textContent = p.situacao === 'no_caixa' ? 'Cancelar pedido' : 'Excluir pedido';
+    document.getElementById('detNotaCancelar').textContent = p.situacao === 'finalizado'
+        ? 'Para cancelar, cancele a venda no PDV ou na nuvem. Este pedido é cancelado junto, automaticamente.' : '';
     mostrar('telaDetalhe');
 }
 document.getElementById('btnVoltarDetalhe').addEventListener('click', () => { mostrar(telaAntesDoDetalhe); atualizarTelasDePedidos(); });
+async function apagarPedidoLocal(id) {
+    const db = await abrirBanco();
+    await new Promise((ok, falha) => { const t = db.transaction('pedidos', 'readwrite'); t.objectStore('pedidos').delete(id); t.oncomplete = ok; t.onerror = () => falha(t.error); });
+    await carregarPedidos();
+}
+document.getElementById('btnCancelarPedido').addEventListener('click', async () => {
+    const p = detalheAtual, botao = document.getElementById('btnCancelarPedido');
+    if (p.situacao === 'fila' || (p.situacao === 'recusado' && !p.documento)) {
+        if (!confirm('Excluir este pedido do aparelho? Ele não chegou ao ERP.')) return;
+        if (p.situacao === 'recusado' && navigator.onLine) { try { await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' }); } catch (e) {} }
+        await apagarPedidoLocal(p.id);
+        mostrar('telaPedidos'); return desenharPedidos();
+    }
+    if (!navigator.onLine) return alert('Sem internet. Para cancelar no ERP é preciso estar conectado.');
+    if (!confirm(`Cancelar o pedido nº ${p.documento}? Ele sai do caixa e da nuvem.`)) return;
+    botao.disabled = true; botao.textContent = 'Cancelando...';
+    try {
+        const r = await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' });
+        if (r.status === 200) Object.assign(p, { situacao: r.corpo.situacao, mensagem: r.corpo.mensagem || '' });
+        else { alert(r.corpo.erro || 'Não foi possível cancelar agora.'); if (r.status === 422) await enviarFila(); }
+        await salvarPedido(p);
+    } catch (e) { alert('Sem resposta do servidor. Tente de novo.'); }
+    abrirDetalhe(p.id);
+});
 document.getElementById('btnReenviar').addEventListener('click', async () => { await enviarFila(); abrirDetalhe(detalheAtual.id); });
 document.getElementById('btnRepetir').addEventListener('click', () => {   // pedido novo, igual (o enviado não se edita)
     const p = detalheAtual;

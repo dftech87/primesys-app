@@ -217,6 +217,19 @@ async def pedido_enviar(request: Request, aparelho: dict = Depends(sessao.aparel
         return _erro(503, "ERP indisponível agora. O pedido fica guardado e é enviado depois.")
 
 
+@app.post("/api/pedidos/{id_pedido}/cancelar")
+async def pedido_cancelar(id_pedido: str, aparelho: dict = Depends(sessao.aparelho_atual)):
+    """Cancela um pedido do próprio vendedor que ainda não foi finalizado."""
+    if len(id_pedido) > 40:
+        return _erro(400, "Pedido inválido.")
+    try:
+        return await pedidos.cancelar(aparelho, id_pedido)
+    except pedidos.PedidoRecusado as erro:
+        return _erro(422, str(erro))
+    except pedidos.ErpIndisponivel:
+        return _erro(503, "ERP indisponível agora. Tente de novo em instantes.")
+
+
 @app.get("/api/pedidos")
 async def pedido_lista(cursor: str = "", aparelho: dict = Depends(sessao.aparelho_atual)):
     """Situação dos pedidos do vendedor (no caixa, finalizado, faturado...). Confere o ERP no máximo a cada 2 min."""

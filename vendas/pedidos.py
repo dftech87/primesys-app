@@ -215,7 +215,8 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
     data_hora = _data_hora_do_pedido(dados.get("criado_em"))
     corpo = {
         "documento": {"idCaixa": 0, "idAbertura": 0, "idUsuario": id_usuario, "idPessoa": id_cliente, "dataHora": data_hora,
-                      "modelo": tipo, "idNaturezaOperacao": config["natureza"], "idExterno": dados["id"],
+                      "modelo": tipo, "serie": "0",   # mesma série dos pedidos de venda feitos na nuvem
+                      "idNaturezaOperacao": config["natureza"], "idExterno": dados["id"],
                       "status": TIPOS[tipo]["status"], "observacao": observacao},
         "pessoa": {"idPessoa": id_cliente},
         "mercadoriaLista": itens_erp,
@@ -320,8 +321,21 @@ def _situacao(tipo: str, status: str, importado: str) -> str:
     return "faturado" if status == "E" else "rascunho"
 
 
+_ORIGEM = re.compile(r"Docs Origem:\s*([\d,\s]+)", re.I)
+
+
+async def _cancelar_no_erp(client: MeuERPClient, id_documento: int) -> None:
+    """A nuvem não deixa cancelar documento criado pela API ("de outra abertura"); pela API pode."""
+    resposta = await client.post(f"/api/documento/{int(id_documento)}/status/v1", json={"status": "C"})
+    if not resposta.get("status"):
+        raise PedidoRecusado(resposta.get("mensagem") or "O ERP não aceitou o cancelamento.")
+
+
 async def conferir_situacoes(tenant: dict) -> None:
-    """Uma consulta para todos os pedidos em andamento da empresa (não gasta 1 chamada por pedido)."""
+    """Uma rodada de conferência para todos os pedidos da empresa (2 consultas, não 1 por pedido):
+      - situação no ERP (aguardando finalizar, finalizado, cancelado);
+      - pedido finalizado cuja venda gerada ("Docs Origem: nº") foi cancelada -> cancela o pedido também, pela API,
+        para não ficar um pedido "Emitido" sobrando (a nuvem não consegue cancelar pedido criado pelo app)."""
     cnpj = tenant["cnpj"]
     agora = datetime.now(timezone.utc)
     if agora - _ultima_conferencia.get(cnpj, datetime.min.replace(tzinfo=timezone.utc)) < CONFERIR_A_CADA:
@@ -331,24 +345,76 @@ async def conferir_situacoes(tenant: dict) -> None:
     with db_session() as conn:
         abertos = {int(r["id_documento"]): dict(r) for r in conn.execute(
             "SELECT id, tipo, id_documento, situacao FROM pv_pedidos WHERE cnpj = ? AND id_documento IS NOT NULL "
-            "AND situacao IN ('no_caixa', 'rascunho') AND criado_em >= ?", (cnpj, limite))}
+            "AND situacao IN ('no_caixa', 'rascunho', 'finalizado') AND criado_em >= ?", (cnpj, limite))}
     if not abertos:
         return
-    lista = ",".join(i(x) for x in sorted(abertos)[:1000])
+    ids = sorted(abertos)[-1000:]
+    lista = ",".join(i(x) for x in ids)
+    client = MeuERPClient(tenant["api_token"], segundo_plano=True)
     try:
-        linhas = await executar(MeuERPClient(tenant["api_token"], segundo_plano=True),
-                                f"select _iddocumento as id, status, coalesce(flagimportado, 'F') as importado from documento where _iddocumento in ({lista})",
-                                max_paginas=10)
+        linhas = await executar(client, f"select _iddocumento as id, status, coalesce(flagimportado, 'F') as importado "
+                                        f"from documento where _iddocumento in ({lista})", max_paginas=10)
+        # Vendas geradas a partir dos pedidos (o ERP grava "Docs Origem: <nº do pedido>" na observação da venda).
+        vendas = await executar(client, f"select _iddocumento as id, status, observacao from documento "
+                                         f"where _iddocumento > {i(ids[0])} and observacao like 'Docs Origem:%'", max_paginas=10)
     except Exception:
         logger.warning("não foi possível conferir a situação dos pedidos da empresa %s", cnpj)
         return
+    vendas_do_pedido: dict[int, list[str]] = {}
+    for v in vendas:
+        achado = _ORIGEM.search(v.get("observacao") or "")
+        for origem in re.findall(r"\d+", achado.group(1)) if achado else []:
+            vendas_do_pedido.setdefault(int(origem), []).append(v["status"])
+
     for l in linhas:
         pedido = abertos.get(int(l["id"]))
         if pedido is None:
             continue
         nova = _situacao(pedido["tipo"], l["status"], l["importado"])
+        situacoes_vendas = vendas_do_pedido.get(int(l["id"]), [])
+        if nova == "finalizado" and situacoes_vendas and all(st in ("C", "X") for st in situacoes_vendas):
+            try:
+                await _cancelar_no_erp(client, int(l["id"]))
+                nova = "cancelado"
+                logger.info("pedido %s cancelado porque a venda gerada foi cancelada (empresa %s)", l["id"], cnpj)
+            except Exception:
+                logger.warning("não foi possível cancelar o pedido %s (venda já cancelada)", l["id"])
         if nova != pedido["situacao"]:
             _gravar(pedido["id"], situacao=nova, atualizado_em=agora_texto())
+
+
+async def cancelar(aparelho: dict, id_pedido: str) -> dict:
+    """Vendedor cancela um pedido seu que ainda não foi finalizado (o cliente desistiu)."""
+    linha = _linha(str(id_pedido).lower())
+    if linha is None or linha["cnpj"] != aparelho["cnpj"] or int(linha["id_funcionario"]) != int(aparelho["id_funcionario"]):
+        raise PedidoRecusado("Pedido não encontrado.")
+    if linha["situacao"] == "cancelado":
+        return _para_celular(linha)
+    if not linha["id_documento"]:   # recusado pelo ERP: nunca entrou lá
+        _gravar(linha["id"], situacao="cancelado", atualizado_em=agora_texto())
+        return _para_celular(_linha(linha["id"]))
+    client = MeuERPClient(aparelho["tenant"]["api_token"])
+    try:
+        atual = await executar(client, f"select status, coalesce(flagimportado, 'F') as importado from documento "
+                                       f"where _iddocumento = {i(linha['id_documento'])}", max_paginas=1)
+        if not atual:
+            raise PedidoRecusado("Pedido não encontrado no ERP.")
+        situacao = _situacao(linha["tipo"], atual[0]["status"], atual[0]["importado"])
+        if situacao == "cancelado":
+            _gravar(linha["id"], situacao="cancelado", atualizado_em=agora_texto())
+            return _para_celular(_linha(linha["id"]))
+        if situacao == "finalizado":
+            _gravar(linha["id"], situacao="finalizado", atualizado_em=agora_texto())
+            raise PedidoRecusado("Este pedido já foi finalizado e virou venda. Cancele a venda no PDV ou na nuvem: "
+                                 "o pedido é cancelado junto, automaticamente.")
+        await _cancelar_no_erp(client, int(linha["id_documento"]))
+    except PedidoRecusado:
+        raise
+    except Exception as erro:
+        raise ErpIndisponivel() from erro
+    _gravar(linha["id"], situacao="cancelado", atualizado_em=agora_texto())
+    logger.info("pedido %s (documento %s) cancelado pelo vendedor (empresa %s)", linha["id"], linha["id_documento"], aparelho["cnpj"])
+    return _para_celular(_linha(linha["id"]))
 
 
 def do_vendedor(cnpj: str, id_funcionario: int, cursor: str, limite: int = 200) -> dict:
