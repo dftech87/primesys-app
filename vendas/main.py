@@ -140,8 +140,8 @@ async def entrar(dados: Entrada, request: Request):
         logger.exception("falha ao identificar o vendedor (empresa %s)", cnpj)
         return _erro(503, "Não foi possível consultar o ERP agora. Tente novamente em instantes.")
     if vendedor is None:
-        return _erro(403, "Seu login está certo, mas não achamos o seu cadastro de funcionário. No ERP, vincule o seu "
-                          "usuário ao funcionário ou coloque este e-mail no contato dele. Depois aguarde até 10 minutos.")
+        return _erro(403, "Seu usuário do ERP não está ligado a um funcionário ativo. "
+                          "No ERP, informe o seu usuário no cadastro de funcionário.")
     permissoes = await vendedores.permissoes(tenant, vendedor["id_perfil"])
     token = sessao.criar(cnpj, vendedor, aparelho=request.headers.get("user-agent", ""))
     logger.info("aparelho conectado: empresa %s, funcionário %s", cnpj, vendedor["id_funcionario"])

@@ -28,7 +28,7 @@ A comissão vem do cadastro do funcionário. Mudança no ERP pode levar até 10 
 |---|---|
 | "O Prime Vendas não está liberado para esta empresa" | Passo 1 (Liberar no admin) |
 | E-mail ou senha inválidos (mensagem do ERP) | Conferir o login no próprio ERP |
-| "Seu login está certo, mas não achamos o seu cadastro de funcionário" | Passo 2 e aguardar até 10 minutos |
+| "Seu usuário do ERP não está ligado a um funcionário ativo" | Passo 2 e aguardar até 10 minutos |
 | "Acesso expirado" | Entrar de novo com e-mail e senha |
 
 ## Atualizações
