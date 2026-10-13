@@ -11,6 +11,9 @@
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     [hidden] { display: none !important; }
     html, body { margin: 0; min-height: 100%; font-family: 'Segoe UI', Roboto, Tahoma, sans-serif; color: #0f172a; background: #f1f5f9; }
+    /* No computador (ou tablet deitado) o app fica com largura de celular, centralizado. */
+    body { position: relative; max-width: 520px; margin: 0 auto; box-shadow: 0 0 0 100vmax #e2e8f0; clip-path: inset(0 -100vmax); }
+
     button { font: inherit; }
     .tela { display: none; min-height: 100vh; position: relative; }
     .tela.ativa { display: block; }
@@ -126,6 +129,12 @@
     .com-indice { padding-right: 24px; }
     .btn-fixo { position: fixed; left: 16px; right: 16px; bottom: 76px; z-index: 18; height: 50px; border: 0; border-radius: 14px; background: #047857; color: #fff; font-weight: 700; font-size: 15px; box-shadow: 0 8px 20px rgba(4,120,87,.35); }
     .btn-fixo:disabled { background: #94a3b8; box-shadow: none; }
+    /* Telas largas: barra de baixo, botão fixo e índice acompanham a coluna central de 520px. */
+    .nav { max-width: 520px; margin: 0 auto; }
+    @media (min-width: 521px) {
+        .btn-fixo { left: calc(50% - 244px); right: calc(50% - 244px); }
+        .indice { right: calc(50% - 258px); }
+    }
 </style>
 </head>
 <body>

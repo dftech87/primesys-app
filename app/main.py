@@ -23,7 +23,7 @@ class _GZipSemServiceWorker(GZipMiddleware):
         await super().__call__(scope, receive, send)
 
 
-app = FastAPI(title="PrimeSys Dashboard")
+app = FastAPI(title="PrimeSys Dashboard", docs_url=None, redoc_url=None, openapi_url=None)   # sem páginas de documentação públicas
 app.add_middleware(
     SessionMiddleware, secret_key=settings.session_secret, https_only=COOKIE_SEGURO, same_site="lax", max_age=SESSAO_MAX_IDADE
 )

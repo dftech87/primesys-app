@@ -191,6 +191,16 @@ async def service_worker():
     return Response(corpo, media_type="text/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
+@app.get("/.well-known/assetlinks.json")
+async def assetlinks():
+    """O Android confere este arquivo para abrir o APK do Prime Vendas como app (sem barra de navegador).
+    Gerado junto com o APK (PWABuilder); só tem o nome do pacote e a impressão digital pública da assinatura."""
+    arquivo = ESTATICOS / "well-known" / "assetlinks.json"
+    if not arquivo.is_file():
+        return JSONResponse([], headers={"Cache-Control": "no-cache"})
+    return FileResponse(arquivo, media_type="application/json", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/")
 async def inicio():
     return FileResponse(ESTATICOS / "index.html", headers={"Cache-Control": "no-cache"})
