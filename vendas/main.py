@@ -100,6 +100,7 @@ async def cabecalhos(request: Request, call_next):
 
 
 criar_tabelas()
+catalogo.aplicar_regra_do_catalogo()
 
 
 @app.api_route("/saude", methods=["GET", "HEAD"])

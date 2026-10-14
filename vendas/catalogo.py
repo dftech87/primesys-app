@@ -50,13 +50,19 @@ async def _parametros(client: MeuERPClient) -> dict:
     return {"empresa": int(p.get("empresa") or 1), "local": int(p.get("local") or 1), "tabela": int(p.get("tabela") or 1)}
 
 
+# Só entra no catálogo do app o que dá para vender: produto ativo e com preço na tabela padrão. Na leitura completa o
+# filtro é feito no próprio ERP (em clientes com dezenas de milhares de itens, lê bem menos páginas). Na leitura do que
+# mudou vêm todos os alterados, e o que deixou de ser vendável chega como inativo (o celular tira da lista).
+_VENDAVEL = f"{_ATIVO.format(a='ve')} and coalesce(p.valpreco, 0) > 0"
+
+
 def _sql_produtos(par: dict, desde: str | None) -> str:
     alterado = "greatest(v.dtalteracao, m.dtalteracao, ve.dtalteracao, p.dtalteracao)"
-    filtro = f"where {alterado} >= {_marca(desde)}" if desde else ""
+    filtro = f"where {alterado} >= {_marca(desde)}" if desde else f"where {_VENDAVEL}"
     return f"""
         select v._idmercadoriavariacao as id, trim(m.descricao || ' ' || coalesce(v.descricao, '')) as descricao, coalesce(v.codigobarras, '') as barras, coalesce(v.embalagem, '') as embalagem,
                p.valpreco as preco, coalesce(ve.flagpermitirdesconto, 'T') as permite, ve.permaximodesconto as desconto_max,
-               case when {_ATIVO.format(a='ve')} then 1 else 0 end as ativo, {alterado} as alterado
+               case when {_VENDAVEL} then 1 else 0 end as ativo, {alterado} as alterado
         from mercadoria_variacao v
         join mercadoria m on m._idmercadoria = v.idmercadoria
         join mercadoria_variacao_empresa ve on ve._idmercadoriavariacao = v._idmercadoriavariacao and ve._idempresa = {i(par['empresa'])}
@@ -67,11 +73,15 @@ def _sql_produtos(par: dict, desde: str | None) -> str:
 
 
 def _sql_estoque(par: dict, desde: str | None) -> str:
+    """Estoque do local padrão, só dos produtos vendáveis (mesma regra do catálogo)."""
     filtro = f"and e.datahora >= {_marca(desde)}" if desde else ""
     return f"""
         select e._idmercadoriavariacao as id, coalesce(e.qtdsaldo, 0) as saldo, e.datahora as alterado
         from mercadoria_estoque e
-        where e._idempresa = {i(par['empresa'])} and e._idlocalestoque = {i(par['local'])} {filtro}
+        join mercadoria_variacao_empresa ve on ve._idmercadoriavariacao = e._idmercadoriavariacao and ve._idempresa = e._idempresa
+        join mercadoria_tabela_preco p on p._idmercadoriavariacao = e._idmercadoriavariacao and p._idempresa = e._idempresa
+             and p._idtabela = {i(par['tabela'])} and {_ATIVO.format(a='p')}
+        where e._idempresa = {i(par['empresa'])} and e._idlocalestoque = {i(par['local'])} and {_VENDAVEL} {filtro}
         order by e._idmercadoriavariacao"""
 
 
@@ -211,6 +221,22 @@ async def _atualizar(tenant: dict) -> None:
         except Exception as erro:
             logger.exception("falha lendo %s do ERP (empresa %s)", tabela, cnpj)
             _salvar_controle(cnpj, tabela, erro=type(erro).__name__)
+
+
+REGRA_DO_CATALOGO = "vendavel-v1"   # mude ao trocar a regra de quais produtos entram: força uma leitura completa
+
+
+def aplicar_regra_do_catalogo() -> None:
+    """Quando a regra muda (ex.: passar a trazer só produto ativo com preço), a próxima sincronização de cada empresa
+    faz leitura completa de produtos e estoque, e o que saiu da regra vira inativo nos celulares."""
+    with db_session() as conn:
+        marcada = conn.execute("SELECT marca_erp FROM pv_sincronizacao WHERE cnpj = '*' AND tabela = 'regra'").fetchone()
+        if marcada and marcada["marca_erp"] == REGRA_DO_CATALOGO:
+            return
+        conn.execute("UPDATE pv_sincronizacao SET ultima_completa = '' WHERE tabela IN ('produtos', 'estoque')")
+        conn.execute("INSERT INTO pv_sincronizacao (cnpj, tabela, marca_erp) VALUES ('*', 'regra', ?) "
+                     "ON CONFLICT (cnpj, tabela) DO UPDATE SET marca_erp = excluded.marca_erp", (REGRA_DO_CATALOGO,))
+    logger.warning("regra do catálogo mudou para %s: próxima sincronização lê tudo de novo", REGRA_DO_CATALOGO)
 
 
 _em_andamento: dict[str, asyncio.Task] = {}
