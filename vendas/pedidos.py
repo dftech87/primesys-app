@@ -166,7 +166,7 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
         if desconto > 0:
             if not produto["permite_desconto"]:
                 raise PedidoRecusado(f"{produto['descricao']} não permite desconto.")
-            if not permissoes.get("desconto_item"):
+            if not (permissoes.get("desconto_item") or permissoes.get("desconto_documento")):
                 raise PedidoRecusado("Seu perfil no ERP não permite dar desconto.")
             limite = produto["desconto_max"]
             if limite and desconto / bruto * 100 > limite + 0.01 and not permissoes.get("desconto_acima_do_limite"):

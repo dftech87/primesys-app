@@ -236,6 +236,10 @@
     .linha-ficha:last-child { border: 0; } .linha-ficha span:first-child { color: #64748b; }
     .btn-linha { width: 100%; height: 44px; margin-top: 10px; border: 1px solid #a7f3d0; border-radius: 12px; background: #ecfdf5; color: #065f46; font-weight: 700; font-size: 14px; cursor: pointer; }
     .btn-linha:disabled { opacity: .6; }
+    .desc-pedido { flex-wrap: wrap; gap: 8px; }
+    .desc-pedido .n { flex: 1 1 100%; } .desc-pedido small { display: block; color: #64748b; font-size: 12px; }
+    .desc-pedido .rs { display: flex; align-items: center; gap: 4px; font-weight: 700; }
+    .desc-pedido input { width: 100px; height: 38px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 10px; font-size: 15px; text-align: right; }
     .dialogo { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: calc(100% - 48px); max-width: 360px; background: #fff; border-radius: 18px; padding: 20px 18px 14px; z-index: 61; box-shadow: 0 20px 50px rgba(15,23,42,.35); }
     .dialogo .dlg-txt { font-size: 15px; line-height: 1.45; color: #0f172a; white-space: pre-line; }
     .dialogo .dlg-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
@@ -1284,6 +1288,7 @@ function abrirDetalhe(id) {
         cancelado: textoVendas(p) ? `Cancelado no ERP (a venda nº ${textoVendas(p)} também foi cancelada).` : 'Cancelado no ERP.', recusado: p.mensagem || 'O pedido não foi aceito.' }[p.situacao] || '';
     document.getElementById('detSituacao').innerHTML = `<b class="${cls}">${rotulo}</b><small>${esc(explica)}</small>`;
     document.getElementById('detItens').innerHTML = p.itens.map((i) => `<div class="item"><span class="n"><b>${esc(i.descricao)}</b><small>${fmtQtd(i.qtd)} × ${fmtMoeda(i.preco)}${i.desconto ? ' · desconto ' + fmtMoeda(i.desconto) : ''}</small></span><span class="p">${fmtMoeda(centavos(i.qtd * i.preco - (i.desconto || 0)))}</span></div>`).join('')
+        + (p.desconto_pedido ? `<div class="item"><span class="n">Inclui desconto no pedido</span><span class="p vermelho">− ${fmtMoeda(p.desconto_pedido)}</span></div>` : '')
         + `<div class="item"><span class="n"><b>Total</b></span><span class="p">${fmtMoeda(p.total)}</span></div>`;
     document.getElementById('detPagamentos').innerHTML = p.pagamentos.map((g) => `<div class="item"><span class="n"><b>${esc(g.forma_nome || 'Forma ' + g.forma)}</b>${g.parcelamento_nome ? `<small>${esc(g.parcelamento_nome)}</small>` : ''}</span><span class="p">${fmtMoeda(g.valor)}</span></div>`).join('');
     document.getElementById('detObs').innerHTML = p.observacao ? `<div class="tit">Observação</div><div class="lista" style="padding:12px 14px;font-size:14px">${esc(p.observacao)}</div>` : '';
@@ -1423,16 +1428,43 @@ function desenharPedProdutos() {
 document.getElementById('buscaPedProduto').addEventListener('input', desenharPedProdutos);
 document.getElementById('listaPedProdutos').addEventListener('click', (ev) => {
     const mais = ev.target.closest('[data-mais]'), abrir = ev.target.closest('[data-abrir]');
-    if (mais) {
-        const p = produtos.find((x) => x.id === +mais.dataset.mais);
-        const item = rascunho.itens.find((i) => i.produto === p.id);
-        if (item) item.qtd = centavos(item.qtd + 1); else rascunho.itens.push({ produto: p.id, descricao: p.descricao, qtd: 1, preco: p.preco, desconto: 0 });
-        desenharPedProdutos(); atualizarBarra();
-    } else if (abrir) abrirItem(+abrir.dataset.abrir);
+    if (mais) abrirItem(+mais.dataset.mais);   // "+" abre quantidade, preço e desconto (se já está no pedido, edita)
+    else if (abrir) abrirItem(+abrir.dataset.abrir);
 });
+// Desconto no pedido todo: a API do ERP só aceita desconto por item, então ele é dividido entre os itens que aceitam
+// desconto, proporcional ao valor de cada um, sem passar do máximo de cada produto (a não ser que o perfil permita).
+function podeDescontoNoPedido() { const p = conta.permissoes || {}; return !!(p.desconto_documento || p.desconto_item); }
+function distribuirDescontoPedido(valor) {
+    const perm = conta.permissoes || {};
+    const itens = rascunho.itens.map((i) => {
+        const p = produtos.find((x) => x.id === i.produto) || {};
+        const bruto = centavos(i.qtd * i.preco), livre = centavos(bruto - (i.desconto || 0));
+        const limitePct = !p.permite_desconto ? 0 : (p.desconto_max && !perm.desconto_acima_do_limite ? p.desconto_max : 99);
+        const teto = Math.max(0, centavos(Math.min(livre - 0.01, bruto * limitePct / 100 - (i.desconto || 0))));
+        return { produto: i.produto, base: livre, teto, parte: 0 };
+    });
+    const maximo = centavos(itens.reduce((s, x) => s + x.teto, 0));
+    if (valor <= 0) return { ok: true, partes: new Map(), maximo };
+    if (valor > maximo + 0.001) return { ok: false, partes: new Map(), maximo };
+    let resta = valor, abertos = itens.filter((x) => x.teto > 0);
+    for (let volta = 0; volta < 10 && resta > 0.004 && abertos.length; volta++) {   // proporcional; quem bate no teto sai
+        const base = abertos.reduce((s, x) => s + x.base, 0);
+        for (const x of abertos) x.parte = centavos(Math.min(x.teto, x.parte + resta * x.base / base));
+        resta = centavos(valor - itens.reduce((s, x) => s + x.parte, 0));
+        abertos = abertos.filter((x) => x.parte < x.teto);
+    }
+    if (Math.abs(resta) >= 0.01) {   // centavos do arredondamento: no item com folga
+        const alvo = itens.filter((x) => x.teto - x.parte >= resta).sort((a, b) => b.base - a.base)[0];
+        if (alvo) alvo.parte = centavos(alvo.parte + resta);
+    }
+    return { ok: true, partes: new Map(itens.filter((x) => x.parte > 0).map((x) => [x.produto, x.parte])), maximo };
+}
 function totaisRascunho() {
     const bruto = rascunho.itens.reduce((s, i) => s + centavos(i.qtd * i.preco), 0), desc = rascunho.itens.reduce((s, i) => s + (i.desconto || 0), 0);
-    return { bruto: centavos(bruto), desconto: centavos(desc), total: centavos(bruto - desc), unidades: rascunho.itens.reduce((s, i) => s + i.qtd, 0) };
+    const dp = rascunho.desconto_pedido || 0, d = dp ? distribuirDescontoPedido(dp) : { ok: true, maximo: 0 };
+    const pedido = d.ok ? dp : 0;
+    return { bruto: centavos(bruto), desconto_itens: centavos(desc), desconto_pedido: pedido, desconto: centavos(desc + pedido),
+             total: centavos(bruto - desc - pedido), unidades: rascunho.itens.reduce((s, i) => s + i.qtd, 0), descontoPedidoOk: d.ok, maximoPedido: d.maximo };
 }
 function atualizarBarra() {
     const t = totaisRascunho();
@@ -1496,16 +1528,24 @@ document.getElementById('itemRemover').addEventListener('click', () => {
     rascunho.itens = rascunho.itens.filter((i) => i.produto !== itemAberto.p.id);
     fecharFolha('folhaItem'); rascunho.pagamentos = []; aposMudarItens();
 });
-function aposMudarItens() { if (rascunho.passo === 3) { if (!rascunho.itens.length) return irPasso(2); desenharResumo(); } else { desenharPedProdutos(); atualizarBarra(); } }
+function aposMudarItens() {
+    rascunho.pagamentos = []; if (rascunho.passo === 3) { if (!rascunho.itens.length) return irPasso(2); desenharResumo(); } else { desenharPedProdutos(); atualizarBarra(); } }
 
 // Passo 3: resumo + pagamento (só as formas permitidas para este tipo de documento) + observação
 function formasDoTipo() { return ((configPedido || {})[rascunho.tipo] || {}).pagamentos || []; }
 function desenharResumo() {
     const t = totaisRascunho();
     document.getElementById('resumoItens').innerHTML = rascunho.itens.map((i) => `<div class="item clicavel" data-editar="${i.produto}"><span class="n"><b>${esc(i.descricao)}</b><small>${fmtQtd(i.qtd)} × ${fmtMoeda(i.preco)}${i.desconto ? ' · desconto ' + fmtMoeda(i.desconto) : ''}</small></span><span class="p">${fmtMoeda(centavos(i.qtd * i.preco - i.desconto))}</span></div>`).join('');
+    const dp = rascunho.desconto_pedido || 0;
+    const linhaDesconto = podeDescontoNoPedido() ? `<div class="item desc-pedido"><span class="n">Desconto no pedido<small id="descPedidoInfo">${!t.descontoPedidoOk ? `máximo possível ${fmtMoeda(t.maximoPedido)}` : dp ? 'dividido entre os itens' : 'em R$ ou %'}</small></span>
+            <span class="rs">R$ <input id="descPedidoValor" inputmode="decimal" placeholder="0,00" value="${dp ? fmtNum(dp) : ''}"></span>
+            <span class="rs"><input id="descPedidoPct" inputmode="decimal" placeholder="0" value="${dp && t.bruto ? (dp / (t.bruto - t.desconto_itens) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : ''}"> %</span></div>` : '';
     document.getElementById('resumoTotais').innerHTML = `<div class="item"><span class="n">Produtos (${rascunho.itens.length})</span><span class="p">${fmtMoeda(t.bruto)}</span></div>`
-        + (t.desconto ? `<div class="item"><span class="n">Descontos</span><span class="p vermelho">− ${fmtMoeda(t.desconto)}</span></div>` : '')
+        + (t.desconto_itens ? `<div class="item"><span class="n">Descontos nos itens</span><span class="p vermelho">− ${fmtMoeda(t.desconto_itens)}</span></div>` : '')
+        + linhaDesconto
+        + (t.desconto_pedido ? `<div class="item"><span class="n">Desconto no pedido</span><span class="p vermelho">− ${fmtMoeda(t.desconto_pedido)}</span></div>` : '')
         + `<div class="item"><span class="n"><b>Total ${rascunho.tipo === 'PA' ? 'do pedido' : 'da pré-venda'}</b></span><span class="p grande">${fmtMoeda(t.total)}</span></div>`;
+    if (!t.descontoPedidoOk) { const info = document.getElementById('descPedidoInfo'); if (info) info.classList.add('vermelho'); }
     if (!rascunho.pagamentos.length && formasDoTipo().length) rascunho.pagamentos = [{ forma: formasDoTipo()[0].id, valor: t.total, parcelamento: 0 }];
     desenharPagamentos();
     document.getElementById('barraResumoTotal').textContent = fmtMoeda(t.total);
@@ -1528,8 +1568,19 @@ function desenharPagamentos() {
     el.className = 'falta' + (falta === 0 ? '' : ' ruim');
     el.innerHTML = falta === 0 ? `<span>Pagamento completo</span><span>✓ ${fmtMoeda(soma)}</span>` : falta > 0 ? `<span>Falta</span><span>${fmtMoeda(falta)}</span>` : `<span>Passou do total</span><span>${fmtMoeda(-falta)}</span>`;
     document.getElementById('barraResumoInfo').textContent = 'finaliza no caixa ou na nuvem';
-    document.getElementById('btnEnviarPedido').disabled = falta !== 0 || !rascunho.itens.length || !rascunho.pagamentos.length;
+    document.getElementById('btnEnviarPedido').disabled = falta !== 0 || !rascunho.itens.length || !rascunho.pagamentos.length || !t.descontoPedidoOk;
 }
+document.getElementById('resumoTotais').addEventListener('change', (ev) => {
+    const t = totaisRascunho(), base = centavos(t.bruto - t.desconto_itens);
+    let valor = 0;
+    if (ev.target.id === 'descPedidoValor') valor = centavos(lerNumero(ev.target.value));
+    else if (ev.target.id === 'descPedidoPct') valor = centavos(base * lerNumero(ev.target.value) / 100);
+    else return;
+    rascunho.desconto_pedido = Math.max(0, Math.min(valor, base));
+    rascunho.pagamentos = [];   // o total mudou: refaz o pagamento com o novo total
+    desenharResumo();
+    if (!totaisRascunho().descontoPedidoOk) avisar(`Desconto maior que o permitido para estes produtos. O máximo possível neste pedido é ${fmtMoeda(totaisRascunho().maximoPedido)}.`);
+});
 document.getElementById('resumoItens').addEventListener('click', (ev) => { const el = ev.target.closest('[data-editar]'); if (el) abrirItem(+el.dataset.editar); });
 document.getElementById('resumoPagamentos').addEventListener('click', (ev) => {
     const caixa = ev.target.closest('[data-pag]'); if (!caixa) return;
@@ -1552,9 +1603,11 @@ document.getElementById('btnMaisPagamento').addEventListener('click', () => {
 });
 document.getElementById('btnEnviarPedido').addEventListener('click', async () => {
     const t = totaisRascunho(), formas = formasDoTipo();
+    const partes = t.desconto_pedido ? distribuirDescontoPedido(t.desconto_pedido).partes : new Map();
     const pedido = {
         id: rascunho.id, tipo: rascunho.tipo, cliente: rascunho.cliente, cliente_nome: rascunho.cliente_nome, criado_em: horaLocalISO(),
-        itens: rascunho.itens.map((i) => ({ ...i })), total: t.total, observacao: document.getElementById('pedObservacao').value.trim(),
+        itens: rascunho.itens.map((i) => ({ ...i, desconto: centavos((i.desconto || 0) + (partes.get(i.produto) || 0)) })),
+        desconto_pedido: t.desconto_pedido, total: t.total, observacao: document.getElementById('pedObservacao').value.trim(),
         pagamentos: rascunho.pagamentos.map((g) => {
             const f = formas.find((x) => x.id === g.forma) || {}, plano = (f.parcelamentos || []).find((x) => x.id === g.parcelamento);
             return { forma: g.forma, forma_nome: f.descricao || '', valor: g.valor, parcelamento: plano ? plano.id : 0, parcelamento_nome: plano ? `${plano.descricao} · ${plano.parcelas}x` : '' };
