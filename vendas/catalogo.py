@@ -15,6 +15,7 @@ import logging
 import re
 from datetime import timedelta
 
+from app.cache import cached
 from app.database import db_session
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import executar, i
@@ -237,6 +238,34 @@ def estado(cnpj: str) -> dict:
         "tabelas": {t: {"total": int(totais[t]), "pronta": bool(controle.get(t, {}).get("ultima_completa")),
                         "erro": controle.get(t, {}).get("erro", "")} for t in TABELAS},
     }
+
+
+async def _estoque_agora(token: str, cnpj: str, id_produto: int) -> list[dict]:
+    client = MeuERPClient(token)
+    locais = await cached((cnpj, "vendas-locais-estoque"), 6 * 3600,
+                          lambda: client.get("/api/local-estoque/v1", params={"limit": 100}))
+    resultado = []
+    for local in (locais.get("items") or []):
+        if local.get("ativo") != "S":
+            continue
+        try:
+            e = await client.get(f"/api/mercadoria/{int(id_produto)}/local-estoque/{int(local['codigo'])}/estoque/v1")
+            saldo = float(e.get("qtdSaldo") or 0)
+        except Exception as erro:   # 404 = produto nunca movimentado neste local: estoque zero
+            resposta = getattr(erro, "response", None)
+            saldo = 0.0 if resposta is not None and resposta.status_code == 404 else None
+        resultado.append({"local": int(local["codigo"]), "descricao": local.get("descricao") or "", "saldo": saldo})
+    return resultado
+
+
+async def estoque_agora(tenant: dict, id_produto: int) -> list[dict] | None:
+    """Estoque do produto agora, em cada local (consulta o ERP só quando o vendedor pede; guarda 1 minuto)."""
+    with db_session() as conn:
+        existe = conn.execute("SELECT 1 FROM pv_produtos WHERE cnpj = ? AND id = ?", (tenant["cnpj"], int(id_produto))).fetchone()
+    if not existe:
+        return None
+    return await cached((tenant["cnpj"], "vendas-estoque-agora", int(id_produto)), 60,
+                        lambda: _estoque_agora(tenant["api_token"], tenant["cnpj"], int(id_produto)))
 
 
 def mudancas(cnpj: str, tabela: str, cursor: str, limite: int = 2000) -> dict:

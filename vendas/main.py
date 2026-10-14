@@ -214,6 +214,19 @@ async def dados(tabela: str, cursor: str = "", aparelho: dict = Depends(sessao.a
 
 
 # ---- Pedidos ----------------------------------------------------------------------------------------------------
+@app.get("/api/produtos/{id_produto}/estoque")
+async def produto_estoque(id_produto: int, aparelho: dict = Depends(sessao.aparelho_atual)):
+    """Estoque do produto agora, em todos os locais (botão "Ver estoque agora" da ficha)."""
+    try:
+        locais = await catalogo.estoque_agora(aparelho["tenant"], id_produto)
+    except Exception:
+        logger.exception("estoque agora indisponível (empresa %s, produto %s)", aparelho["cnpj"], id_produto)
+        return _erro(503, "ERP indisponível agora. Tente de novo em instantes.")
+    if locais is None:
+        return _erro(404, "Produto não encontrado.")
+    return {"locais": locais}
+
+
 @app.get("/api/pedido/config")
 async def pedido_config(aparelho: dict = Depends(sessao.aparelho_atual)):
     """Formas de pagamento permitidas em cada tipo de documento (o celular guarda para montar pedidos sem internet)."""

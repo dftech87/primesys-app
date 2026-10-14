@@ -226,6 +226,16 @@
     .filtro-data .dia input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
     .filtro-data .todos { height: 40px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; }
     .filtro-data .todos.on { background: #047857; border-color: #047857; color: #fff; }
+    .ficha-topo { background: linear-gradient(160deg, #064e3b, #047857); color: #fff; padding: 14px 16px 18px; }
+    .ficha-topo .l1 { display: flex; align-items: center; gap: 10px; }
+    .ficha-topo .voltar { border: 0; background: none; color: #fff; font-size: 22px; cursor: pointer; padding: 0 4px; }
+    .ficha-topo b.nome { display: block; font-size: 18px; margin-top: 12px; line-height: 1.3; }
+    .ficha-topo small { color: #a7f3d0; font-size: 12px; }
+    .ficha-topo .preco { font-size: 32px; font-weight: 700; margin-top: 8px; }
+    .linha-ficha { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    .linha-ficha:last-child { border: 0; } .linha-ficha span:first-child { color: #64748b; }
+    .btn-linha { width: 100%; height: 44px; margin-top: 10px; border: 1px solid #a7f3d0; border-radius: 12px; background: #ecfdf5; color: #065f46; font-weight: 700; font-size: 14px; cursor: pointer; }
+    .btn-linha:disabled { opacity: .6; }
     .dialogo { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: calc(100% - 48px); max-width: 360px; background: #fff; border-radius: 18px; padding: 20px 18px 14px; z-index: 61; box-shadow: 0 20px 50px rgba(15,23,42,.35); }
     .dialogo .dlg-txt { font-size: 15px; line-height: 1.45; color: #0f172a; white-space: pre-line; }
     .dialogo .dlg-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
@@ -332,7 +342,7 @@
 <!-- Produtos -->
 <section class="tela" id="telaProdutos">
     <div class="cab-lista">
-        <div class="l1"><span><span class="nm">Produtos</span><br><small id="prodInfo"></small></span><span class="net" data-net>Online</span></div>
+        <div class="l1"><span><span class="nm">Consulta de preço e estoque</span><br><small id="prodInfo"></small></span><span class="net" data-net>Online</span></div>
         <div class="busca"><span>🔍</span><input id="buscaProduto" placeholder="Nome, código ou código de barras" autocomplete="off" enterkeyhint="search"><button class="limpar" type="button" data-limpar="buscaProduto">✕</button></div>
     </div>
     <div class="wrap"><div class="lista" id="listaProdutos"></div><div class="rodape-lista" id="rodapeProdutos"></div></div>
@@ -441,6 +451,23 @@
         <div class="erro" id="erroCliente" role="alert"></div>
     </form>
     <div class="barra-ped"><span class="tot"><small id="cliBarraInfo">Confere no ERP se já existe</small></span><button type="button" class="btn-barra" id="btnSalvarCliente">Salvar cliente</button></div>
+</section>
+
+<!-- Ficha do produto (consulta de preço e estoque) -->
+<section class="tela" id="telaFicha">
+    <div class="ficha-topo">
+        <div class="l1"><button type="button" class="voltar" id="btnVoltarFicha">←</button><span style="flex:1"></span><span class="net" data-net>Online</span></div>
+        <b class="nome" id="fichaNome"></b><small id="fichaCodigos"></small>
+        <div class="preco" id="fichaPreco"></div>
+    </div>
+    <div class="wrap" style="padding-bottom:30px">
+        <div class="tit">Estoque</div>
+        <div class="lista" id="fichaEstoque"></div>
+        <button type="button" class="btn-linha" id="btnEstoqueAgora">🔄 Ver estoque agora (todos os locais)</button>
+        <div class="tit">Venda</div>
+        <div class="lista" id="fichaVenda"></div>
+        <button type="button" class="btn-novo" id="btnPedidoComProduto">＋ Novo pedido com este produto</button>
+    </div>
 </section>
 
 <!-- Item do pedido: quantidade, preço e desconto -->
@@ -1041,7 +1068,7 @@ function desenharProdutos() {
     const achados = partes.length ? produtos.filter((p) => partes.every((x) => p._busca.includes(x))) : produtos;
     const lista = achados.slice(0, MAX_LISTA);
     document.getElementById('listaProdutos').innerHTML = lista.map((p) => `
-        <div class="item"><span class="n"><b>${esc(p.descricao)}</b><small>cód. ${p.id}${p.embalagem ? ' · ' + esc(p.embalagem) : ''} · ${seloEstoque(p.id)}</small></span>
+        <div class="item clicavel" data-ficha="${p.id}"><span class="n"><b>${esc(p.descricao)}</b><small>cód. ${p.id}${p.embalagem ? ' · ' + esc(p.embalagem) : ''} · ${seloEstoque(p.id)}</small></span>
         <span class="p">${fmtMoeda(p.preco)}</span></div>`).join('');
     document.getElementById('rodapeProdutos').textContent = !achados.length ? 'Nenhum produto encontrado.'
         : achados.length > MAX_LISTA ? `Mostrando ${MAX_LISTA} de ${achados.length}. Digite mais para filtrar.` : `${achados.length} produto(s)`;
@@ -1731,6 +1758,58 @@ async function enviarClientesPendentes() {
     await gravarLocal('clientesFila', restantes);
     await carregarCatalogo();
 }
+
+
+// ============================================================================================================
+// Ficha do produto: preço, estoque do local padrão (cópia do aparelho), estoque agora em todos os locais (consulta o
+// ERP só quando o vendedor toca) e regras de desconto. Daqui dá para começar um pedido com o produto.
+// ============================================================================================================
+let fichaAtual = null;
+function abrirFicha(id) {
+    const p = produtos.find((x) => x.id === id);
+    if (!p) return;
+    fichaAtual = p;
+    document.getElementById('fichaNome').textContent = p.descricao;
+    document.getElementById('fichaCodigos').textContent = [`cód. ${p.id}`, p.barras ? `barras ${p.barras}` : '', p.embalagem].filter(Boolean).join(' · ');
+    document.getElementById('fichaPreco').textContent = p.preco > 0 ? fmtMoeda(p.preco) : 'Sem preço no ERP';
+    document.getElementById('fichaEstoque').innerHTML = `<div class="linha-ficha"><span>Local padrão (dados do aparelho)</span>${seloEstoque(p.id)}</div>`;
+    const btn = document.getElementById('btnEstoqueAgora');
+    btn.disabled = false; btn.textContent = '🔄 Ver estoque agora (todos os locais)';
+    const perm = conta.permissoes || {};
+    const linhas = [];
+    if (!p.permite_desconto) linhas.push(['Desconto', 'não permitido neste produto']);
+    else if (!perm.desconto_item) linhas.push(['Desconto', 'seu perfil não permite']);
+    else if (p.desconto_max) {
+        linhas.push(['Desconto', `permitido até ${p.desconto_max.toLocaleString('pt-BR')}%${perm.desconto_acima_do_limite ? ' (seu perfil pode passar)' : ''}`]);
+        if (p.preco > 0) linhas.push(['Preço mínimo com desconto', fmtMoeda(centavos(p.preco * (1 - p.desconto_max / 100)))]);
+    } else linhas.push(['Desconto', 'permitido']);
+    document.getElementById('fichaVenda').innerHTML = linhas.map(([a, b]) => `<div class="linha-ficha"><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join('');
+    document.getElementById('btnPedidoComProduto').disabled = !(p.preco > 0);
+    mostrar('telaFicha');
+}
+document.getElementById('listaProdutos').addEventListener('click', (ev) => { const el = ev.target.closest('[data-ficha]'); if (el) abrirFicha(+el.dataset.ficha); });
+document.getElementById('btnVoltarFicha').addEventListener('click', () => { mostrar('telaProdutos'); desenharProdutos(); });
+document.getElementById('btnEstoqueAgora').addEventListener('click', async () => {
+    const btn = document.getElementById('btnEstoqueAgora'), p = fichaAtual;
+    if (!navigator.onLine) return avisar('Sem internet. O estoque mostrado é o guardado no aparelho.');
+    btn.disabled = true; btn.textContent = 'Consultando o ERP…';
+    try {
+        const r = await api(`/api/produtos/${p.id}/estoque`);
+        if (r.status !== 200) { btn.disabled = false; btn.textContent = '🔄 Ver estoque agora (todos os locais)'; return avisar(r.corpo.erro || 'Não foi possível consultar agora.'); }
+        const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        document.getElementById('fichaEstoque').innerHTML = r.corpo.locais.map((l) => {
+            const saldo = l.saldo, classe = saldo == null ? '' : saldo <= 0 ? 'sem' : saldo <= POUCO_ESTOQUE ? 'pouco' : 'ok';
+            const texto = saldo == null ? 'indisponível' : saldo === 0 ? 'sem estoque' : saldo < 0 ? `sem estoque (${fmtQtd(saldo)})` : `${fmtQtd(saldo)} em estoque`;
+            return `<div class="linha-ficha"><span>${esc(l.descricao)}</span><span class="est ${classe}">${texto}</span></div>`;
+        }).join('') + `<div class="linha-ficha"><span>Consultado no ERP às ${hora}</span><span></span></div>`;
+        btn.textContent = '✓ Estoque atualizado';
+    } catch (e) { btn.disabled = false; btn.textContent = '🔄 Ver estoque agora (todos os locais)'; avisar('Sem resposta do servidor. Tente de novo.'); }
+});
+document.getElementById('btnPedidoComProduto').addEventListener('click', () => {
+    if (!configPedido) return avisar('Para o primeiro pedido o aparelho precisa baixar as formas de pagamento. Conecte à internet e toque em "Atualizar agora".');
+    const p = fichaAtual;
+    iniciarPedido('PA', { itens: [{ produto: p.id, descricao: p.descricao, qtd: 1, preco: p.preco, desconto: 0 }] });
+});
 
 // ============================================================================================================
 // Aviso de nova versão (igual ao PrimeSys Info): o app pergunta ao servidor qual versão está no ar (ao voltar para
