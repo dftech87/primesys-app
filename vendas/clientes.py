@@ -25,7 +25,12 @@ logger = logging.getLogger(__name__)
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TTL_PUBLICO = 7 * 24 * 3600
-_cliente_http = httpx.AsyncClient(timeout=10.0, headers={"User-Agent": "PrimeVendas/1.0"})
+
+
+async def _obter(url: str) -> httpx.Response:
+    """Uma conexão por consulta (são poucas e com cache): nada fica preso a um loop/conexão antiga."""
+    async with httpx.AsyncClient(timeout=10.0, headers={"User-Agent": "PrimeVendas/1.0"}) as cliente:
+        return await cliente.get(url)
 
 
 class CadastroRecusado(Exception):
@@ -66,7 +71,7 @@ def cnpj_valido(cnpj: str) -> bool:
 
 # ---- Consultas públicas (servidor chama; o celular nunca fala direto com esses serviços) ----------------------------
 async def _viacep(cep: str) -> dict | None:
-    r = await _cliente_http.get(f"https://viacep.com.br/ws/{cep}/json/")
+    r = await _obter(f"https://viacep.com.br/ws/{cep}/json/")
     r.raise_for_status()
     d = r.json()
     if d.get("erro"):
@@ -85,20 +90,76 @@ async def buscar_cep(cnpj_empresa: str, cep) -> dict | None:
         raise ServicoIndisponivel() from erro
 
 
+def _num_ibge(v) -> int | None:
+    return int(v) if str(v or "").isdigit() else None
+
+
+def _fone(*partes) -> str:
+    f = so_digitos("".join(str(p or "") for p in partes))
+    return f if len(f) in (10, 11) else ""
+
+
 async def _brasilapi(cnpj: str) -> dict | None:
-    r = await _cliente_http.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}")
+    r = await _obter(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}")
     if r.status_code == 404:
         return None
     r.raise_for_status()
     d = r.json()
-    fone = so_digitos(d.get("ddd_telefone_1"))
     return {"razao_social": d.get("razao_social") or "", "fantasia": d.get("nome_fantasia") or "", "cep": so_digitos(d.get("cep")),
             "logradouro": " ".join(x for x in (d.get("descricao_tipo_de_logradouro") or "", d.get("logradouro") or "") if x).strip(),
             "numero": d.get("numero") or "", "complemento": d.get("complemento") or "", "bairro": d.get("bairro") or "",
-            "cidade": d.get("municipio") or "", "uf": d.get("uf") or "",
-            "ibge": int(d["codigo_municipio_ibge"]) if str(d.get("codigo_municipio_ibge") or "").isdigit() else None,
-            "fone": fone if len(fone) in (10, 11) else "", "email": (d.get("email") or "").lower(),
-            "situacao": d.get("descricao_situacao_cadastral") or ""}
+            "cidade": d.get("municipio") or "", "uf": d.get("uf") or "", "ibge": _num_ibge(d.get("codigo_municipio_ibge")),
+            "fone": _fone(d.get("ddd_telefone_1")), "email": (d.get("email") or "").lower(), "situacao": d.get("descricao_situacao_cadastral") or ""}
+
+
+async def _cnpj_ws(cnpj: str) -> dict | None:
+    r = await _obter(f"https://publica.cnpj.ws/cnpj/{cnpj}")
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    d = r.json()
+    e = d.get("estabelecimento") or {}
+    return {"razao_social": d.get("razao_social") or "", "fantasia": e.get("nome_fantasia") or "", "cep": so_digitos(e.get("cep")),
+            "logradouro": " ".join(x for x in (e.get("tipo_logradouro") or "", e.get("logradouro") or "") if x).strip(),
+            "numero": e.get("numero") or "", "complemento": e.get("complemento") or "", "bairro": e.get("bairro") or "",
+            "cidade": (e.get("cidade") or {}).get("nome") or "", "uf": (e.get("estado") or {}).get("sigla") or "",
+            "ibge": _num_ibge((e.get("cidade") or {}).get("ibge_id")), "fone": _fone(e.get("ddd1"), e.get("telefone1")),
+            "email": (e.get("email") or "").lower(), "situacao": e.get("situacao_cadastral") or ""}
+
+
+async def _receitaws(cnpj: str) -> dict | None:
+    r = await _obter(f"https://receitaws.com.br/v1/cnpj/{cnpj}")
+    r.raise_for_status()
+    d = r.json()
+    if d.get("status") == "ERROR":
+        return None
+    telefone = (d.get("telefone") or "").split("/")[0]
+    return {"razao_social": d.get("nome") or "", "fantasia": d.get("fantasia") or "", "cep": so_digitos(d.get("cep")),
+            "logradouro": d.get("logradouro") or "", "numero": d.get("numero") or "", "complemento": d.get("complemento") or "",
+            "bairro": d.get("bairro") or "", "cidade": d.get("municipio") or "", "uf": d.get("uf") or "", "ibge": None,
+            "fone": _fone(telefone), "email": (d.get("email") or "").lower(), "situacao": d.get("situacao") or ""}
+
+
+async def _dados_publicos(cnpj: str) -> dict | None:
+    """Tenta 3 serviços públicos, nesta ordem (algum pode estar fora ou bloquear o servidor). Sem o código IBGE,
+    completa pelo CEP (o ERP exige o município no endereço)."""
+    for nome, consulta in (("BrasilAPI", _brasilapi), ("CNPJ.ws", _cnpj_ws), ("ReceitaWS", _receitaws)):
+        try:
+            dados = await consulta(cnpj)
+        except Exception as erro:
+            logger.warning("consulta de CNPJ em %s falhou: %s", nome, type(erro).__name__)
+            continue
+        if dados and dados.get("razao_social"):
+            if not dados.get("ibge") and len(dados.get("cep") or "") == 8:
+                try:
+                    cep = await _viacep(dados["cep"])
+                    if cep:
+                        dados.update(ibge=cep["ibge"], cidade=dados["cidade"] or cep["cidade"], uf=dados["uf"] or cep["uf"])
+                except Exception:
+                    pass
+            dados["fonte"] = nome
+            return dados
+    return None
 
 
 async def ja_no_erp(tenant: dict, documento: str) -> dict | None:
@@ -123,9 +184,10 @@ async def buscar_cnpj(aparelho: dict, cnpj) -> dict:
         raise CadastroRecusado("CNPJ inválido. Confira os números.")
     existente = await ja_no_erp(aparelho["tenant"], cnpj)
     try:
-        dados = await cached((aparelho["cnpj"], "publico-cnpj", cnpj), TTL_PUBLICO, lambda: _brasilapi(cnpj))
-    except httpx.HTTPError:
-        dados = None   # Receita/BrasilAPI fora: o vendedor digita
+        dados = await cached((aparelho["cnpj"], "publico-cnpj", cnpj), TTL_PUBLICO, lambda: _dados_publicos(cnpj),
+                             guardar_se=lambda v: v is not None)
+    except Exception:
+        dados = None   # serviços da Receita fora: o vendedor digita
     return {"existente": existente, "dados": dados}
 
 

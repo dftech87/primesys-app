@@ -1440,7 +1440,7 @@ function cnpjOk(c) { const d = digitos(c); if (d.length !== 14 || /^(\d)\1+$/.te
 function msgCli(id, texto, tipo, extra) { const el = document.getElementById(id); el.className = 'msg-cli' + (texto ? ' ' + (tipo || 'info') : ''); el.innerHTML = texto ? esc(texto) + (extra || '') : ''; }
 
 function abrirCadastro(origem) {
-    cadOrigem = origem; cadIbge = null;
+    cadOrigem = origem; cadIbge = null; ultimoCnpjBuscado = '';
     document.getElementById('formCliente').reset();
     ['cliMsgDoc', 'cliMsgCep'].forEach((id) => msgCli(id, ''));
     document.getElementById('erroCliente').classList.remove('mostrar');
@@ -1468,7 +1468,13 @@ document.getElementById('btnNovoClienteAba').addEventListener('click', () => abr
 document.getElementById('btnVoltarCliente').addEventListener('click', () => {
     if (cadOrigem === 'pedido') { mostrar('telaPedido'); irPasso(1); } else { mostrar('telaClientes'); desenharClientes(); }
 });
-document.getElementById('cliDoc').addEventListener('input', (ev) => { ev.target.value = cadTipo === 'J' ? mascaraCnpj(ev.target.value) : mascaraCpf(ev.target.value); msgCli('cliMsgDoc', ''); });
+let ultimoCnpjBuscado = '';
+document.getElementById('cliDoc').addEventListener('input', (ev) => {
+    ev.target.value = cadTipo === 'J' ? mascaraCnpj(ev.target.value) : mascaraCpf(ev.target.value); msgCli('cliMsgDoc', '');
+    // CNPJ completo e válido: busca sozinho (sem precisar tocar em "Buscar dados")
+    const d = digitos(ev.target.value);
+    if (cadTipo === 'J' && d.length === 14 && cnpjOk(d) && d !== ultimoCnpjBuscado) { ultimoCnpjBuscado = d; document.getElementById('btnBuscarCnpj').click(); }
+});
 document.getElementById('cliCelular').addEventListener('input', (ev) => { ev.target.value = mascaraFone(ev.target.value); });
 document.getElementById('cliCep').addEventListener('input', async (ev) => {
     ev.target.value = mascaraCep(ev.target.value); cadIbge = null;
