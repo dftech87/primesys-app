@@ -217,6 +217,13 @@
     .msg-cli button { margin-top: 8px; border: 0; border-radius: 8px; background: #047857; color: #fff; font-weight: 700; padding: 8px 12px; cursor: pointer; }
     .duas-campos { display: flex; gap: 10px; } .duas-campos > div { flex: 1; min-width: 0; }
     .pendente-tag { font-size: 10px; font-weight: 700; color: #b45309; background: #fffbeb; border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+    .filtro-data { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+    .filtro-data .seta { width: 40px; height: 40px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-size: 20px; color: #047857; cursor: pointer; flex: none; }
+    .filtro-data .seta:disabled { color: #cbd5e1; }
+    .filtro-data .dia { position: relative; flex: 1; height: 40px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700; font-size: 14px; color: #0f172a; cursor: pointer; }
+    .filtro-data .dia input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+    .filtro-data .todos { height: 40px; padding: 0 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; }
+    .filtro-data .todos.on { background: #047857; border-color: #047857; color: #fff; }
     .dialogo { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: calc(100% - 48px); max-width: 360px; background: #fff; border-radius: 18px; padding: 20px 18px 14px; z-index: 61; box-shadow: 0 20px 50px rgba(15,23,42,.35); }
     .dialogo .dlg-txt { font-size: 15px; line-height: 1.45; color: #0f172a; white-space: pre-line; }
     .dialogo .dlg-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
@@ -345,6 +352,12 @@
     <div class="cab-lista"><div class="l1"><span class="nm">Meus pedidos</span><span class="net" data-net>Online</span></div>
 </div>
     <div class="wrap">
+        <div class="filtro-data">
+            <button type="button" class="seta" id="diaAnterior" aria-label="Dia anterior">‹</button>
+            <label class="dia"><span>📅</span><span id="diaTexto">Hoje</span><input type="date" id="diaEscolhido" aria-label="Escolher a data"></label>
+            <button type="button" class="seta" id="diaSeguinte" aria-label="Dia seguinte">›</button>
+            <button type="button" class="todos" id="diaTodos">Todos</button>
+        </div>
         <div class="resumo3" id="resumoPedidos"></div>
         <div class="busca contorno"><span>🔍</span><input id="buscaPedido" placeholder="Nº do pedido ou cliente" autocomplete="off"><button class="limpar" type="button" data-limpar="buscaPedido">✕</button></div>
         <div id="listaPedidos"></div>
@@ -1075,7 +1088,7 @@ document.getElementById('nav').addEventListener('click', (ev) => {
     const aba = botao.dataset.aba;
     if (aba === 'telaProdutos') desenharProdutos();
     if (aba === 'telaClientes') desenharClientes();
-    if (aba === 'telaPedidos') desenharPedidos();
+    if (aba === 'telaPedidos') { filtroDia = horaLocalISO().slice(0, 10); desenharPedidos(); }
     if (aba === 'telaInicio') return abrirInicio();
     mostrar(aba);
 });
@@ -1100,8 +1113,8 @@ async function carregarPedidos() {
 }
 async function salvarPedido(p) { await gravarLinhas('pedidos', [p]); await carregarPedidos(); }
 
-function horaLocalISO() {   // hora do aparelho, sem fuso (é a hora em que o vendedor fez o pedido)
-    const d = new Date(), z = (n) => String(n).padStart(2, '0');
+function horaLocalISO(base) {   // hora do aparelho, sem fuso (é a hora em que o vendedor fez o pedido)
+    const d = base instanceof Date ? base : new Date(), z = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`;
 }
 const centavos = (v) => Math.round((Number(v) || 0) * 100) / 100;
@@ -1187,7 +1200,8 @@ function linhaPedido(p) {
 // ---- Aba Pedidos: Pedido de venda | Pré-venda ----
 function desenharPedidos() {
     const termo = semAcento(document.getElementById('buscaPedido').value.trim());
-    const doTipo = pedidos;
+    desenharFiltroData();
+    const doTipo = filtroDia ? pedidos.filter((p) => (p.criado_em || '').startsWith(filtroDia)) : pedidos;
     const conta = (lista) => doTipo.filter((p) => lista.includes(p.situacao)).length;
     const problema = conta(['recusado']) + conta(['fila']);
     document.getElementById('resumoPedidos').innerHTML = `<div>Aguardando finalizar<b>${conta(['no_caixa'])}</b></div><div>Finalizados<b>${conta(['finalizado', 'faturado'])}</b></div><div>Pendentes<b class="${problema ? 'vermelho' : ''}">${problema}</b></div>`;
@@ -1201,8 +1215,27 @@ function desenharPedidos() {
         const rotulo = d === hoje ? 'Hoje' : d.split('-').reverse().join('/');
         html += `<div class="tit"><span>${rotulo}</span><span>${fmtMoeda(total)}</span></div><div class="lista">${itens.map(linhaPedido).join('')}</div>`;
     });
-    document.getElementById('listaPedidos').innerHTML = html || '<div class="rodape-lista">Nenhum pedido ainda.</div>';
+    document.getElementById('listaPedidos').innerHTML = html || `<div class="rodape-lista">${filtroDia ? 'Nenhum pedido neste dia.' : 'Nenhum pedido ainda.'}</div>`;
 }
+
+// Data da lista de pedidos: começa em hoje; setas andam um dia; tocar na data abre o calendário; "Todos" tira o filtro.
+let filtroDia = null;
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+function somarDias(isoDia, n) { const d = new Date(isoDia + 'T12:00:00'); d.setDate(d.getDate() + n); return horaLocalISO(d).slice(0, 10); }
+function desenharFiltroData() {
+    const hoje = horaLocalISO().slice(0, 10);
+    const texto = !filtroDia ? 'Todos os dias' : filtroDia === hoje ? 'Hoje' : filtroDia === somarDias(hoje, -1) ? 'Ontem'
+        : `${filtroDia.split('-').reverse().slice(0, 2).join('/')} · ${DIAS_SEMANA[new Date(filtroDia + 'T12:00:00').getDay()]}`;
+    document.getElementById('diaTexto').textContent = texto;
+    document.getElementById('diaEscolhido').value = filtroDia || hoje;
+    document.getElementById('diaEscolhido').max = hoje;
+    document.getElementById('diaSeguinte').disabled = !filtroDia || filtroDia >= hoje;
+    document.getElementById('diaTodos').classList.toggle('on', !filtroDia);
+}
+document.getElementById('diaAnterior').addEventListener('click', () => { filtroDia = somarDias(filtroDia || horaLocalISO().slice(0, 10), -1); desenharPedidos(); });
+document.getElementById('diaSeguinte').addEventListener('click', () => { if (filtroDia) { filtroDia = somarDias(filtroDia, 1); desenharPedidos(); } });
+document.getElementById('diaTodos').addEventListener('click', () => { filtroDia = filtroDia ? null : horaLocalISO().slice(0, 10); desenharPedidos(); });
+document.getElementById('diaEscolhido').addEventListener('change', (ev) => { if (ev.target.value) { filtroDia = ev.target.value; desenharPedidos(); } });
 document.getElementById('buscaPedido').addEventListener('input', desenharPedidos);
 document.addEventListener('click', (ev) => { const b = ev.target.closest('[data-pedido]'); if (b) abrirDetalhe(b.dataset.pedido); });
 
