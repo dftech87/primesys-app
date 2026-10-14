@@ -61,6 +61,11 @@ SCHEMA = [
         id TEXT PRIMARY KEY, cnpj TEXT NOT NULL, id_funcionario INTEGER NOT NULL, id_pessoa INTEGER NOT NULL,
         resultado TEXT NOT NULL, criado_em TEXT NOT NULL
     )""",
+    # Resultados de consultas ao ERP que mudam pouco (ver vendas/memoria.py): sobrevivem a uma publicação.
+    """CREATE TABLE IF NOT EXISTS pv_cache (
+        cnpj TEXT NOT NULL, chave TEXT NOT NULL, valor TEXT NOT NULL, ate TEXT NOT NULL,
+        PRIMARY KEY (cnpj, chave)
+    )""",
     # Controle da leitura do ERP por empresa e tabela: até onde já leu (marca do ERP) e quando.
     """CREATE TABLE IF NOT EXISTS pv_sincronizacao (
         cnpj TEXT NOT NULL, tabela TEXT NOT NULL, marca_erp TEXT NOT NULL DEFAULT '',

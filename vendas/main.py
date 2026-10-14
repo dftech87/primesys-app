@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Fatia da cota do ERP que este processo pode usar (o PrimeSys Info usa a dele). Ajustado antes de qualquer chamada.
 meuerp_client.RATE_LIMIT_CAPACITY = config.COTA_ERP_POR_MINUTO
-meuerp_client.RESERVA_PARA_INTERATIVAS = 2
+meuerp_client.RESERVA_PARA_INTERATIVAS = 4   # login e pedido nunca esperam pela sincronização em segundo plano
 
 ESTATICOS = Path(__file__).parent / "static"
 
@@ -63,6 +64,11 @@ async def _conferir_pedidos_sempre() -> None:
                 tenant = get_tenant_by_cnpj(cnpj)
                 if config.empresa_liberada(tenant):
                     await pedidos.conferir_situacoes(tenant)
+            # Quem é cada vendedor e as permissões: renovados antes de vencer, para o login ser rápido.
+            for cnpj in sessao.empresas_com_aparelhos():
+                tenant = get_tenant_by_cnpj(cnpj)
+                if config.empresa_liberada(tenant):
+                    await vendedores.renovar_se_preciso(tenant)
         except Exception:
             logger.exception("falha na conferência automática dos pedidos")
 
@@ -132,6 +138,7 @@ def _erro(status: int, mensagem: str) -> JSONResponse:
 async def entrar(dados: Entrada, request: Request):
     """Primeiro acesso do aparelho: valida e-mail e senha no ERP (nada é guardado), descobre o funcionário ligado
     ao usuário e devolve o token do aparelho + o que o app precisa saber (nome, comissão, permissões)."""
+    inicio = time.monotonic()
     cnpj, email = normalize_cnpj(dados.cnpj), dados.email.strip().lower()
     chave_usuario = f"vendas:{cnpj}:{email}"
     ip = limite.ip_do_cliente(request)
@@ -168,7 +175,7 @@ async def entrar(dados: Entrada, request: Request):
                           "No ERP, informe o seu usuário no cadastro de funcionário.")
     permissoes = await vendedores.permissoes(tenant, vendedor["id_perfil"])
     token = sessao.criar(cnpj, vendedor, aparelho=request.headers.get("user-agent", ""))
-    logger.info("aparelho conectado: empresa %s, funcionário %s", cnpj, vendedor["id_funcionario"])
+    logger.info("aparelho conectado: empresa %s, funcionário %s, login em %.1fs", cnpj, vendedor["id_funcionario"], time.monotonic() - inicio)
     return {
         "token": token,
         "empresa": {"cnpj": cnpj, "nome": tenant["nome_fantasia"]},

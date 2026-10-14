@@ -51,6 +51,13 @@ def _revogar_id(id_aparelho: int) -> None:
         conn.execute("UPDATE pv_aparelhos SET revogado = 1 WHERE id = ?", (id_aparelho,))
 
 
+def empresas_com_aparelhos() -> list[str]:
+    """Empresas com algum celular conectado (não desconectado) usado nos últimos 30 dias."""
+    limite = (texto_para_data(agora_texto()) - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    with db_session() as conn:
+        return [r["cnpj"] for r in conn.execute("SELECT DISTINCT cnpj FROM pv_aparelhos WHERE revogado = 0 AND ultimo_uso >= ?", (limite,))]
+
+
 NAO_AUTORIZADO = HTTPException(status_code=401, detail="Acesso expirado. Entre de novo com seu e-mail e senha do ERP.")
 
 
