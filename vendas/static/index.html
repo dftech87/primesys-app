@@ -532,11 +532,12 @@ async function lerTodos(loja) {
     const db = await abrirBanco();
     return new Promise((ok, falha) => { const r = db.transaction(loja).objectStore(loja).getAll(); r.onsuccess = () => ok(r.result || []); r.onerror = () => falha(r.error); });
 }
-async function limparCatalogo() {
+async function limparLojas(lojas) {
     const db = await abrirBanco();
-    const lojas = [...TABELAS, 'pedidos'];   // pedidos ainda na fila também saem (o aviso de sair diz isso)
     return new Promise((ok, falha) => { const t = db.transaction(lojas, 'readwrite'); lojas.forEach((n) => t.objectStore(n).clear()); t.oncomplete = ok; t.onerror = () => falha(t.error); });
 }
+const limparCatalogo = () => limparLojas(TABELAS);
+const limparPedidos = () => limparLojas(['pedidos']);   // pedidos ainda na fila também saem (o aviso de sair diz isso)
 async function lerLocal(chave) {
     const db = await abrirBanco();
     return new Promise((ok, falha) => { const r = db.transaction(LOJA).objectStore(LOJA).get(chave); r.onsuccess = () => ok(r.result); r.onerror = () => falha(r.error); });
@@ -574,11 +575,47 @@ async function abrirCofre(pin) {   // PIN errado = a decifragem falha (o AES-GCM
         return new TextDecoder().decode(claro);
     } catch (e) { return null; }
 }
+// O acesso do aparelho fica cifrado com uma chave gerada AQUI e que não pode ser exportada (WebCrypto): nem quem
+// copiar os arquivos do app consegue usá-la fora deste aparelho. A proteção de quem pega o celular é a tela de
+// bloqueio do próprio Android; o servidor confere o acesso a cada abertura com internet e o admin pode bloquear.
+async function chaveDoAparelho() {
+    let chave = await lerLocal('chaveAparelho');
+    if (!chave) {
+        chave = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+        await gravarLocal('chaveAparelho', chave);
+    }
+    return chave;
+}
+async function guardarAcesso(token) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await chaveDoAparelho(), new TextEncoder().encode(token));
+    await gravarLocal('cofre', { v: 2, iv: b64(iv), dado: b64(cifrado) });
+}
+async function abrirAcesso() {
+    const cofre = await lerLocal('cofre');
+    if (!cofre || cofre.v !== 2) return null;
+    try {
+        const claro = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: deB64(cofre.iv) }, await chaveDoAparelho(), deB64(cofre.dado));
+        return new TextDecoder().decode(claro);
+    } catch (e) { return null; }
+}
+
+// Sair: apaga o acesso e o que é do vendedor (pedidos, cadastros na fila). O catálogo (produtos, clientes, estoque)
+// fica, porque o próximo login quase sempre é da mesma empresa; se vier outro CNPJ, ele é apagado no login.
 async function esquecerAparelho() {
-    // Outro usuário pode ser de outra empresa: o catálogo guardado sai junto.
-    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'ultimaSync', 'configPedido', 'cursor_pedidos', 'clientesFila', ...TABELAS.map((n) => 'cursor_' + n)]);
-    await limparCatalogo();
-    tokenEmUso = null; conta = null; produtos = []; clientes = []; estoque = new Map(); pedidos = []; configPedido = null;
+    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'cursor_pedidos', 'clientesFila']);
+    await limparPedidos();
+    tokenEmUso = null; conta = null; pedidos = [];
+}
+async function apagarCatalogoDeOutraEmpresa(cnpj) {
+    const dona = await lerLocal('empresaCatalogo');
+    // Dona desconhecida (aparelho de versão antiga) com catálogo guardado: apaga também, por segurança.
+    if (dona !== cnpj && (dona || (await lerTodos('produtos')).length)) {
+        await apagarLocal(['ultimaSync', 'configPedido', ...TABELAS.map((n) => 'cursor_' + n)]);
+        await limparCatalogo();
+        produtos = []; clientes = []; estoque = new Map(); configPedido = null;
+    }
+    await gravarLocal('empresaCatalogo', cnpj);
 }
 
 // ============================================================================================================
@@ -669,10 +706,16 @@ document.getElementById('formLogin').addEventListener('submit', async (ev) => {
             if (document.getElementById('lembrarCnpj').checked) { localStorage.setItem('pv_cnpj', cnpj); localStorage.setItem('pv_empresa', corpo.empresa.nome); }
             else { localStorage.removeItem('pv_cnpj'); localStorage.removeItem('pv_empresa'); }
         } catch (e) {}
-        tokenRecebido = corpo.token;
         conta = { empresa: corpo.empresa, vendedor: corpo.vendedor, permissoes: corpo.permissoes, pinOfflineDias: corpo.pin_offline_dias };
         document.getElementById('senha').value = '';
-        iniciarCriacaoPin();
+        await apagarCatalogoDeOutraEmpresa(corpo.empresa.cnpj);
+        await guardarAcesso(corpo.token);
+        await gravarLocal('conta', conta);
+        await gravarLocal('ultimoOnline', Date.now());
+        tokenEmUso = corpo.token;
+        await carregarCatalogo();
+        if (produtos.length) { abrirInicio(); sincronizarEmSegundoPlano(); }   // mesma empresa: só baixa o que mudou
+        else primeiraSincronizacao();
     } catch (e) {
         falhar('Sem resposta do servidor. Confira a internet e tente de novo.');
     } finally {
@@ -776,7 +819,13 @@ async function concluirDesbloqueio() {
         return avisoPin(`PIN incorreto. ${restam} ${restam === 1 ? 'tentativa restante' : 'tentativas restantes'}.`, true);
     }
     await gravarLocal('tentativas', 0);
+    await guardarAcesso(token);   // aparelho do tempo do PIN: passa a abrir direto daqui para frente
+    return entrarComAcesso(token);
+}
+
+async function entrarComAcesso(token) {
     tokenEmUso = token;
+    if (!(await lerLocal('empresaCatalogo')) && conta && conta.empresa) await gravarLocal('empresaCatalogo', conta.empresa.cnpj);
     // Com internet, confirma no servidor que o acesso continua valendo (vendedor ativo, aparelho não desconectado).
     if (navigator.onLine) {
         try {
@@ -797,7 +846,7 @@ async function concluirDesbloqueio() {
     const limiteDias = conta.pinOfflineDias || 7;
     if (Date.now() - ultimo > limiteDias * 86400000) {
         tokenEmUso = null;
-        return avisoPin(`Faz mais de ${limiteDias} dias sem conectar. Ligue a internet para continuar.`, true);
+        return prepararLogin(`Faz mais de ${limiteDias} dias sem conectar. Ligue a internet e abra o app de novo para continuar.`);
     }
     await carregarCatalogo();
     if (!produtos.length && navigator.onLine) return primeiraSincronizacao();   // nunca terminou de baixar
@@ -806,7 +855,7 @@ async function concluirDesbloqueio() {
 }
 
 document.getElementById('btnOutroUsuario').addEventListener('click', async () => {
-    if (!(await confirmar('Sair deste usuário? Para entrar de novo será preciso e-mail, senha do ERP e internet. Pedidos ainda não enviados serão perdidos.', 'Sair', true))) return;
+    if (!(await confirmar('Sair deste usuário? Para entrar de novo será preciso e-mail, senha do ERP e internet. Pedidos ainda não enviados serão perdidos (produtos e clientes continuam guardados).', 'Sair', true))) return;
     await esquecerAparelho();
     prepararLogin();
 });
@@ -826,7 +875,7 @@ function abrirInicio() {
     mostrar('telaInicio');
 }
 document.getElementById('btnSair').addEventListener('click', async () => {
-    if (!(await confirmar('Desconectar este aparelho? Para entrar de novo será preciso e-mail, senha do ERP e internet.', 'Desconectar', true))) return;
+    if (!(await confirmar('Desconectar este aparelho? Para entrar de novo será preciso e-mail, senha do ERP e internet. Produtos e clientes continuam guardados; pedidos ainda não enviados serão perdidos.', 'Desconectar', true))) return;
     if (navigator.onLine && tokenEmUso) { try { await api('/api/sair', { method: 'POST' }); } catch (e) {} }
     await esquecerAparelho();
     prepararLogin();
@@ -1667,10 +1716,10 @@ async function verificarVersao() {
 document.getElementById('btnAtualizarApp').addEventListener('click', () => {
     const botao = document.getElementById('btnAtualizarApp');
     botao.textContent = 'Atualizando...'; botao.disabled = true;
-    // Depois de recarregar, volta para a mesma aba sem pedir o PIN de novo (só nesta aba do navegador e por 1 minuto).
+    // Depois de recarregar, volta para a mesma aba (só nesta aba do navegador e por 1 minuto).
     try {
         const aba = (document.querySelector('.tela.ativa') || {}).id;
-        if (tokenEmUso && ABAS.includes(aba)) sessionStorage.setItem('pv_retomar', JSON.stringify({ token: tokenEmUso, aba, ate: Date.now() + 60000 }));
+        if (ABAS.includes(aba)) sessionStorage.setItem('pv_retomar', JSON.stringify({ aba, ate: Date.now() + 60000 }));
     } catch (e) {}
     window.location.reload();
 });
@@ -1684,16 +1733,10 @@ window.addEventListener('online', verificarVersao);
 setInterval(() => { if (document.visibilityState === 'visible') verificarVersao(); }, 30 * 1000);
 setTimeout(verificarVersao, 4000);
 
-async function retomarDepoisDeAtualizar() {
+function abaParaRetomar() {
     let dados = null;
     try { dados = JSON.parse(sessionStorage.getItem('pv_retomar') || 'null'); sessionStorage.removeItem('pv_retomar'); } catch (e) {}
-    if (!dados || !dados.token || Date.now() > dados.ate) return false;
-    tokenEmUso = dados.token;
-    await carregarCatalogo();
-    abrirInicio();
-    if (dados.aba !== 'telaInicio') document.querySelector(`#nav [data-aba="${dados.aba}"]`).click();
-    sincronizarEmSegundoPlano();
-    return true;
+    return dados && Date.now() <= dados.ate && dados.aba !== 'telaInicio' ? dados.aba : null;
 }
 
 // ============================================================================================================
@@ -1707,8 +1750,15 @@ async function retomarDepoisDeAtualizar() {
     try {
         conta = await lerLocal('conta');
         const cofre = await lerLocal('cofre');
-        if (conta && cofre && await retomarDepoisDeAtualizar()) return;
-        if (conta && cofre) return iniciarDesbloqueio();
+        if (conta && cofre && cofre.v === 2) {
+            const token = await abrirAcesso();
+            if (token) {
+                const aba = abaParaRetomar();   // voltando de "Atualizar": mesma aba de antes
+                await entrarComAcesso(token);
+                if (aba && document.getElementById('telaInicio').classList.contains('ativa')) document.querySelector(`#nav [data-aba="${aba}"]`).click();
+                return;
+            }
+        } else if (conta && cofre) return iniciarDesbloqueio();   // acesso antigo protegido por PIN: pede uma última vez
     } catch (e) {}
     prepararLogin();
 })();
