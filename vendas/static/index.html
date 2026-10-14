@@ -1278,7 +1278,9 @@ function abrirDetalhe(id) {
     const p = pedidos.find((x) => x.id === id);
     if (!p) return;
     detalheAtual = p;
-    telaAntesDoDetalhe = (document.querySelector('.tela.ativa') || {}).id || 'telaPedidos';
+    const atual = (document.querySelector('.tela.ativa') || {}).id;
+    if (atual && atual !== 'telaDetalhe') telaAntesDoDetalhe = atual;   // reabrir o detalhe (após cancelar/reenviar) não pode virar "voltar para ele mesmo"
+    if (!ABAS.includes(telaAntesDoDetalhe)) telaAntesDoDetalhe = 'telaPedidos';
     document.getElementById('cabDetalhe').className = 'cab-ped ' + (p.tipo === 'PA' ? 'pa' : 'pv');
     document.getElementById('detTitulo').textContent = `${NOMES_TIPO[p.tipo]} · ${p.cliente_nome}`;
     document.getElementById('detSub').textContent = `${(p.criado_em || '').slice(0, 10).split('-').reverse().join('/')} ${(p.criado_em || '').slice(11, 16)} · ${p.documento ? 'nº no ERP ' + p.documento : 'ainda sem número'}`;
