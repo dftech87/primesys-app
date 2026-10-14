@@ -1539,7 +1539,8 @@ function desenharResumo() {
     const dp = rascunho.desconto_pedido || 0;
     const linhaDesconto = podeDescontoNoPedido() ? `<div class="item desc-pedido"><span class="n">Desconto no pedido<small id="descPedidoInfo">${!t.descontoPedidoOk ? `máximo possível ${fmtMoeda(t.maximoPedido)}` : dp ? 'dividido entre os itens' : 'em R$ ou %'}</small></span>
             <span class="rs">R$ <input id="descPedidoValor" inputmode="decimal" placeholder="0,00" value="${dp ? fmtNum(dp) : ''}"></span>
-            <span class="rs"><input id="descPedidoPct" inputmode="decimal" placeholder="0" value="${dp && t.bruto ? (dp / (t.bruto - t.desconto_itens) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : ''}"> %</span></div>` : '';
+            <span class="rs"><input id="descPedidoPct" inputmode="decimal" placeholder="0" value="${dp && t.bruto ? (dp / (t.bruto - t.desconto_itens) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : ''}"> %</span></div>`
+        : `<div class="item"><span class="n">Desconto no pedido<small>seu perfil no ERP não permite dar desconto</small></span></div>`;
     document.getElementById('resumoTotais').innerHTML = `<div class="item"><span class="n">Produtos (${rascunho.itens.length})</span><span class="p">${fmtMoeda(t.bruto)}</span></div>`
         + (t.desconto_itens ? `<div class="item"><span class="n">Descontos nos itens</span><span class="p vermelho">− ${fmtMoeda(t.desconto_itens)}</span></div>` : '')
         + linhaDesconto
@@ -1570,7 +1571,14 @@ function desenharPagamentos() {
     document.getElementById('barraResumoInfo').textContent = 'finaliza no caixa ou na nuvem';
     document.getElementById('btnEnviarPedido').disabled = falta !== 0 || !rascunho.itens.length || !rascunho.pagamentos.length || !t.descontoPedidoOk;
 }
+let esperaDesconto = null;
+document.getElementById('resumoTotais').addEventListener('input', (ev) => {
+    if (!['descPedidoValor', 'descPedidoPct'].includes(ev.target.id)) return;
+    clearTimeout(esperaDesconto);
+    esperaDesconto = setTimeout(() => ev.target.dispatchEvent(new Event('change', { bubbles: true })), 900);
+});
 document.getElementById('resumoTotais').addEventListener('change', (ev) => {
+    clearTimeout(esperaDesconto);
     const t = totaisRascunho(), base = centavos(t.bruto - t.desconto_itens);
     let valor = 0;
     if (ev.target.id === 'descPedidoValor') valor = centavos(lerNumero(ev.target.value));
