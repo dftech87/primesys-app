@@ -217,6 +217,14 @@
     .msg-cli button { margin-top: 8px; border: 0; border-radius: 8px; background: #047857; color: #fff; font-weight: 700; padding: 8px 12px; cursor: pointer; }
     .duas-campos { display: flex; gap: 10px; } .duas-campos > div { flex: 1; min-width: 0; }
     .pendente-tag { font-size: 10px; font-weight: 700; color: #b45309; background: #fffbeb; border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+    .dialogo { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: calc(100% - 48px); max-width: 360px; background: #fff; border-radius: 18px; padding: 20px 18px 14px; z-index: 61; box-shadow: 0 20px 50px rgba(15,23,42,.35); }
+    .dialogo .dlg-txt { font-size: 15px; line-height: 1.45; color: #0f172a; white-space: pre-line; }
+    .dialogo .dlg-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .dialogo button { border: 0; border-radius: 10px; padding: 10px 16px; font-weight: 700; font-size: 14px; cursor: pointer; }
+    .dialogo .dlg-sec { background: #f1f5f9; color: #334155; }
+    .dialogo .dlg-ok { background: #047857; color: #fff; }
+    .dialogo .dlg-ok.perigo { background: #b91c1c; }
+    #velaDialogo { z-index: 60; }
     .btn-cancelar { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; margin-top: 12px; border: 1px solid #fecaca; border-radius: 12px; background: #fef2f2; color: #b91c1c; font-weight: 700; font-size: 15px; cursor: pointer; }
     .btn-cancelar:disabled { opacity: .6; }
     .situacao-card { background: #fff; border-radius: 16px; padding: 14px; margin-top: 14px; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
@@ -456,6 +464,13 @@
     </div>
 </section>
 
+<!-- Avisos e confirmações do app (no lugar das janelas do navegador, que mostram o endereço do servidor) -->
+<div class="vela" id="velaDialogo" hidden></div>
+<div class="dialogo" id="dialogo" role="dialog" aria-modal="true" hidden>
+    <div class="dlg-txt" id="dlgTexto"></div>
+    <div class="dlg-btns"><button type="button" class="dlg-sec" id="dlgCancelar">Voltar</button><button type="button" class="dlg-ok" id="dlgOk">OK</button></div>
+</div>
+
 <div class="aviso-versao" id="avisoVersao" role="status" aria-live="polite">
     <span class="texto"><b>Nova versão disponível.</b> Atualize para ver as novidades.</span>
     <button type="button" class="atualizar" id="btnAtualizarApp">Atualizar</button>
@@ -471,6 +486,23 @@
 
 <script>
 'use strict';
+// Janela própria do app para avisos e confirmações (a do navegador mostra o endereço do servidor).
+function dialogo(texto, { ok = 'OK', cancelar = null, perigo = false } = {}) {
+    return new Promise((resolver) => {
+        const caixa = document.getElementById('dialogo'), vela = document.getElementById('velaDialogo');
+        const bOk = document.getElementById('dlgOk'), bCancelar = document.getElementById('dlgCancelar');
+        document.getElementById('dlgTexto').textContent = texto;
+        bOk.textContent = ok; bOk.classList.toggle('perigo', perigo);
+        bCancelar.textContent = cancelar || ''; bCancelar.hidden = !cancelar;
+        const fechar = (resposta) => { caixa.hidden = true; vela.hidden = true; bOk.onclick = bCancelar.onclick = vela.onclick = null; resolver(resposta); };
+        bOk.onclick = () => fechar(true);
+        bCancelar.onclick = () => fechar(false);
+        vela.onclick = () => fechar(!cancelar);
+        caixa.hidden = false; vela.hidden = false; bOk.focus();
+    });
+}
+const confirmar = (texto, ok = 'Confirmar', perigo = false) => dialogo(texto, { ok, cancelar: 'Voltar', perigo });
+const avisar = (texto) => dialogo(texto);
 // ============================================================================================================
 // Armazenamento local (IndexedDB). Nada sensível em texto aberto: o token do aparelho fica cifrado com uma
 // chave derivada do PIN (PBKDF2 + AES-GCM). Sem o PIN certo, o token guardado não serve para nada.
@@ -774,7 +806,7 @@ async function concluirDesbloqueio() {
 }
 
 document.getElementById('btnOutroUsuario').addEventListener('click', async () => {
-    if (!confirm('Sair deste usuário? Para entrar de novo será preciso e-mail, senha do ERP e internet. Pedidos ainda não enviados serão perdidos.')) return;
+    if (!(await confirmar('Sair deste usuário? Para entrar de novo será preciso e-mail, senha do ERP e internet. Pedidos ainda não enviados serão perdidos.', 'Sair', true))) return;
     await esquecerAparelho();
     prepararLogin();
 });
@@ -794,7 +826,7 @@ function abrirInicio() {
     mostrar('telaInicio');
 }
 document.getElementById('btnSair').addEventListener('click', async () => {
-    if (!confirm('Desconectar este aparelho? Para entrar de novo será preciso e-mail, senha do ERP e internet.')) return;
+    if (!(await confirmar('Desconectar este aparelho? Para entrar de novo será preciso e-mail, senha do ERP e internet.', 'Desconectar', true))) return;
     if (navigator.onLine && tokenEmUso) { try { await api('/api/sair', { method: 'POST' }); } catch (e) {} }
     await esquecerAparelho();
     prepararLogin();
@@ -1163,20 +1195,20 @@ async function apagarPedidoLocal(id) {
 document.getElementById('btnCancelarPedido').addEventListener('click', async () => {
     const p = detalheAtual, botao = document.getElementById('btnCancelarPedido');
     if (p.situacao === 'fila' || (p.situacao === 'recusado' && !p.documento)) {
-        if (!confirm('Excluir este pedido do aparelho? Ele não chegou ao ERP.')) return;
+        if (!(await confirmar('Excluir este pedido do aparelho? Ele não chegou ao ERP.', 'Excluir', true))) return;
         if (p.situacao === 'recusado' && navigator.onLine) { try { await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' }); } catch (e) {} }
         await apagarPedidoLocal(p.id);
         mostrar('telaPedidos'); return desenharPedidos();
     }
-    if (!navigator.onLine) return alert('Sem internet. Para cancelar no ERP é preciso estar conectado.');
-    if (!confirm(`Cancelar o pedido nº ${p.documento}? Ele sai do caixa e da nuvem.`)) return;
+    if (!navigator.onLine) return avisar('Sem internet. Para cancelar no ERP é preciso estar conectado.');
+    if (!(await confirmar(`Cancelar o pedido nº ${p.documento}? Ele sai do caixa e da nuvem.`, 'Cancelar pedido', true))) return;
     botao.disabled = true; botao.textContent = 'Cancelando...';
     try {
         const r = await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' });
         if (r.status === 200) Object.assign(p, { situacao: r.corpo.situacao, mensagem: r.corpo.mensagem || '' });
-        else { alert(r.corpo.erro || 'Não foi possível cancelar agora.'); if (r.status === 422) await enviarFila(); }
+        else { await avisar(r.corpo.erro || 'Não foi possível cancelar agora.'); if (r.status === 422) await enviarFila(); }
         await salvarPedido(p);
-    } catch (e) { alert('Sem resposta do servidor. Tente de novo.'); }
+    } catch (e) { await avisar('Sem resposta do servidor. Tente de novo.'); }
     abrirDetalhe(p.id);
 });
 document.getElementById('btnReenviar').addEventListener('click', async () => { await enviarFila(); abrirDetalhe(detalheAtual.id); });
@@ -1190,10 +1222,10 @@ function abrirFolha(id) { document.getElementById(id).hidden = false; document.g
 function fecharFolha(id) { document.getElementById(id).hidden = true; document.getElementById('velaItem').hidden = true; }
 document.getElementById('btnNovoPedido').addEventListener('click', () => {
     if (!configPedido) {
-        alert('Para o primeiro pedido o aparelho precisa baixar as formas de pagamento. Conecte à internet e toque em "Atualizar agora".');
+        avisar('Para o primeiro pedido o aparelho precisa baixar as formas de pagamento. Conecte à internet e toque em "Atualizar agora".');
         return;
     }
-    if (!(configPedido.PA || {}).disponivel) return alert('A natureza "Pedido de venda" não foi encontrada no ERP desta empresa.');
+    if (!(configPedido.PA || {}).disponivel) return avisar('A natureza "Pedido de venda" não foi encontrada no ERP desta empresa.');
     iniciarPedido('PA');   // só pedido de venda: pré-venda ou NFC-e é escolhido na finalização (caixa ou nuvem)
 });
 
@@ -1221,9 +1253,9 @@ function irPasso(n) {
     if (n === 2) { desenharPedProdutos(); atualizarBarra(); }
     if (n === 3) desenharResumo();
 }
-document.getElementById('btnVoltarPedido').addEventListener('click', () => {
+document.getElementById('btnVoltarPedido').addEventListener('click', async () => {
     if (rascunho.passo > 1) return irPasso(rascunho.passo - 1);
-    if (rascunho.itens.length && !confirm('Descartar este pedido?')) return;
+    if (rascunho.itens.length && !(await confirmar('Descartar este pedido? Os produtos escolhidos serão perdidos.', 'Descartar', true))) return;
     rascunho = null; abrirInicio();
 });
 document.querySelectorAll('#cabPedido .passos div').forEach((d) => d.addEventListener('click', () => {
@@ -1304,7 +1336,7 @@ let itemAberto = null;
 function podeDescontar(p) { return !!(conta.permissoes && conta.permissoes.desconto_item) && !!p.permite_desconto; }
 function abrirItem(id) {
     const p = produtos.find((x) => x.id === id);
-    if (!(p.preco > 0)) return alert('Este produto está sem preço no ERP.');
+    if (!(p.preco > 0)) return avisar('Este produto está sem preço no ERP. Cadastre o preço na tabela de preço padrão para poder vender.');
     const existente = rascunho.itens.find((i) => i.produto === id);
     itemAberto = { p, qtd: existente ? existente.qtd : 1, desconto: existente ? existente.desconto : 0, existe: !!existente };
     document.getElementById('itemNome').textContent = p.descricao;
@@ -1577,7 +1609,7 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async () =
         const c = clienteLocal({ id: tempId, nome: d.nome, fantasia: d.fantasia, documento: d.documento ? (d.tipo_pessoa === 'J' ? mascaraCnpj(d.documento) : '***.' + d.documento.slice(3, 6) + '.' + d.documento.slice(6, 9) + '-**') : '', bairro: d.bairro, cidade: d.cidade, uf: d.uf, fone: d.celular }, true);
         await gravarLinhas('clientes', [c]);
         await carregarCatalogo();
-        alert('Sem internet: o cliente foi guardado no aparelho e será cadastrado no ERP assim que a conexão voltar.');
+        await avisar('Sem internet: o cliente foi guardado no aparelho e será cadastrado no ERP assim que a conexão voltar.');
         await clienteSalvo(c, false, true);
     } catch (e) {
         erro.textContent = 'Sem resposta do servidor. Tente de novo.'; erro.classList.add('mostrar');
@@ -1586,7 +1618,7 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async () =
 async function clienteSalvo(cliente, existente, jaLocal) {
     if (!jaLocal) { await gravarLinhas('clientes', [cliente]); await carregarCatalogo(); }
     const c = clientes.find((x) => x.id === cliente.id) || clienteLocal(cliente);
-    if (existente) alert(`Este cliente já existia no ERP (cód. ${cliente.id}). Vamos usar o cadastro existente.`);
+    if (existente) await avisar(`Este cliente já existia no ERP (cód. ${cliente.id}). Vamos usar o cadastro existente.`);
     if (cadOrigem === 'pedido') return usarClienteNoPedido(c.id, c.exibir);
     mostrar('telaClientes'); desenharClientes();
 }
