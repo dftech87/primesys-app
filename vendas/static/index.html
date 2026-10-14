@@ -884,6 +884,7 @@ async function entrarComAcesso(token) {
                 await gravarLocal('ultimoOnline', Date.now());
                 conta.empresa = corpo.empresa;
                 conta.pinOfflineDias = corpo.pin_offline_dias;
+                if (corpo.permissoes) conta.permissoes = corpo.permissoes;   // perfil mudado no ERP vale sem novo login
                 await gravarLocal('conta', conta);
             }
         } catch (e) { /* servidor fora: segue como offline */ }

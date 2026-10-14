@@ -188,10 +188,18 @@ async def entrar(dados: Entrada, request: Request):
 
 @app.get("/api/eu")
 async def eu(aparelho: dict = Depends(sessao.aparelho_atual)):
-    """O app chama ao abrir com internet: confirma que o acesso continua valendo."""
-    return {"ok": True, "empresa": {"cnpj": aparelho["cnpj"], "nome": aparelho["tenant"]["nome_fantasia"]},
-            "vendedor": {"id": aparelho["id_funcionario"], "nome": aparelho["nome_vendedor"]},
-            "pin_offline_dias": config.PIN_OFFLINE_DIAS}
+    """O app chama ao abrir com internet: confirma que o acesso continua valendo e traz as permissões atuais
+    (perfil mudado no ERP vale sem sair e entrar). Vem do que está guardado; ERP fora, o app mantém as que tem."""
+    resposta = {"ok": True, "empresa": {"cnpj": aparelho["cnpj"], "nome": aparelho["tenant"]["nome_fantasia"]},
+                "vendedor": {"id": aparelho["id_funcionario"], "nome": aparelho["nome_vendedor"]},
+                "pin_offline_dias": config.PIN_OFFLINE_DIAS}
+    try:
+        vendedor = await vendedores.do_funcionario(aparelho["tenant"], aparelho["id_funcionario"])
+        if vendedor:
+            resposta["permissoes"] = await vendedores.permissoes(aparelho["tenant"], vendedor.get("id_perfil"))
+    except Exception:
+        logger.warning("permissões atuais indisponíveis para o aparelho; o app mantém as do login")
+    return resposta
 
 
 @app.post("/api/sair")

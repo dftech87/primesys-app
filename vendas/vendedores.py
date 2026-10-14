@@ -5,6 +5,8 @@ O ERP não diz qual usuário acabou de validar o login, então montamos o mapa e
   2. se o e-mail não estiver lá, o e-mail do CONTATO no cadastro do funcionário (1 consulta SQL). Cobre quem não
      vinculou o usuário e usuários que o ERP não mostra (ex.: usuário de suporte/revenda). E-mail de contato
      repetido em dois funcionários ativos não vale (ambíguo).
+Quando a API não devolve o perfil do usuário (fonte 2, ou usuário de suporte), ele vem do banco do ERP
+(usuario_perfil_empresa, 1 consulta SQL), o mesmo perfil que a nuvem usa para liberar desconto.
 A senha continua sendo conferida pelo ERP; o mapa só diz QUAL funcionário é. Fica em memória por algumas horas,
 por empresa. O e-mail nunca vai para o celular: só nome e primeiro nome.
 """
@@ -13,12 +15,13 @@ import logging
 import time
 
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar
+from app.sqlquery import executar, i
 from vendas import config
 from vendas.memoria import esquecer, gravar, guardado, vence_em
 
 logger = logging.getLogger(__name__)
 
+CHAVE_MAPA = "mapa-vendedores-v2"   # v2: perfil completado pelo banco do ERP
 TTL_MAPA = 24 * 3600          # renovado em segundo plano a cada ~6 h (renovar_se_preciso), então o login não espera
 TTL_PERMISSOES = 24 * 3600
 RENOVAR_A_CADA = 6 * 3600
@@ -42,6 +45,29 @@ _SQL_EMAIL_CONTATO = """
     from pessoa_funcionario f
     join pessoa_contato c on c._idpessoa = f._idpessoa
     where coalesce(f.flaginativo, 'F') <> 'T' and coalesce(trim(c.email), '') <> ''"""
+
+# Perfil de cada usuário na empresa principal (a mesma regra do catálogo). Perfil 0 não tem permissões no ERP.
+_SQL_PERFIL_USUARIOS = """
+    select _idusuario as id, idperfil as perfil
+    from usuario_perfil_empresa
+    where _idusuario in ({ids}) and coalesce(idperfil, 0) > 0
+      and _idempresa = (select min(_idempresa) from mercadoria_variacao_empresa)"""
+
+
+async def _completar_perfis(client: MeuERPClient, mapa: dict[str, dict]) -> None:
+    """Preenche o perfil de quem a API não mostrou, lendo do banco do ERP. Sem resposta, fica sem perfil (sem desconto)."""
+    faltando = {int(v["id_usuario"]) for v in mapa.values() if not v.get("id_perfil") and int(v.get("id_usuario") or 0) > 0}
+    if not faltando:
+        return
+    try:
+        linhas = await executar(client, _SQL_PERFIL_USUARIOS.format(ids=", ".join(i(x) for x in sorted(faltando))))
+    except Exception:
+        logger.warning("perfis dos usuários indisponíveis no banco do ERP; sem desconto para %d usuário(s)", len(faltando))
+        return
+    perfil = {int(r["id"]): int(r["perfil"]) for r in linhas}
+    for v in mapa.values():
+        if not v.get("id_perfil") and int(v.get("id_usuario") or 0) in perfil:
+            v["id_perfil"] = perfil[int(v["id_usuario"])]
 
 
 async def _montar_mapa(token: str) -> dict[str, dict]:
@@ -89,6 +115,7 @@ async def _montar_mapa(token: str) -> dict[str, dict]:
                 "nome_usuario": usuario.get("nome") or "",
                 "origem": "usuario",
             }
+    await _completar_perfis(client, mapa)
     return mapa
 
 
@@ -98,7 +125,7 @@ async def do_email(tenant: dict, email: str) -> dict | None:
     mapa = await _mapa(tenant)
     if email not in mapa and time.monotonic() - _ultima_remontagem.get(cnpj, -1e9) > REMONTAR_NO_MINIMO_A_CADA:
         _ultima_remontagem[cnpj] = time.monotonic()
-        esquecer(cnpj, "mapa-vendedores")
+        esquecer(cnpj, CHAVE_MAPA)
         mapa = await _mapa(tenant)
     vendedor = mapa.get(email)
     if vendedor is None:
@@ -120,7 +147,7 @@ async def _nome_pessoa(token: str, id_pessoa: int) -> str:
 
 
 async def _mapa(tenant: dict) -> dict:
-    return await guardado(tenant["cnpj"], "mapa-vendedores", TTL_MAPA, lambda: _montar_mapa(tenant["api_token"]))
+    return await guardado(tenant["cnpj"], CHAVE_MAPA, TTL_MAPA, lambda: _montar_mapa(tenant["api_token"]))
 
 
 async def do_funcionario(tenant: dict, id_funcionario: int) -> dict | None:
@@ -136,10 +163,10 @@ async def renovar_se_preciso(tenant: dict) -> None:
     """Segundo plano: refaz o mapa de vendedores e as permissões dos perfis quando têm mais de ~6 h, antes de vencer.
     Assim um vínculo novo no ERP vale em poucas horas e nenhum login precisa refazer essas consultas."""
     cnpj = tenant["cnpj"]
-    if vence_em(cnpj, "mapa-vendedores") > TTL_MAPA - RENOVAR_A_CADA:
+    if vence_em(cnpj, CHAVE_MAPA) > TTL_MAPA - RENOVAR_A_CADA:
         return
     mapa = await _montar_mapa(tenant["api_token"])
-    gravar(cnpj, "mapa-vendedores", mapa, TTL_MAPA)
+    gravar(cnpj, CHAVE_MAPA, mapa, TTL_MAPA)
     for id_perfil in {v["id_perfil"] for v in mapa.values() if v.get("id_perfil")}:
         try:
             gravar(cnpj, f"permissoes-perfil-{int(id_perfil)}", await _ler_permissoes(tenant["api_token"], int(id_perfil)), TTL_PERMISSOES)
