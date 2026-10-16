@@ -182,20 +182,25 @@ def _montar(empresa: dict, pedido: dict, cliente: dict, produtos: dict, formas: 
         pdf.multi_cell(largura, 5, _t("Vendedor: " + vendedor), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
 
-    # Itens
-    bruto = descontos = 0.0
+    # Itens (coluna de acréscimo só se algum item tiver)
+    bruto = descontos = acrescimos = 0.0
+    com_acrescimo = any(float(i.get("acrescimo") or 0) for i in dados.get("itens") or [])
+    larguras = (14, 66, 15, 22, 21, 21, 27) if com_acrescimo else (14, 78, 16, 24, 22, 28)
+    titulos = ("Cód.", "Produto", "Qtd", "Preço", "Desconto", "Acréscimo", "Total") if com_acrescimo else ("Cód.", "Produto", "Qtd", "Preço", "Desconto", "Total")
     pdf.set_font("Helvetica", "", 8.5)
-    with pdf.table(col_widths=(14, 78, 16, 24, 22, 28), text_align=("LEFT", "LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"),
+    with pdf.table(col_widths=larguras, text_align=("LEFT", "LEFT") + ("RIGHT",) * (len(larguras) - 2),
                    headings_style=FontFace(emphasis="BOLD", fill_color=(239, 243, 250)), line_height=5.2,
                    borders_layout="HORIZONTAL_LINES", padding=1.2) as tabela:
         cab = tabela.row()
-        for titulo in ("Cód.", "Produto", "Qtd", "Preço", "Desconto", "Total"):
+        for titulo in titulos:
             cab.cell(_t(titulo))
         for item in dados.get("itens") or []:
             qtd, preco, desc = float(item.get("qtd") or 0), float(item.get("preco") or 0), float(item.get("desconto") or 0)
+            acr = float(item.get("acrescimo") or 0)
             total_item = round(qtd * preco, 2)
             bruto += total_item
             descontos += desc
+            acrescimos += acr
             prod = produtos.get(int(item.get("produto") or 0)) or {}
             descricao = prod.get("descricao") or item.get("descricao") or ""
             if prod.get("embalagem"):
@@ -206,7 +211,9 @@ def _montar(empresa: dict, pedido: dict, cliente: dict, produtos: dict, formas: 
             r.cell(_t(_qtd(qtd)))
             r.cell(_t(_moeda(preco)))
             r.cell(_t(_moeda(desc) if desc else "-"))
-            r.cell(_t(_moeda(total_item - desc)))
+            if com_acrescimo:
+                r.cell(_t(_moeda(acr) if acr else "-"))
+            r.cell(_t(_moeda(total_item - desc + acr)))
     pdf.ln(2)
 
     # Totais
@@ -217,6 +224,8 @@ def _montar(empresa: dict, pedido: dict, cliente: dict, produtos: dict, formas: 
     total("Produtos", _moeda(bruto))
     if descontos:
         total("Descontos", "- " + _moeda(descontos))
+    if acrescimos:
+        total("Acréscimos", "+ " + _moeda(acrescimos))
     total("Total do pedido", _moeda(pedido["total"]), negrito=True, tamanho=12)
     pdf.ln(3)
 

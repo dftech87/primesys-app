@@ -146,7 +146,7 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
             f"SELECT id, descricao, preco, permite_desconto, desconto_max, ativo FROM pv_produtos WHERE cnpj = ? AND id IN ({marcas})",
             (cnpj, *set(ids)))}
 
-    itens_erp, total_bruto, total_desconto = [], 0.0, 0.0
+    itens_erp, total_bruto, total_desconto, total_acrescimo = [], 0.0, 0.0, 0.0
     for x, pid in zip(itens_celular, ids):
         produto = produtos.get(pid)
         if produto is None or not produto["ativo"]:
@@ -171,11 +171,21 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
             limite = produto["desconto_max"]
             if limite and desconto / bruto * 100 > limite + 0.01 and not permissoes.get("desconto_acima_do_limite"):
                 raise PedidoRecusado(f"Desconto acima do máximo de {limite:g}% em {produto['descricao']}.")
+        # Acréscimo (no item ou o do pedido, que chega dividido nos itens): o ERP só tem a permissão "acréscimo no documento".
+        acrescimo = round(_num(x.get("acrescimo") or 0, "acréscimo"), 2)
+        if acrescimo < 0 or acrescimo > bruto:
+            raise PedidoRecusado(f"Acréscimo inválido em {produto['descricao']}.")
+        if acrescimo > 0 and not permissoes.get("acrescimo_documento"):
+            raise PedidoRecusado("Seu perfil no ERP não permite dar acréscimo.")
         total_bruto += bruto
         total_desconto += desconto
-        itens_erp.append({"idMercadoriaVariacao": pid, "valUnitarioBruto": preco, "qtd": qtd, "valDesconto": desconto,
-                          "idPessoaFuncionario": int(aparelho["id_funcionario"]), "perComissao": vendedor["per_comissao"]})
-    total = round(total_bruto - total_desconto, 2)
+        total_acrescimo += acrescimo
+        item_erp = {"idMercadoriaVariacao": pid, "valUnitarioBruto": preco, "qtd": qtd, "valDesconto": desconto,
+                    "idPessoaFuncionario": int(aparelho["id_funcionario"]), "perComissao": vendedor["per_comissao"]}
+        if acrescimo:
+            item_erp["valAcrescimo"] = acrescimo
+        itens_erp.append(item_erp)
+    total = round(total_bruto - total_desconto + total_acrescimo, 2)
 
     permitidos = {p["id"]: p for p in config["pagamentos"]}
     pagamentos_celular = dados.get("pagamentos") or []
@@ -226,7 +236,7 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
         corpo["parcelaLista"] = parcelas_erp
     if tipo == "PA":
         corpo["pedido"] = {"tipoEntrega": "B", "dtEntrega": data_hora, "idExterno": dados["id"]}
-    resumo = {"tipo": tipo, "cliente": id_cliente, "cliente_nome": cliente["nome"], "total": total, "desconto": round(total_desconto, 2),
+    resumo = {"tipo": tipo, "cliente": id_cliente, "cliente_nome": cliente["nome"], "total": total, "desconto": round(total_desconto, 2), "acrescimo": round(total_acrescimo, 2),
               "itens": len(itens_erp), "criado_em": data_hora}
     return {"corpo": corpo, "resumo": resumo}
 
