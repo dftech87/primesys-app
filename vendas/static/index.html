@@ -1067,6 +1067,12 @@ document.getElementById('btnSyncAgora').addEventListener('click', sincronizarEmS
 window.addEventListener('online', sincronizarEmSegundoPlano);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizarEmSegundoPlano(); });
 setInterval(sincronizarEmSegundoPlano, 5 * 60000);
+const temFila = () => pedidos.some((x) => x.situacao === 'fila' && x.cliente > 0);
+window.addEventListener('online', () => { [3000, 10000].forEach((ms) => setTimeout(() => { if (temFila()) enviarFilaComAviso(); }, ms)); });
+setInterval(() => { if (temFila() && document.visibilityState === 'visible') enviarFilaComAviso(); }, 20000);
+async function enviarFilaComAviso() {
+    try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) { await esquecerAparelho(); return prepararLogin(e.message); } }
+}
 
 // ---- Produtos: lista + busca (nome, código, código de barras) e estoque colorido ----
 const MAX_LISTA = 150;
@@ -1202,6 +1208,10 @@ async function enviarFila() {
     } finally {
         enviando = false;
         atualizarTelasDePedidos();
+        if (detalheAtual && document.getElementById('telaDetalhe').classList.contains('ativa')) {
+            const atual = pedidos.find((x) => x.id === detalheAtual.id);
+            if (atual && atual.situacao !== detalheAtual.situacao) abrirDetalhe(atual.id);
+        }
     }
 }
 function pedidoDoServidor(s) {   // pedido feito em outro aparelho do mesmo vendedor
@@ -1324,8 +1334,9 @@ async function apagarPedidoLocal(id) {
 document.getElementById('btnCancelarPedido').addEventListener('click', async () => {
     const p = detalheAtual, botao = document.getElementById('btnCancelarPedido');
     if (p.situacao === 'fila' || (p.situacao === 'recusado' && !p.documento)) {
+        if (enviando) return avisar('Enviando pedidos agora. Aguarde um instante e tente de novo.');
         if (!(await confirmar('Excluir este pedido do aparelho? Ele não chegou ao ERP.', 'Excluir', true))) return;
-        if (p.situacao === 'recusado' && navigator.onLine) { try { await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' }); } catch (e) {} }
+        if (navigator.onLine) { try { await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' }); } catch (e) {} }
         await apagarPedidoLocal(p.id);
         mostrar('telaPedidos'); return desenharPedidos();
     }
