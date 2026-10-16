@@ -204,6 +204,9 @@
     .aviso-item.ruim { color: #991b1b; background: #fef2f2; }
     .tt { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 14px; color: #64748b; }
     .tt b { font-size: 20px; color: #0f172a; }
+    .btn-pdf { width: 100%; margin-top: 12px; min-height: 52px; border: 1px solid #16a34a; border-radius: 12px; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 15px; cursor: pointer; }
+    .btn-pdf small { display: block; font-weight: 500; font-size: 12px; color: #4d7c0f; }
+    .btn-pdf:disabled { opacity: .6; }
     .btn-sec { height: 50px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; color: #334155; font-weight: 700; font-size: 15px; cursor: pointer; }
     .form-cli { padding: 0 16px 120px; }
     .form-cli .lbl { margin: 12px 2px 5px; }
@@ -501,6 +504,7 @@
     </div>
     <div class="wrap" style="padding-bottom:30px">
         <div class="situacao-card" id="detSituacao"></div>
+        <button type="button" class="btn-pdf" id="btnPdfPedido" hidden>Enviar PDF ao cliente <small>WhatsApp ou outro app</small></button>
         <div class="tit">Itens</div><div class="lista" id="detItens"></div>
         <div class="tit">Pagamento</div><div class="lista" id="detPagamentos"></div>
         <div id="detObs"></div>
@@ -1296,6 +1300,7 @@ function abrirDetalhe(id) {
     document.getElementById('detPagamentos').innerHTML = p.pagamentos.map((g) => `<div class="item"><span class="n"><b>${esc(g.forma_nome || 'Forma ' + g.forma)}</b>${g.parcelamento_nome ? `<small>${esc(g.parcelamento_nome)}</small>` : ''}</span><span class="p">${fmtMoeda(g.valor)}</span></div>`).join('');
     document.getElementById('detObs').innerHTML = p.observacao ? `<div class="tit">Observação</div><div class="lista" style="padding:12px 14px;font-size:14px">${esc(p.observacao)}</div>` : '';
     document.getElementById('btnReenviar').hidden = p.situacao !== 'fila';
+    document.getElementById('btnPdfPedido').hidden = !p.documento || ['recusado', 'cancelado'].includes(p.situacao);
     // Cancelar: só o que ainda não virou venda. Na fila (nem chegou ao ERP) é só excluir do aparelho.
     const btnCancelar = document.getElementById('btnCancelarPedido');
     btnCancelar.hidden = !['no_caixa', 'fila', 'recusado'].includes(p.situacao);
@@ -1330,6 +1335,35 @@ document.getElementById('btnCancelarPedido').addEventListener('click', async () 
     } catch (e) { await avisar('Sem resposta do servidor. Tente de novo.'); }
     abrirDetalhe(p.id);
 });
+// PDF do pedido (gerado pelo servidor, com a logo da loja) para o vendedor mandar ao cliente. Opcional.
+document.getElementById('btnPdfPedido').addEventListener('click', async () => {
+    const p = detalheAtual, botao = document.getElementById('btnPdfPedido');
+    if (!navigator.onLine) return avisar('Sem internet. Para gerar o PDF é preciso estar conectado.');
+    const rotulo = botao.innerHTML;
+    botao.disabled = true; botao.textContent = 'Gerando PDF...';
+    let arquivo;
+    try {
+        const resp = await fetch(`/api/pedidos/${p.id}/pdf`, { headers: { Authorization: 'Bearer ' + tokenEmUso }, cache: 'no-store' });
+        if (!resp.ok) { let c = {}; try { c = await resp.json(); } catch (e) {} return avisar(c.erro || 'Não foi possível gerar o PDF agora.'); }
+        arquivo = new File([await resp.blob()], `Pedido-${p.documento}.pdf`, { type: 'application/pdf' });
+    } catch (e) { return avisar('Sem resposta do servidor. Tente de novo.'); }
+    finally { botao.disabled = false; botao.innerHTML = rotulo; }
+    const dados = { files: [arquivo], title: `Pedido de venda nº ${p.documento}`, text: `Pedido de venda nº ${p.documento} - ${(conta.empresa || {}).nome || ''}` };
+    if (!(navigator.canShare && navigator.canShare({ files: [arquivo] }))) return baixarArquivo(arquivo);
+    try { await navigator.share(dados); }
+    catch (e) {
+        if (e.name === 'AbortError') return;   // o vendedor fechou a lista de apps
+        // O celular só abre a lista de apps logo após um toque; se o PDF demorou, pede mais um toque.
+        if (e.name === 'NotAllowedError' && await dialogo('PDF pronto.', { ok: 'Enviar', cancelar: 'Fechar' })) {
+            try { await navigator.share(dados); } catch (e2) { if (e2.name !== 'AbortError') baixarArquivo(arquivo); }
+        } else if (e.name !== 'NotAllowedError') baixarArquivo(arquivo);
+    }
+});
+function baixarArquivo(arquivo) {   // aparelho sem compartilhamento de arquivos: salva o PDF
+    const url = URL.createObjectURL(arquivo), a = document.createElement('a');
+    a.href = url; a.download = arquivo.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 document.getElementById('btnReenviar').addEventListener('click', async () => { await enviarFila(); abrirDetalhe(detalheAtual.id); });
 document.getElementById('btnRepetir').addEventListener('click', () => {   // pedido novo, igual (o enviado não se edita)
     const p = detalheAtual;

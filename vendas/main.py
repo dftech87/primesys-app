@@ -24,7 +24,7 @@ from app.config import COOKIE_SEGURO
 from app.database import db_session
 from app.security import normalize_cnpj
 from app.tenants import authenticate, get_tenant_by_cnpj
-from vendas import catalogo, clientes, config, pedidos, sessao, vendedores
+from vendas import catalogo, clientes, config, pdf_pedido, pedidos, sessao, vendedores
 from vendas.db import criar_tabelas
 
 logger = logging.getLogger(__name__)
@@ -319,6 +319,22 @@ async def cliente_cadastrar(request: Request, aparelho: dict = Depends(sessao.ap
         return _erro(422, str(erro))
     except clientes.ServicoIndisponivel:
         return _erro(503, "ERP indisponível agora. O cadastro fica guardado e é enviado depois.")
+
+
+@app.get("/api/pedidos/{id_pedido}/pdf")
+async def pedido_pdf(id_pedido: str, aparelho: dict = Depends(sessao.aparelho_atual)):
+    """PDF do pedido (logo e dados da loja), para o vendedor mandar ao cliente pelo WhatsApp ou outro app."""
+    if len(id_pedido) > 40:
+        return _erro(400, "Pedido inválido.")
+    try:
+        conteudo, nome = await pdf_pedido.gerar(aparelho, id_pedido)
+    except pedidos.PedidoRecusado as erro:
+        return _erro(422, str(erro))
+    except Exception:
+        logger.exception("falha gerando o PDF do pedido")
+        return _erro(503, "Não foi possível gerar o PDF agora. Tente de novo.")
+    return Response(conteudo, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{nome}"', "Cache-Control": "no-store"})
 
 
 @app.get("/api/pedidos")
