@@ -1,17 +1,22 @@
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-import asyncio
 import secrets
 
 from app import limite
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
-from app.tenants import create_tenant, empresa_do_token, list_tenants, set_tenant_ativo, set_vendas_liberado
+from app.tenants import (
+    create_tenant, dados_da_empresa_do_token, empresa_do_token, list_tenants, set_tenant_ativo, set_tenant_nome,
+    set_tenant_token, set_vendas_liberado,
+)
+
+import logging
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/templates")
+logger = logging.getLogger(__name__)
 
 
 def _is_admin(request: Request) -> bool:
@@ -23,37 +28,50 @@ def _mask_token(token: str) -> str:
     return f"••••{token[-4:]}" if len(token) > 8 else "••••"
 
 
-async def _tenants_view() -> list[dict]:
-    """Lista para a tela, já com a conferência de cada token: ele é da empresa do CNPJ? Está repetido em outro
-    cadastro? (A pergunta é feita ao próprio ERP, 1 chamada por cliente; o token em si nunca aparece inteiro.)"""
-    tenants = list_tenants()
-    donos = await asyncio.gather(*(empresa_do_token(t["api_token"]) if t["api_token"] else asyncio.sleep(0) for t in tenants))
-    quem_usa: dict[str, list[str]] = {}
-    for t in tenants:
-        if t["api_token"]:
-            quem_usa.setdefault(t["api_token"], []).append(t["nome_fantasia"])
+def _cnpj_formatado(cnpj: str) -> str:
+    d = normalize_cnpj(cnpj)
+    return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}" if len(d) == 14 else d
 
-    resultado = []
-    for t, dono in zip(tenants, donos):
-        problemas, cor = [], "#166534"
-        repetido_com = [n for n in quem_usa.get(t["api_token"], []) if n != t["nome_fantasia"]] if t["api_token"] else []
-        if not t["api_token"]:
-            problemas, cor = ["Token ilegível (chave de criptografia ausente ou diferente)"], "#991b1b"
-        else:
-            if repetido_com:
-                problemas.append("Token REPETIDO com: " + ", ".join(repetido_com))
-            if dono is None:
-                problemas.append("Não foi possível conferir no ERP (token inválido ou ERP fora do ar)")
-            elif dono != normalize_cnpj(t["cnpj"]):
-                problemas.append(f"Token é da empresa de CNPJ {dono}, não deste CNPJ")
-            cor = "#991b1b" if problemas else "#166534"
-        resultado.append({
-            **dict(t),
-            "api_token": _mask_token(t["api_token"]),
-            "conf_texto": "; ".join(problemas) if problemas else "Confere com o CNPJ",
-            "conf_cor": cor,
-        })
-    return resultado
+
+def _data_br(texto) -> str:
+    t = str(texto or "")
+    return f"{t[8:10]}/{t[5:7]}/{t[:4]}" if len(t) >= 10 else t
+
+
+def _avisar(request: Request, texto: str, tipo: str = "ok") -> None:
+    """Mensagem para a próxima tela (depois do redirecionamento), guardada na sessão assinada."""
+    request.session["aviso"] = {"texto": texto, "tipo": tipo}
+
+
+def _voltar(cnpj: str = "", novo: bool = False) -> RedirectResponse:
+    destino = "/admin?novo=1" if novo else (f"/admin?c={normalize_cnpj(cnpj)}" if cnpj else "/admin")
+    return RedirectResponse(destino, status_code=303)
+
+
+def _aparelhos(cnpj: str) -> list[dict] | None:
+    """Celulares conectados ao Prime Vendas. None se a tabela do Prime Vendas ainda não existe neste banco."""
+    try:
+        from vendas import sessao
+        return [{**a, "ultimo_uso": _data_br(a["ultimo_uso"]), "desde": _data_br(a["criado_em"])} for a in sessao.aparelhos_da_empresa(cnpj)]
+    except Exception:
+        logger.warning("celulares do Prime Vendas indisponíveis para o /admin")
+        return None
+
+
+async def _conferencia(cliente: dict, todos: list[dict]) -> tuple[str, str]:
+    """O token do cliente aberto é da empresa do CNPJ? Está repetido em outro cadastro? (1 consulta ao ERP.)"""
+    if not cliente["api_token"]:
+        return "Token ilegível (chave de criptografia ausente ou diferente)", "ruim"
+    repetido = [t["nome_fantasia"] for t in todos if t["api_token"] == cliente["api_token"] and t["cnpj"] != cliente["cnpj"]]
+    dono = await empresa_do_token(cliente["api_token"])
+    problemas = []
+    if repetido:
+        problemas.append("Token repetido com: " + ", ".join(repetido))
+    if dono is None:
+        problemas.append("Não foi possível conferir no ERP (token inválido ou ERP fora do ar)")
+    elif dono != normalize_cnpj(cliente["cnpj"]):
+        problemas.append(f"Token é da empresa de CNPJ {_cnpj_formatado(dono)}, não deste CNPJ")
+    return ("; ".join(problemas), "ruim") if problemas else ("Confere com o CNPJ", "bom")
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -91,32 +109,96 @@ async def admin_logout(request: Request):
 
 
 @router.get("", response_class=HTMLResponse)
-async def admin_home(request: Request):
+async def admin_home(request: Request, c: str = "", novo: int = 0):
+    """Lista de clientes à esquerda e, à direita, o cliente aberto (ou o cadastro de um novo).
+    A lista não consulta o ERP; só o cliente aberto tem o token conferido."""
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
-    return templates.TemplateResponse(request, "admin.html", {"tenants": await _tenants_view(), "message": None})
+    todos = list_tenants()
+    clientes = sorted(
+        ({**t, "cnpj_fmt": _cnpj_formatado(t["cnpj"]), "desde": _data_br(t["criado_em"])} for t in todos),
+        key=lambda t: (not t["ativo"], (t["nome_fantasia"] or "").upper()),
+    )
+    aberto = None
+    cnpj = normalize_cnpj(c)
+    if not novo:
+        aberto = next((t for t in clientes if t["cnpj"] == cnpj), None) or (clientes[0] if clientes else None)
+    if aberto:
+        texto, classe = await _conferencia(aberto, todos)
+        aberto = {**aberto, "token_mascarado": _mask_token(aberto["api_token"]), "conf_texto": texto, "conf_classe": classe,
+                  "aparelhos": _aparelhos(aberto["cnpj"])}
+    contexto = {"clientes": [{k: v for k, v in t.items() if k != "api_token"} for t in clientes],
+                "aberto": {k: v for k, v in aberto.items() if k != "api_token"} if aberto else None,
+                "novo": bool(novo) or not clientes, "aviso": request.session.pop("aviso", None)}
+    return templates.TemplateResponse(request, "admin.html", contexto)
+
+
+@router.post("/tenants/consultar")
+async def admin_consultar_token(request: Request, api_token: str = Form(...)):
+    """Novo cliente: diz de qual empresa é o token (CNPJ e nome, segundo o próprio ERP) e se já está cadastrada."""
+    if not _is_admin(request):
+        return JSONResponse({"erro": "Sessão expirada. Entre de novo."}, status_code=401)
+    dados = await dados_da_empresa_do_token(api_token.strip())
+    if dados is None:
+        return JSONResponse({"erro": "O ERP não reconheceu esse token. Confira se ele foi copiado inteiro."}, status_code=422)
+    existente = next((t for t in list_tenants() if t["cnpj"] == dados["cnpj"]), None)
+    return {"cnpj": dados["cnpj"], "cnpj_fmt": _cnpj_formatado(dados["cnpj"]), "nome": dados["fantasia"] or dados["razao"],
+            "ja_cadastrado": existente is not None, "nome_cadastrado": existente["nome_fantasia"] if existente else ""}
 
 
 @router.post("/tenants")
 async def admin_create_tenant(
     request: Request,
-    cnpj: str = Form(...),
-    nome_fantasia: str = Form(...),
     api_token: str = Form(...),
+    nome_fantasia: str = Form(...),
+    prime_info: str = Form(""),
+    prime_vendas: str = Form(""),
 ):
+    """Novo cliente. O CNPJ vem do próprio ERP (dono do token), nunca do formulário: não há como gravar um token
+    no cadastro de outra empresa. Cliente que já existe não é sobrescrito (lá tem 'Trocar token')."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    token, nome = api_token.strip(), " ".join(nome_fantasia.split())[:120]
+    dados = await dados_da_empresa_do_token(token)
+    if dados is None:
+        _avisar(request, "Não cadastrado: o ERP não reconheceu esse token. Confira se ele foi copiado inteiro.", "ruim")
+        return _voltar(novo=True)
+    cnpj = dados["cnpj"]
+    if any(t["cnpj"] == cnpj for t in list_tenants()):
+        _avisar(request, "Esse cliente já está cadastrado. Para corrigir o token, use \"Trocar token\" no cadastro dele.", "ruim")
+        return _voltar(cnpj)
+    create_tenant(cnpj=cnpj, nome_fantasia=nome or dados["fantasia"] or dados["razao"] or cnpj, api_token=token)
+    set_tenant_ativo(cnpj, ativo=bool(prime_info))
+    set_vendas_liberado(cnpj, liberado=bool(prime_vendas))
+    _avisar(request, "Cliente cadastrado (token conferido com o CNPJ no ERP).")
+    return _voltar(cnpj)
+
+
+@router.post("/tenants/{cnpj}/token")
+async def admin_trocar_token(request: Request, cnpj: str, api_token: str = Form(...)):
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
     token = api_token.strip()
-    # Confere no próprio ERP de quem é o token antes de gravar: token trocado = dados de outra empresa na tela.
     dono = await empresa_do_token(token)
     if dono is None:
-        mensagem = "NÃO cadastrado: o ERP não reconheceu esse token. Confira se ele foi copiado inteiro e tente de novo."
+        _avisar(request, "Token não trocado: o ERP não reconheceu esse token. Confira se ele foi copiado inteiro.", "ruim")
     elif dono != normalize_cnpj(cnpj):
-        mensagem = f"NÃO cadastrado: esse token pertence à empresa de CNPJ {dono}, e não ao CNPJ informado. Use o token da empresa certa."
+        _avisar(request, f"Token não trocado: ele é da empresa de CNPJ {_cnpj_formatado(dono)}, não deste cliente.", "ruim")
     else:
-        create_tenant(cnpj=cnpj, nome_fantasia=nome_fantasia, api_token=token)
-        mensagem = f"Cliente {nome_fantasia} cadastrado com sucesso (token conferido com o CNPJ no ERP)."
-    return templates.TemplateResponse(request, "admin.html", {"tenants": await _tenants_view(), "message": mensagem})
+        set_tenant_token(cnpj, token)
+        _avisar(request, "Token trocado e conferido com o CNPJ no ERP.")
+    return _voltar(cnpj)
+
+
+@router.post("/tenants/{cnpj}/nome")
+async def admin_editar_nome(request: Request, cnpj: str, nome_fantasia: str = Form(...)):
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    nome = " ".join(nome_fantasia.split())[:120]
+    if nome:
+        set_tenant_nome(cnpj, nome)
+        _avisar(request, "Nome atualizado.")
+    return _voltar(cnpj)
 
 
 @router.post("/tenants/{cnpj}/desativar")
@@ -124,21 +206,8 @@ async def admin_desativar_tenant(request: Request, cnpj: str):
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
     set_tenant_ativo(cnpj, ativo=False)
-    return templates.TemplateResponse(
-        request, "admin.html", {"tenants": await _tenants_view(), "message": "Cliente desativado."}
-    )
-
-
-@router.post("/tenants/{cnpj}/vendas/{acao}")
-async def admin_prime_vendas(request: Request, cnpj: str, acao: str):
-    """Liga/desliga o Prime Vendas da empresa. Bloquear desconecta na hora os celulares dela."""
-    if not _is_admin(request):
-        return RedirectResponse("/admin/login", status_code=303)
-    if acao not in ("liberar", "bloquear"):
-        return RedirectResponse("/admin", status_code=303)
-    set_vendas_liberado(cnpj, liberado=acao == "liberar")
-    mensagem = "Prime Vendas liberado para a empresa." if acao == "liberar" else "Prime Vendas bloqueado para a empresa."
-    return templates.TemplateResponse(request, "admin.html", {"tenants": await _tenants_view(), "message": mensagem})
+    _avisar(request, "Prime Info desligado: o cliente não entra mais no app.")
+    return _voltar(cnpj)
 
 
 @router.post("/tenants/{cnpj}/reativar")
@@ -146,6 +215,26 @@ async def admin_reativar_tenant(request: Request, cnpj: str):
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
     set_tenant_ativo(cnpj, ativo=True)
-    return templates.TemplateResponse(
-        request, "admin.html", {"tenants": await _tenants_view(), "message": "Cliente reativado."}
-    )
+    _avisar(request, "Prime Info ligado.")
+    return _voltar(cnpj)
+
+
+@router.post("/tenants/{cnpj}/vendas/{acao}")
+async def admin_prime_vendas(request: Request, cnpj: str, acao: str):
+    """Liga/desliga o Prime Vendas da empresa. Bloquear desconecta na hora os celulares dela."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    if acao in ("liberar", "bloquear"):
+        set_vendas_liberado(cnpj, liberado=acao == "liberar")
+        _avisar(request, "Prime Vendas ligado." if acao == "liberar" else "Prime Vendas desligado: os celulares da empresa foram desconectados.")
+    return _voltar(cnpj)
+
+
+@router.post("/tenants/{cnpj}/aparelhos/{id_aparelho}/desconectar")
+async def admin_desconectar_aparelho(request: Request, cnpj: str, id_aparelho: int):
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    from vendas import sessao
+    if sessao.desconectar(normalize_cnpj(cnpj), id_aparelho):
+        _avisar(request, "Celular desconectado. O vendedor precisa entrar de novo com o e-mail e a senha do ERP.")
+    return _voltar(cnpj)

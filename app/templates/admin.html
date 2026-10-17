@@ -8,33 +8,54 @@
         :root { color-scheme: light; }
         * { box-sizing: border-box; }
         body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; color: #0f172a; }
-        header {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 16px 24px; background: #0f172a; color: #fff;
-        }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #0f172a; color: #fff; }
         header h1 { margin: 0; font-size: 18px; }
         header a { color: #cbd5e1; text-decoration: none; font-size: 13px; }
-        main { padding: 24px; max-width: 900px; margin: 0 auto; }
-        .panel { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
-        .panel h2 { margin: 0 0 16px; font-size: 15px; color: #334155; }
-        label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
-        input {
-            width: 100%; border: 1px solid #cbd5e1; border-radius: 10px;
-            padding: 10px 12px; font-size: 14px; margin-bottom: 14px;
-        }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-        button {
-            border: 0; border-radius: 10px; padding: 10px 20px;
-            font-size: 14px; font-weight: 700; color: #fff; background: #0f172a; cursor: pointer;
-        }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e2e8f0; }
-        th { color: #64748b; font-weight: 600; }
-        .success {
-            margin-bottom: 16px; padding: 10px 12px; border-radius: 10px;
-            background: #dcfce7; color: #166534; font-size: 13px;
-        }
-        .token { font-family: monospace; color: #64748b; }
+        main { padding: 24px; max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+        .panel { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .aviso { grid-column: 1 / -1; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+        .aviso.ok { background: #dcfce7; color: #166534; } .aviso.ruim { background: #fee2e2; color: #991b1b; }
+        input[type=text], input[type=search] { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; }
+        button, .btn { border: 0; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 600; color: #fff; background: #0f172a; cursor: pointer; text-decoration: none; display: inline-block; font-family: inherit; }
+        .sec { background: #fff; color: #0f172a; border: 1px solid #cbd5e1; }
+        .perigo { background: #fff; color: #b91c1c; border: 1px solid #fecaca; }
+        .lista { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow: auto; }
+        .lista a { display: block; padding: 10px 12px; border-radius: 10px; color: #0f172a; text-decoration: none; }
+        .lista a:hover { background: #f1f5f9; }
+        .lista a.on { background: #e0e7ff; }
+        .lista .nm { font-size: 14px; font-weight: 600; }
+        .lista .sub { font-size: 12px; color: #64748b; display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+        .lista a.inativo .nm { color: #94a3b8; }
+        .tag { font-size: 11px; padding: 1px 7px; border-radius: 6px; background: #f1f5f9; color: #475569; }
+        .tag.v { background: #dcfce7; color: #166534; } .tag.d { background: #fee2e2; color: #991b1b; }
+        .novo-btn { width: 100%; margin-top: 12px; }
+        h2 { margin: 0; font-size: 20px; }
+        .meta { color: #64748b; font-size: 13px; margin-top: 4px; }
+        .linha { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid #e2e8f0; }
+        .linha:first-of-type { border-top: 0; }
+        .linha .t { font-size: 14px; font-weight: 600; }
+        .linha .d { font-size: 12px; color: #64748b; margin-top: 2px; }
+        .bloco { margin-top: 16px; }
+        .chip { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; }
+        .chip.bom { background: #dcfce7; color: #166534; } .chip.ruim { background: #fee2e2; color: #991b1b; }
+        .chave { width: 46px; height: 26px; border-radius: 13px; padding: 0; position: relative; background: #cbd5e1; border: 0; flex: none; }
+        .chave::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; }
+        .chave.ligada { background: #16a34a; } .chave.ligada::after { left: 23px; }
+        .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+        .editar { display: none; margin-top: 10px; gap: 8px; }
+        .editar.aberto { display: flex; }
+        .aparelho { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; margin-top: 8px; font-size: 13px; }
+        .mini { padding: 6px 10px; font-size: 12px; }
+        .passo { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
+        .achou { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; display: none; }
+        .achou.bom { display: block; background: #dcfce7; color: #166534; } .achou.ruim { display: block; background: #fee2e2; color: #991b1b; }
+        .vela { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+        .vela.aberta { display: flex; }
+        .dialogo { background: #fff; border-radius: 14px; padding: 20px; max-width: 380px; width: 100%; }
+        .dialogo p { margin: 0 0 16px; font-size: 14px; line-height: 1.5; }
+        .dialogo div { display: flex; gap: 8px; justify-content: flex-end; }
+        .vazio { color: #64748b; font-size: 13px; }
+        @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } .lista { max-height: 40vh; } }
     </style>
 </head>
 <body>
@@ -43,70 +64,177 @@
         <a href="/admin/logout">Sair</a>
     </header>
     <main>
-        {% if message %}<div class="success">{{ message }}</div>{% endif %}
+        {% if aviso %}<div class="aviso {{ aviso.tipo }}">{{ aviso.texto }}</div>{% endif %}
 
-        <div class="panel">
-            <h2>Cadastrar / atualizar cliente</h2>
-            <form method="post" action="/admin/tenants">
-                <div class="grid">
-                    <div>
-                        <label for="cnpj">CNPJ</label>
-                        <input id="cnpj" name="cnpj" type="text" inputmode="numeric" required />
-                    </div>
-                    <div>
-                        <label for="nome_fantasia">Nome do cliente</label>
-                        <input id="nome_fantasia" name="nome_fantasia" type="text" required />
-                    </div>
+        <!-- Lista de clientes -->
+        <aside class="panel">
+            <input type="search" id="busca" placeholder="Buscar por nome ou CNPJ" autocomplete="off" />
+            <div class="lista" id="lista">
+                {% for t in clientes %}
+                <a href="/admin?c={{ t.cnpj }}" class="{{ 'on' if aberto and aberto.cnpj == t.cnpj else '' }} {{ '' if t.ativo else 'inativo' }}"
+                   data-busca="{{ (t.nome_fantasia ~ ' ' ~ t.cnpj ~ ' ' ~ t.cnpj_fmt)|lower }}">
+                    <div class="nm">{{ t.nome_fantasia }}</div>
+                    <div class="sub">{{ t.cnpj_fmt }}
+                        {% if not t.ativo %}<span class="tag d">desativado</span>{% elif t.vendas_liberado %}<span class="tag v">Vendas</span>{% endif %}</div>
+                </a>
+                {% else %}
+                <div class="vazio">Nenhum cliente cadastrado ainda.</div>
+                {% endfor %}
+            </div>
+            <a class="btn novo-btn" href="/admin?novo=1" style="text-align:center">+ Novo cliente</a>
+        </aside>
+
+        <!-- Painel -->
+        <section class="panel" id="painel">
+        {% if novo %}
+            <h2>Novo cliente</h2>
+            <div class="meta">O CNPJ e o nome vêm do próprio ERP, a partir do token.</div>
+            <form method="post" action="/admin/tenants" id="formNovo">
+                <div class="passo">1. Cole o token da API (Meu ERP Online) do cliente</div>
+                <div style="display:flex;gap:8px">
+                    <input type="text" name="api_token" id="novoToken" autocomplete="off" required />
+                    <button type="button" class="sec" id="btnConsultar">Buscar empresa</button>
                 </div>
-                <label for="api_token">Token da API (Meu ERP Online) desse cliente</label>
-                <input id="api_token" name="api_token" type="text" required />
-                <button type="submit">Salvar cliente</button>
-                <p style="color:#64748b;font-size:12px;margin-top:10px;">
-                    O login do cliente final usa o e-mail e a senha que ele já tem no Meu ERP Online
-                    (validados direto na API dele) — não é preciso cadastrar senha aqui.
-                </p>
+                <div class="achou" id="achou"></div>
+                <div id="novoResto" style="display:none">
+                    <div class="passo">2. Confira o nome</div>
+                    <input type="text" name="nome_fantasia" id="novoNome" maxlength="120" required />
+                    <div class="passo">3. Escolha o que liberar</div>
+                    <div class="linha" style="border-top:0"><div><div class="t">Prime Info</div><div class="d">Relatórios e painel no celular</div></div>
+                        <label><input type="checkbox" name="prime_info" value="1" checked /> ligado</label></div>
+                    <div class="linha"><div><div class="t">Prime Vendas</div><div class="d">App dos vendedores</div></div>
+                        <label><input type="checkbox" name="prime_vendas" value="1" /> ligado</label></div>
+                    <div class="acoes"><button type="submit">Salvar cliente</button><a class="btn sec" href="/admin">Cancelar</a></div>
+                </div>
             </form>
-        </div>
+            <p class="meta" style="margin-top:18px">O login do cliente usa o e-mail e a senha que ele já tem no Meu ERP Online. Não é preciso cadastrar senha aqui.</p>
+        {% elif aberto %}
+            <h2>{{ aberto.nome_fantasia }}</h2>
+            <div class="meta">{{ aberto.cnpj_fmt }} &middot; cliente desde {{ aberto.desde }}</div>
 
-        <div class="panel">
-            <h2>Clientes cadastrados</h2>
-            <table>
-                <thead><tr><th>CNPJ</th><th>Nome</th><th>Token</th><th>Conferência do token</th><th>Status</th><th>Prime Vendas</th><th>Cadastrado em</th><th></th></tr></thead>
-                <tbody>
-                    {% for t in tenants %}
-                    <tr>
-                        <td>{{ t.cnpj }}</td>
-                        <td>{{ t.nome_fantasia }}</td>
-                        <td class="token">{{ t.api_token }}</td>
-                        <td style="color:{{ t.conf_cor }};font-weight:600;">{{ t.conf_texto }}</td>
-                        <td>{% if t.ativo %}<span style="color:#166534;">Ativo</span>{% else %}<span style="color:#991b1b;">Desativado</span>{% endif %}</td>
-                        <td>
-                            <form method="post" action="/admin/tenants/{{ t.cnpj }}/vendas/{{ 'bloquear' if t.vendas_liberado else 'liberar' }}" style="margin:0;display:flex;align-items:center;gap:8px;">
-                                {% if t.vendas_liberado %}<span style="color:#166534;font-weight:600;">Liberado</span>
-                                <button type="submit" style="background:#fee2e2;color:#991b1b;border:0;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">Bloquear</button>
-                                {% else %}<span style="color:#64748b;">Bloqueado</span>
-                                <button type="submit" style="background:#dcfce7;color:#166534;border:0;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">Liberar</button>{% endif %}
-                            </form>
-                        </td>
-                        <td>{{ t.criado_em }}</td>
-                        <td>
-                            {% if t.ativo %}
-                            <form method="post" action="/admin/tenants/{{ t.cnpj }}/desativar" style="margin:0;">
-                                <button type="submit" style="background:#fee2e2;color:#991b1b;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;">Desativar</button>
-                            </form>
-                            {% else %}
-                            <form method="post" action="/admin/tenants/{{ t.cnpj }}/reativar" style="margin:0;">
-                                <button type="submit" style="background:#dcfce7;color:#166534;border:0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;">Reativar</button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="8">Nenhum cliente cadastrado.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+            <div class="bloco">
+                <div class="linha">
+                    <div><div class="t">Token da API <span style="font-family:monospace;color:#64748b;font-weight:400">{{ aberto.token_mascarado }}</span></div>
+                        <div class="d">Conferido agora no ERP</div></div>
+                    <span class="chip {{ aberto.conf_classe }}">{{ aberto.conf_texto }}</span>
+                </div>
+                <div class="linha">
+                    <div><div class="t">Prime Info</div><div class="d">{{ 'Ligado: o cliente entra no app de relatórios.' if aberto.ativo else 'Desligado: o cliente não entra no app.' }}</div></div>
+                    <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/{{ 'desativar' if aberto.ativo else 'reativar' }}"
+                          {% if aberto.ativo %}data-confirmar="Desligar o Prime Info de {{ aberto.nome_fantasia }}? O cliente deixa de entrar no app."{% endif %}>
+                        <button type="submit" class="chave {{ 'ligada' if aberto.ativo else '' }}" aria-label="{{ 'Desligar' if aberto.ativo else 'Ligar' }} Prime Info"></button>
+                    </form>
+                </div>
+                <div class="linha">
+                    <div><div class="t">Prime Vendas</div><div class="d">
+                        {% if not aberto.vendas_liberado %}Desligado.
+                        {% elif aberto.aparelhos is none %}Ligado.
+                        {% else %}Ligado &middot; {{ aberto.aparelhos|length }} celular(es) conectado(s).{% endif %}</div></div>
+                    <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/vendas/{{ 'bloquear' if aberto.vendas_liberado else 'liberar' }}"
+                          {% if aberto.vendas_liberado %}data-confirmar="Desligar o Prime Vendas de {{ aberto.nome_fantasia }}? Os celulares dos vendedores são desconectados na hora."{% endif %}>
+                        <button type="submit" class="chave {{ 'ligada' if aberto.vendas_liberado else '' }}" aria-label="{{ 'Desligar' if aberto.vendas_liberado else 'Ligar' }} Prime Vendas"></button>
+                    </form>
+                </div>
+            </div>
+
+            {% if aberto.vendas_liberado and aberto.aparelhos %}
+            <div class="bloco">
+                <div class="t" style="font-size:14px;font-weight:600">Celulares conectados</div>
+                {% for a in aberto.aparelhos %}
+                <div class="aparelho">
+                    <div><b>{{ a.nome_vendedor }}</b><div class="d" style="color:#64748b">{{ a.aparelho or 'Aparelho' }} &middot; conectado em {{ a.desde }} &middot; último uso {{ a.ultimo_uso }}</div></div>
+                    <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/aparelhos/{{ a.id }}/desconectar"
+                          data-confirmar="Desconectar o celular de {{ a.nome_vendedor }}? Ele vai precisar entrar de novo com o e-mail e a senha do ERP.">
+                        <button type="submit" class="perigo mini">Desconectar</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="acoes">
+                <button type="button" class="sec" data-abrir="edToken">Trocar token</button>
+                <button type="button" class="sec" data-abrir="edNome">Editar nome</button>
+            </div>
+            <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/token" class="editar" id="edToken">
+                <input type="text" name="api_token" placeholder="Cole o token novo" autocomplete="off" required />
+                <button type="submit">Salvar token</button>
+            </form>
+            <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/nome" class="editar" id="edNome">
+                <input type="text" name="nome_fantasia" value="{{ aberto.nome_fantasia }}" maxlength="120" required />
+                <button type="submit">Salvar nome</button>
+            </form>
+        {% endif %}
+        </section>
     </main>
+
+    <div class="vela" id="vela"><div class="dialogo"><p id="dlgTexto"></p><div><button type="button" class="sec" id="dlgNao">Voltar</button><button type="button" id="dlgSim">Confirmar</button></div></div></div>
+
+    <script>
+    'use strict';
+    // Busca na lista (no próprio navegador, sem ir ao servidor)
+    const busca = document.getElementById('busca');
+    const semAcento = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    busca.addEventListener('input', () => {
+        const termo = semAcento(busca.value.trim()), digitos = termo.replace(/\D/g, '');
+        document.querySelectorAll('#lista a').forEach((a) => {
+            const texto = semAcento(a.dataset.busca);
+            a.style.display = !termo || texto.includes(termo) || (digitos && texto.replace(/\D/g, '').includes(digitos)) ? '' : 'none';
+        });
+    });
+
+    // Confirmação antes de desligar ou desconectar
+    let pendente = null;
+    const vela = document.getElementById('vela');
+    document.querySelectorAll('form[data-confirmar]').forEach((f) => f.addEventListener('submit', (ev) => {
+        if (f.dataset.ok) return;
+        ev.preventDefault();
+        pendente = f;
+        document.getElementById('dlgTexto').textContent = f.dataset.confirmar;
+        vela.classList.add('aberta');
+    }));
+    document.getElementById('dlgNao').addEventListener('click', () => { vela.classList.remove('aberta'); pendente = null; });
+    document.getElementById('dlgSim').addEventListener('click', () => { if (pendente) { pendente.dataset.ok = '1'; pendente.submit(); } });
+
+    // Trocar token / editar nome
+    document.querySelectorAll('[data-abrir]').forEach((b) => b.addEventListener('click', () => {
+        document.querySelectorAll('.editar').forEach((e) => e.classList.toggle('aberto', e.id === b.dataset.abrir && !e.classList.contains('aberto')));
+        const campo = document.querySelector('#' + b.dataset.abrir + ' input'); if (campo) campo.focus();
+    }));
+
+    // Novo cliente: o servidor pergunta ao ERP de quem é o token
+    const btnConsultar = document.getElementById('btnConsultar');
+    if (btnConsultar) {
+        const achou = document.getElementById('achou'), resto = document.getElementById('novoResto');
+        const consultar = async () => {
+            const token = document.getElementById('novoToken').value.trim();
+            if (!token) return;
+            btnConsultar.disabled = true; btnConsultar.textContent = 'Buscando...';
+            achou.className = 'achou'; resto.style.display = 'none';
+            try {
+                const dados = new FormData(); dados.append('api_token', token);
+                const r = await fetch('/admin/tenants/consultar', { method: 'POST', body: dados, credentials: 'same-origin' });
+                const c = await r.json();
+                if (!r.ok) { achou.textContent = c.erro || 'Não foi possível consultar agora.'; achou.className = 'achou ruim'; return; }
+                if (c.ja_cadastrado) {
+                    achou.innerHTML = '';
+                    achou.append(`Esse token é de ${c.cnpj_fmt}, que já está cadastrado como ${c.nome_cadastrado}. `);
+                    const link = document.createElement('a'); link.href = '/admin?c=' + c.cnpj; link.textContent = 'Abrir o cadastro'; achou.append(link);
+                    achou.className = 'achou ruim'; return;
+                }
+                achou.textContent = `Empresa encontrada no ERP: ${c.nome} · ${c.cnpj_fmt}`;
+                achou.className = 'achou bom';
+                document.getElementById('novoNome').value = c.nome;
+                resto.style.display = '';
+            } catch (e) { achou.textContent = 'Sem resposta do servidor. Tente de novo.'; achou.className = 'achou ruim'; }
+            finally { btnConsultar.disabled = false; btnConsultar.textContent = 'Buscar empresa'; }
+        };
+        btnConsultar.addEventListener('click', consultar);
+        document.getElementById('novoToken').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); consultar(); } });
+    }
+
+    // Celular: ao abrir um cliente, mostra o painel
+    if (window.innerWidth <= 760 && location.search.includes('c=')) document.getElementById('painel').scrollIntoView();
+    </script>
 </body>
 </html>

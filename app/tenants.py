@@ -101,6 +101,29 @@ def set_vendas_liberado(cnpj: str, liberado: bool) -> None:
         )
 
 
+def set_tenant_token(cnpj: str, api_token: str) -> None:
+    """Troca só o token (o nome e as liberações ficam). Quem chama confere antes no ERP que o token é deste CNPJ."""
+    with db_session() as conn:
+        conn.execute("UPDATE empresas SET api_token = ? WHERE cnpj = ?", (cripto.proteger(api_token), normalize_cnpj(cnpj)))
+
+
+def set_tenant_nome(cnpj: str, nome_fantasia: str) -> None:
+    with db_session() as conn:
+        conn.execute("UPDATE empresas SET nome_fantasia = ? WHERE cnpj = ?", (nome_fantasia, normalize_cnpj(cnpj)))
+
+
+async def dados_da_empresa_do_token(token: str) -> dict | None:
+    """CNPJ e nome da empresa dona do token, segundo o próprio ERP (cadastro no /admin). None se não reconheceu."""
+    try:
+        resposta = await MeuERPClient(token).get("/api/empresa/v1")
+    except Exception:
+        return None
+    cnpj = normalize_cnpj(resposta.get("cnpjCpf"))
+    if not cnpj:
+        return None
+    return {"cnpj": cnpj, "fantasia": (resposta.get("fantasia") or "").strip(), "razao": (resposta.get("razaoSocial") or "").strip()}
+
+
 def get_tenant_by_cnpj(cnpj: str) -> dict | None:
     """Empresa ativa com o token já aberto. Se o token não puder ser lido (chave ausente/errada), devolve None
     e registra o erro: o cliente cai na tela de login em vez de receber um erro do ERP."""
