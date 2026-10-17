@@ -23,11 +23,6 @@ def _is_admin(request: Request) -> bool:
     return bool(request.session.get("is_admin"))
 
 
-def _mask_token(token: str) -> str:
-    # Só os 4 últimos: o suficiente para reconhecer qual token é, sem expor o começo dele.
-    return f"••••{token[-4:]}" if len(token) > 8 else "••••"
-
-
 def _cnpj_formatado(cnpj: str) -> str:
     d = normalize_cnpj(cnpj)
     return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}" if len(d) == 14 else d
@@ -125,7 +120,7 @@ async def admin_home(request: Request, c: str = "", novo: int = 0):
         aberto = next((t for t in clientes if t["cnpj"] == cnpj), None) or (clientes[0] if clientes else None)
     if aberto:
         texto, classe = await _conferencia(aberto, todos)
-        aberto = {**aberto, "token_mascarado": _mask_token(aberto["api_token"]), "conf_texto": texto, "conf_classe": classe,
+        aberto = {**aberto, "conf_texto": texto, "conf_classe": classe,
                   "aparelhos": _aparelhos(aberto["cnpj"])}
     contexto = {"clientes": [{k: v for k, v in t.items() if k != "api_token"} for t in clientes],
                 "aberto": {k: v for k, v in aberto.items() if k != "api_token"} if aberto else None,

@@ -32,17 +32,22 @@
         h2 { margin: 0; font-size: 20px; }
         .meta { color: #64748b; font-size: 13px; margin-top: 4px; }
         .linha { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid #e2e8f0; }
-        .linha:first-of-type { border-top: 0; }
-        .linha .t { font-size: 14px; font-weight: 600; }
-        .linha .d { font-size: 12px; color: #64748b; margin-top: 2px; }
-        .bloco { margin-top: 16px; }
-        .chip { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; }
-        .chip.bom { background: #dcfce7; color: #166534; } .chip.ruim { background: #fee2e2; color: #991b1b; }
-        .chave { width: 46px; height: 26px; border-radius: 13px; padding: 0; position: relative; background: #cbd5e1; border: 0; flex: none; }
-        .chave::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; }
-        .chave.ligada { background: #16a34a; } .chave.ligada::after { left: 23px; }
-        .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-        .editar { display: none; margin-top: 10px; gap: 8px; }
+        .linha .t, .app .t { font-size: 15px; font-weight: 600; }
+        .linha .d, .app .d, .aparelho .d { font-size: 12.5px; color: #64748b; margin-top: 3px; }
+        .d.ruim { color: #b91c1c; }
+        .celulares > .d { font-size: 12.5px; color: #64748b; font-weight: 600; }
+        .secao { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin: 22px 0 8px; }
+        .app { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 10px; }
+        .lado { display: flex; align-items: center; gap: 10px; flex: none; }
+        .lado form { margin: 0; }
+        .st { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 8px; white-space: nowrap; }
+        .st.on { background: #dcfce7; color: #166534; } .st.off { background: #f1f5f9; color: #475569; }
+        .verde { background: #16a34a; }
+        .ponto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+        .ponto.bom { background: #16a34a; } .ponto.ruim { background: #dc2626; }
+        .celulares { margin: -2px 0 10px 14px; padding-left: 14px; border-left: 3px solid #e2e8f0; }
+        .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 10px; }
+        .editar { display: none; margin: 0 0 10px; gap: 8px; }
         .editar.aberto { display: flex; }
         .aparelho { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; margin-top: 8px; font-size: 13px; }
         .mini { padding: 6px 10px; font-size: 12px; }
@@ -55,7 +60,7 @@
         .dialogo p { margin: 0 0 16px; font-size: 14px; line-height: 1.5; }
         .dialogo div { display: flex; gap: 8px; justify-content: flex-end; }
         .vazio { color: #64748b; font-size: 13px; }
-        @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } .lista { max-height: 40vh; } }
+        @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } .lista { max-height: 40vh; } .app { flex-wrap: wrap; } }
     </style>
 </head>
 <body>
@@ -112,37 +117,33 @@
             <h2>{{ aberto.nome_fantasia }}</h2>
             <div class="meta">{{ aberto.cnpj_fmt }} &middot; cliente desde {{ aberto.desde }}</div>
 
-            <div class="bloco">
-                <div class="linha">
-                    <div><div class="t">Token da API <span style="font-family:monospace;color:#64748b;font-weight:400">{{ aberto.token_mascarado }}</span></div>
-                        <div class="d">Conferido agora no ERP</div></div>
-                    <span class="chip {{ aberto.conf_classe }}">{{ aberto.conf_texto }}</span>
-                </div>
-                <div class="linha">
-                    <div><div class="t">Prime Info</div><div class="d">{{ 'Ligado: o cliente entra no app de relatórios.' if aberto.ativo else 'Desligado: o cliente não entra no app.' }}</div></div>
+            <div class="secao">Acesso aos apps</div>
+            <div class="app">
+                <div><div class="t">Prime Info</div><div class="d">App de relatórios do dono da loja</div></div>
+                <div class="lado">
+                    {% if aberto.ativo %}<span class="st on">Liberado</span>{% else %}<span class="st off">Bloqueado</span>{% endif %}
                     <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/{{ 'desativar' if aberto.ativo else 'reativar' }}"
-                          {% if aberto.ativo %}data-confirmar="Desligar o Prime Info de {{ aberto.nome_fantasia }}? O cliente deixa de entrar no app."{% endif %}>
-                        <button type="submit" class="chave {{ 'ligada' if aberto.ativo else '' }}" aria-label="{{ 'Desligar' if aberto.ativo else 'Ligar' }} Prime Info"></button>
-                    </form>
-                </div>
-                <div class="linha">
-                    <div><div class="t">Prime Vendas</div><div class="d">
-                        {% if not aberto.vendas_liberado %}Desligado.
-                        {% elif aberto.aparelhos is none %}Ligado.
-                        {% else %}Ligado &middot; {{ aberto.aparelhos|length }} celular(es) conectado(s).{% endif %}</div></div>
-                    <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/vendas/{{ 'bloquear' if aberto.vendas_liberado else 'liberar' }}"
-                          {% if aberto.vendas_liberado %}data-confirmar="Desligar o Prime Vendas de {{ aberto.nome_fantasia }}? Os celulares dos vendedores são desconectados na hora."{% endif %}>
-                        <button type="submit" class="chave {{ 'ligada' if aberto.vendas_liberado else '' }}" aria-label="{{ 'Desligar' if aberto.vendas_liberado else 'Ligar' }} Prime Vendas"></button>
+                          {% if aberto.ativo %}data-confirmar="Bloquear o Prime Info de {{ aberto.nome_fantasia }}? O cliente deixa de entrar no app."{% endif %}>
+                        {% if aberto.ativo %}<button type="submit" class="perigo">Bloquear</button>{% else %}<button type="submit" class="verde">Liberar</button>{% endif %}
                     </form>
                 </div>
             </div>
-
+            <div class="app">
+                <div><div class="t">Prime Vendas</div><div class="d">App dos vendedores{% if aberto.vendas_liberado and aberto.aparelhos is not none %} &middot; {% set n = aberto.aparelhos|length %}{{ 'nenhum celular conectado' if n == 0 else ('1 celular conectado' if n == 1 else n ~ ' celulares conectados') }}{% endif %}</div></div>
+                <div class="lado">
+                    {% if aberto.vendas_liberado %}<span class="st on">Liberado</span>{% else %}<span class="st off">Bloqueado</span>{% endif %}
+                    <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/vendas/{{ 'bloquear' if aberto.vendas_liberado else 'liberar' }}"
+                          {% if aberto.vendas_liberado %}data-confirmar="Bloquear o Prime Vendas de {{ aberto.nome_fantasia }}? Os celulares dos vendedores são desconectados na hora."{% endif %}>
+                        {% if aberto.vendas_liberado %}<button type="submit" class="perigo">Bloquear</button>{% else %}<button type="submit" class="verde">Liberar</button>{% endif %}
+                    </form>
+                </div>
+            </div>
             {% if aberto.vendas_liberado and aberto.aparelhos %}
-            <div class="bloco">
-                <div class="t" style="font-size:14px;font-weight:600">Celulares conectados</div>
+            <div class="celulares">
+                <div class="d" style="margin-bottom:2px">Celulares conectados ao Prime Vendas</div>
                 {% for a in aberto.aparelhos %}
                 <div class="aparelho">
-                    <div><b>{{ a.nome_vendedor }}</b><div class="d" style="color:#64748b">{{ a.aparelho or 'Aparelho' }} &middot; conectado em {{ a.desde }} &middot; último uso {{ a.ultimo_uso }}</div></div>
+                    <div><b>{{ a.nome_vendedor }}</b><div class="d">{{ a.aparelho or 'Aparelho' }} &middot; conectado em {{ a.desde }} &middot; último uso {{ a.ultimo_uso }}</div></div>
                     <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/aparelhos/{{ a.id }}/desconectar"
                           data-confirmar="Desconectar o celular de {{ a.nome_vendedor }}? Ele vai precisar entrar de novo com o e-mail e a senha do ERP.">
                         <button type="submit" class="perigo mini">Desconectar</button>
@@ -152,14 +153,21 @@
             </div>
             {% endif %}
 
-            <div class="acoes">
+            <div class="secao">Conexão com o ERP</div>
+            <div class="app">
+                {% if aberto.conf_classe == 'bom' %}
+                <div><div class="t"><span class="ponto bom"></span>Token funcionando</div><div class="d">Conferido agora: o token é desta empresa</div></div>
+                {% else %}
+                <div><div class="t"><span class="ponto ruim"></span>Problema no token</div><div class="d ruim">{{ aberto.conf_texto }}</div></div>
+                {% endif %}
                 <button type="button" class="sec" data-abrir="edToken">Trocar token</button>
-                <button type="button" class="sec" data-abrir="edNome">Editar nome</button>
             </div>
             <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/token" class="editar" id="edToken">
                 <input type="text" name="api_token" placeholder="Cole o token novo" autocomplete="off" required />
                 <button type="submit">Salvar token</button>
             </form>
+
+            <div class="acoes"><button type="button" class="sec" data-abrir="edNome">Editar nome</button></div>
             <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/nome" class="editar" id="edNome">
                 <input type="text" name="nome_fantasia" value="{{ aberto.nome_fantasia }}" maxlength="120" required />
                 <button type="submit">Salvar nome</button>
