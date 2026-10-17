@@ -28,3 +28,6 @@ PERMISSAO_DESCONTO_DOCUMENTO = 10037
 PERMISSAO_DESCONTO_ITEM = 10038
 PERMISSAO_DESCONTO_ACIMA_DO_LIMITE = 10042
 PERMISSAO_ACRESCIMO_DOCUMENTO = 10096
+
+# Política de privacidade (uma só para os dois apps, publicada no Prime Info).
+URL_PRIVACIDADE = os.getenv("VENDAS_URL_PRIVACIDADE", "https://app.primesysapp.com.br/privacidade")

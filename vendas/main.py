@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.gzip import GZipMiddleware
@@ -351,6 +351,12 @@ async def pedido_lista(cursor: str = "", aparelho: dict = Depends(sessao.aparelh
 
 
 # ---- App (PWA) -------------------------------------------------------------------------------------------------
+@app.get("/privacidade")
+async def privacidade():
+    """A política de privacidade é uma só para os dois apps (publicada no Prime Info)."""
+    return RedirectResponse(config.URL_PRIVACIDADE, status_code=302)
+
+
 @app.get("/sw.js")
 async def service_worker():
     # Na raiz para controlar o app inteiro; nunca em cache, senão o celular não vê atualização.

@@ -75,3 +75,9 @@ async def login_submit(
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+
+@router.get("/privacidade", response_class=HTMLResponse)
+async def politica_de_privacidade(request: Request):
+    """Política de privacidade pública (exigida pela Play Store); vale para o Prime Info e o Prime Vendas."""
+    return templates.TemplateResponse(request, "privacidade.html", {})
