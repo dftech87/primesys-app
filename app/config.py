@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     admin_user: str = "admin"
     admin_password: str = "1608"
 
+    # Backup para fora do Railway (app/backup.py): chave PÚBLICA que fecha o arquivo (a privada fica só no PC do
+    # dono) e o token que a tarefa agendada do PC usa para baixar. Sem as duas, o download automático fica desligado.
+    backup_public_key: str | None = None
+    backup_token: str | None = None
+
 
 settings = Settings()
 

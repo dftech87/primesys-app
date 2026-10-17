@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 import secrets
 
-from app import limite
+from app import backup, limite
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
 from app.tenants import (
@@ -124,7 +124,8 @@ async def admin_home(request: Request, c: str = "", novo: int = 0):
                   "aparelhos": _aparelhos(aberto["cnpj"])}
     contexto = {"clientes": [{k: v for k, v in t.items() if k != "api_token"} for t in clientes],
                 "aberto": {k: v for k, v in aberto.items() if k != "api_token"} if aberto else None,
-                "novo": bool(novo) or not clientes, "aviso": request.session.pop("aviso", None)}
+                "novo": bool(novo) or not clientes, "aviso": request.session.pop("aviso", None),
+                "backup_configurado": backup.configurado()}
     return templates.TemplateResponse(request, "admin.html", contexto)
 
 
@@ -233,3 +234,41 @@ async def admin_desconectar_aparelho(request: Request, cnpj: str, id_aparelho: i
     if sessao.desconectar(normalize_cnpj(cnpj), id_aparelho):
         _avisar(request, "Celular desconectado. O vendedor precisa entrar de novo com o e-mail e a senha do ERP.")
     return _voltar(cnpj)
+
+
+def _arquivo_de_backup() -> Response:
+    conteudo, nome = backup.gerar()
+    return Response(conteudo, media_type="application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"', "Cache-Control": "no-store"})
+
+
+@router.get("/backup")
+async def admin_baixar_backup(request: Request):
+    """Botão "Baixar backup agora" do admin (o arquivo já sai criptografado; só abre com a chave do PC do dono)."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    try:
+        return _arquivo_de_backup()
+    except backup.BackupIndisponivel:
+        _avisar(request, "Backup não configurado: falta a variável BACKUP_PUBLIC_KEY no servidor.", "ruim")
+        return _voltar()
+
+
+@router.get("/backup/automatico")
+async def backup_automatico(request: Request):
+    """Download feito pela tarefa agendada no PC do dono, com o token BACKUP_TOKEN (cabeçalho Authorization: Bearer).
+    Desligado sem BACKUP_TOKEN e BACKUP_PUBLIC_KEY. Tentativas erradas bloqueiam o IP por um tempo."""
+    esperado = (settings.backup_token or "").strip()
+    if len(esperado) < 32 or not backup.configurado():
+        return JSONResponse({"erro": "backup automático desligado"}, status_code=404)
+    chave = f"backup:{limite.ip_do_cliente(request) or 'sem-ip'}"
+    espera = limite.segundos_bloqueado(chave, limite.LIMITE_ADMIN)
+    if espera:
+        return JSONResponse({"erro": limite.mensagem_bloqueio(espera)}, status_code=429)
+    recebido = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if not secrets.compare_digest(recebido.encode(), esperado.encode()):
+        limite.registrar_falha(chave)
+        logger.warning("tentativa de backup automático com token errado")
+        return JSONResponse({"erro": "não autorizado"}, status_code=401)
+    limite.limpar(chave)
+    return _arquivo_de_backup()

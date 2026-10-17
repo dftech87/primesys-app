@@ -11,3 +11,8 @@ Imagens App base/
 APK/
 *.keystore
 *.jks
+
+# Backups e chaves do backup nunca vão para o Git
+*.psbk
+*.pem
+backup-aberto.json

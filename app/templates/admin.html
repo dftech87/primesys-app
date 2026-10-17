@@ -87,6 +87,10 @@
                 {% endfor %}
             </div>
             <a class="btn novo-btn" href="/admin?novo=1" style="text-align:center">+ Novo cliente</a>
+            {% if backup_configurado %}
+            <a class="btn sec novo-btn" href="/admin/backup" style="text-align:center">Baixar backup agora</a>
+            <div class="meta" style="font-size:12px;text-align:center;margin-top:6px">Sai criptografado: só abre no PC com a chave do backup.</div>
+            {% endif %}
         </aside>
 
         <!-- Painel -->
