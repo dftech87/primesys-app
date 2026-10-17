@@ -210,9 +210,10 @@ async def sair(request: Request, aparelho: dict = Depends(sessao.aparelho_atual)
 
 # ---- Catálogo no celular ----------------------------------------------------------------------------------------
 @app.post("/api/sincronizar")
-async def sincronizar(aparelho: dict = Depends(sessao.aparelho_atual)):
-    """Pede ao servidor para atualizar a cópia do catálogo (lê do ERP só o que estiver vencido) e diz como está."""
-    catalogo.disparar(aparelho["tenant"])
+async def sincronizar(agora: int = 0, aparelho: dict = Depends(sessao.aparelho_atual)):
+    """Pede ao servidor para atualizar a cópia do catálogo (lê do ERP só o que estiver vencido) e diz como está.
+    agora=1: o vendedor tocou em Atualizar; lê as mudanças do ERP na hora (no máximo 1 vez por minuto por empresa)."""
+    catalogo.disparar(aparelho["tenant"], forcar=bool(agora))
     return catalogo.estado(aparelho["cnpj"])
 
 

@@ -3,8 +3,10 @@ e clientes. O servidor lê do ERP uma vez para todos os vendedores daquela empre
 que mudou. Assim o número de vendedores não aumenta o gasto da cota de 20 chamadas por minuto do ERP.
 
 Leitura do ERP:
-  - completa de tempos em tempos (pega tudo, e o que sumiu do ERP fica inativo na cópia);
-  - nos intervalos, só o que mudou desde a última marca de alteração do ERP.
+  - completa só na primeira vez de cada empresa (ou quando a regra do catálogo muda);
+  - depois, só o que mudou desde a última marca de alteração do ERP. Produto inativado ou sem preço chega como
+    inativo; produto que passa a ser vendável traz junto o estoque dele. Leitura completa periódica fica desligada
+    (decisão de 17/10/2026: economiza a cota do ERP); dá para religar com VENDAS_LEITURA_COMPLETA_HORAS.
 Toda consulta é um modelo fixo; só entram números (i()) e marcas de data já validadas (_marca()).
 """
 
@@ -12,7 +14,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
+import time
 from datetime import timedelta
 
 from app.cache import cached
@@ -25,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 # De quanto em quanto tempo ler o que mudou / ler tudo de novo, por tabela.
 INTERVALO_MUDANCAS = {"produtos": timedelta(minutes=10), "estoque": timedelta(minutes=3), "clientes": timedelta(minutes=15)}
-INTERVALO_COMPLETA = {"produtos": timedelta(hours=24), "estoque": timedelta(hours=6), "clientes": timedelta(hours=24)}
+# Leitura completa periódica: desligada (0). Só acontece na primeira vez ou quando a regra do catálogo muda.
+_HORAS_COMPLETA = float(os.getenv("VENDAS_LEITURA_COMPLETA_HORAS", "0") or 0)
+INTERVALO_COMPLETA = timedelta(hours=_HORAS_COMPLETA) if _HORAS_COMPLETA > 0 else None
 MAX_PAGINAS = 400   # 40 mil linhas por leitura (100 por página, teto da API)
 TABELAS = ("produtos", "estoque", "clientes")
 
@@ -72,9 +78,11 @@ def _sql_produtos(par: dict, desde: str | None) -> str:
         order by v._idmercadoriavariacao"""
 
 
-def _sql_estoque(par: dict, desde: str | None) -> str:
-    """Estoque do local padrão, só dos produtos vendáveis (mesma regra do catálogo)."""
+def _sql_estoque(par: dict, desde: str | None, ids: list[int] | None = None) -> str:
+    """Estoque do local padrão, só dos produtos vendáveis (mesma regra do catálogo). Com ids: só desses produtos."""
     filtro = f"and e.datahora >= {_marca(desde)}" if desde else ""
+    if ids:
+        filtro += f" and e._idmercadoriavariacao in ({', '.join(i(x) for x in ids)})"
     return f"""
         select e._idmercadoriavariacao as id, coalesce(e.qtdsaldo, 0) as saldo, e.datahora as alterado
         from mercadoria_estoque e
@@ -198,7 +206,13 @@ def _vencido(texto: str, intervalo: timedelta) -> bool:
     return not texto or texto_para_data(agora_texto()) - texto_para_data(texto) >= intervalo
 
 
-async def _atualizar(tenant: dict) -> None:
+# "Atualizar" tocado pelo vendedor: lê as mudanças na hora, sem esperar o intervalo. No máximo 1 vez por minuto por
+# empresa (vários vendedores tocando juntos não multiplicam as consultas ao ERP).
+FORCAR_NO_MAXIMO_A_CADA = 60
+_ultimo_forcado: dict[str, float] = {}
+
+
+async def _atualizar(tenant: dict, forcar: bool = False) -> None:
     cnpj = tenant["cnpj"]
     client = MeuERPClient(tenant["api_token"], segundo_plano=True)
     par = await _parametros(client)
@@ -206,8 +220,9 @@ async def _atualizar(tenant: dict) -> None:
     controle = _controle(cnpj)
     for tabela in TABELAS:
         c = controle.get(tabela, {})
-        completa = _vencido(c.get("ultima_completa", ""), INTERVALO_COMPLETA[tabela]) or not c.get("marca_erp")
-        if not completa and not _vencido(c.get("ultima_leitura", ""), INTERVALO_MUDANCAS[tabela]):
+        completa = (not c.get("marca_erp") or not c.get("ultima_completa")
+                    or (INTERVALO_COMPLETA is not None and _vencido(c["ultima_completa"], INTERVALO_COMPLETA)))
+        if not completa and not forcar and not _vencido(c.get("ultima_leitura", ""), INTERVALO_MUDANCAS[tabela]):
             continue
         try:
             linhas = await executar(client, construtores[tabela](par, None if completa else c["marca_erp"]), max_paginas=MAX_PAGINAS)
@@ -218,9 +233,28 @@ async def _atualizar(tenant: dict) -> None:
             _salvar_controle(cnpj, tabela, marca_erp=nova_marca, ultima_leitura=agora, erro="",
                              **({"ultima_completa": agora} if completa else {}))
             logger.info("catálogo %s/%s: %s, %d lidas, %d mudaram", cnpj, tabela, "completa" if completa else "mudanças", len(linhas), mudou)
+            if tabela == "produtos" and not completa:
+                # a leitura usa ">=" na marca: a última linha já lida volta sempre e não conta como mudança
+                marca_anterior = c.get("marca_erp", "")
+                await _estoque_dos_alterados(client, cnpj, par, [l for l in linhas if str(l.get("alterado") or "") > marca_anterior])
         except Exception as erro:
             logger.exception("falha lendo %s do ERP (empresa %s)", tabela, cnpj)
             _salvar_controle(cnpj, tabela, erro=type(erro).__name__)
+
+
+async def _estoque_dos_alterados(client: MeuERPClient, cnpj: str, par: dict, produtos: list[dict]) -> None:
+    """Produto que passou a ser vendável (ganhou preço, foi reativado) não tem mudança de estoque para a leitura de
+    mudanças pegar: busca o estoque desses produtos agora. Só gasta consulta quando algum produto mudou."""
+    ids = sorted({int(l["id"]) for l in produtos if int(l.get("ativo") or 0) == 1})
+    if not ids:
+        return
+    for k in range(0, len(ids), 500):
+        try:
+            linhas = await executar(client, _sql_estoque(par, None, ids[k:k + 500]), max_paginas=10)
+            await asyncio.to_thread(_gravar, cnpj, "estoque", linhas, False)
+        except Exception:
+            logger.warning("estoque dos produtos alterados indisponível agora (empresa %s); vem na próxima mudança", cnpj)
+            return
 
 
 REGRA_DO_CATALOGO = "vendavel-v1"   # mude ao trocar a regra de quais produtos entram: força uma leitura completa
@@ -242,12 +276,19 @@ def aplicar_regra_do_catalogo() -> None:
 _em_andamento: dict[str, asyncio.Task] = {}
 
 
-def disparar(tenant: dict) -> bool:
-    """Começa (em segundo plano) a leitura do ERP desta empresa, se ainda não estiver rodando. Devolve se está rodando."""
+def disparar(tenant: dict, forcar: bool = False) -> bool:
+    """Começa (em segundo plano) a leitura do ERP desta empresa, se ainda não estiver rodando. Devolve se está rodando.
+    forcar: lê as mudanças agora mesmo (vendedor tocou em Atualizar), respeitando 1 vez por minuto por empresa."""
     cnpj = tenant["cnpj"]
+    if forcar:
+        agora = time.monotonic()
+        if agora - _ultimo_forcado.get(cnpj, -1e9) < FORCAR_NO_MAXIMO_A_CADA:
+            forcar = False
+        else:
+            _ultimo_forcado[cnpj] = agora
     tarefa = _em_andamento.get(cnpj)
     if tarefa is None or tarefa.done():
-        tarefa = asyncio.create_task(_atualizar(tenant))
+        tarefa = asyncio.create_task(_atualizar(tenant, forcar))
         tarefa.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
         _em_andamento[cnpj] = tarefa
     return not tarefa.done()

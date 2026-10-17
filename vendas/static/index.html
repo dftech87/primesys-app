@@ -106,6 +106,8 @@
     /* Listas (produtos e clientes) */
     .cab-lista { background: linear-gradient(160deg, #064e3b, #047857); color: #fff; padding: 16px 16px 14px; position: sticky; top: 0; z-index: 10; }
     .cab-lista .l1 { display: flex; justify-content: space-between; align-items: center; }
+    .btn-atualizar { margin-top: 10px; width: 100%; height: 36px; border: 1px solid rgba(255,255,255,.45); border-radius: 10px; background: rgba(255,255,255,.12); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+    .btn-atualizar:disabled { opacity: .6; }
     .cab-lista .nm { font-size: 19px; font-weight: 700; }
     .cab-lista small { font-size: 12px; color: #a7f3d0; }
     .busca { display: flex; align-items: center; gap: 8px; height: 44px; border-radius: 12px; background: #fff; padding: 0 12px; margin-top: 12px; }
@@ -359,6 +361,7 @@
 <section class="tela" id="telaProdutos">
     <div class="cab-lista">
         <div class="l1"><span><span class="nm">Consulta de preço e estoque</span><br><small id="prodInfo"></small></span><span class="net" data-net>Online</span></div>
+        <button type="button" class="btn-atualizar" id="btnAtualizarProdutos">↻ Atualizar produtos alterados</button>
         <div class="busca"><span>🔍</span><input id="buscaProduto" placeholder="Nome, código ou código de barras" autocomplete="off" enterkeyhint="search"><button class="limpar" type="button" data-limpar="buscaProduto">✕</button><button class="camera" type="button" data-camera="consulta" aria-label="Ler código de barras" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M16 8v8"/></svg></button></div>
     </div>
     <div class="wrap"><div class="lista" id="listaProdutos"></div><div class="rodape-lista" id="rodapeProdutos"></div></div>
@@ -978,7 +981,7 @@ async function carregarCatalogo() {
 class AcessoEncerrado extends Error {}
 
 // Pede ao servidor para atualizar a cópia (ele lê do ERP só o que estiver vencido) e baixa o que mudou.
-async function sincronizar(aoProgredir) {
+async function sincronizar(aoProgredir, agora = false) {
     const avisar = aoProgredir || (() => {});
     const chamar = async (caminho, opcoes) => {
         const r = await api(caminho, opcoes);
@@ -986,10 +989,11 @@ async function sincronizar(aoProgredir) {
         if (r.status !== 200) throw new Error('servidor respondeu ' + r.status);
         return r.corpo;
     };
-    let est = await chamar('/api/sincronizar', { method: 'POST' });
-    const inicio = Date.now();
+    let est = await chamar('/api/sincronizar' + (agora ? '?agora=1' : ''), { method: 'POST' });
+    const inicio = Date.now(), baixadosPor = {};
     // Primeira vez da empresa: espera o servidor terminar de ler o ERP (pode levar alguns minutos em catálogos grandes).
-    while (est.lendo_erp && TABELAS.some((n) => !est.tabelas[n].pronta) && Date.now() - inicio < 10 * 60000) {
+    // Atualizar tocado pelo vendedor: espera a leitura das mudanças (até 1 minuto).
+    while (est.lendo_erp && (TABELAS.some((n) => !est.tabelas[n].pronta) || (agora && Date.now() - inicio < 60000)) && Date.now() - inicio < 10 * 60000) {
         avisar('erp', est);
         await esperar(2000);
         est = await chamar('/api/sincronizar/estado');
@@ -1005,10 +1009,12 @@ async function sincronizar(aoProgredir) {
             avisar(n, { baixados, total: est.tabelas[n].total, mais: pag.mais });
             if (!pag.mais) break;
         }
+        baixadosPor[n] = baixados;
     }
     const cfg = await api('/api/pedido/config');
     if (cfg.status === 200) { configPedido = cfg.corpo; await gravarLocal('configPedido', cfg.corpo); }
     await gravarLocal('ultimaSync', Date.now());
+    sincronizar.ultimo = baixadosPor;
     await gravarLocal('ultimoOnline', Date.now());
     await carregarCatalogo();
     return est;
@@ -1055,13 +1061,14 @@ document.getElementById('btnComecar').addEventListener('click', () => {
 });
 
 let sincronizando = false;
-async function sincronizarEmSegundoPlano() {
-    if (sincronizando || !navigator.onLine || !tokenEmUso) return;
+async function sincronizarEmSegundoPlano(opcoes) {
+    const agora = !!(opcoes && opcoes.agora === true);
+    if (sincronizando || !navigator.onLine || !tokenEmUso) return false;
     sincronizando = true;
     document.getElementById('iniSync').textContent = 'Atualizando dados…';
     try {
         await enviarFila();   // pedidos guardados sem internet saem primeiro
-        await sincronizar();
+        await sincronizar(null, agora);
         await enviarFila();
         if (document.getElementById('telaProdutos').classList.contains('ativa')) desenharProdutos();
         if (document.getElementById('telaClientes').classList.contains('ativa')) desenharClientes();
@@ -1079,7 +1086,22 @@ async function mostrarUltimaSync() {
     document.getElementById('prodInfo').textContent = `${produtos.length} itens · atualizados ${txt}`;
     document.getElementById('cliInfo').textContent = `${clientes.length} clientes`;
 }
-document.getElementById('btnSyncAgora').addEventListener('click', sincronizarEmSegundoPlano);
+document.getElementById('btnSyncAgora').addEventListener('click', () => sincronizarEmSegundoPlano({ agora: true }));
+// Aba Produtos: o vendedor sabe que um produto mudou no ERP e não quer esperar a atualização automática.
+document.getElementById('btnAtualizarProdutos').addEventListener('click', async () => {
+    const b = document.getElementById('btnAtualizarProdutos');
+    if (!navigator.onLine) return avisar('Sem internet. Conecte para atualizar os produtos.');
+    if (sincronizando) return avisar('Já está atualizando. Aguarde um instante.');
+    b.disabled = true; b.textContent = 'Atualizando…';
+    sincronizar.ultimo = null;
+    await sincronizarEmSegundoPlano({ agora: true });
+    b.disabled = false; b.textContent = '↻ Atualizar produtos alterados';
+    const r = sincronizar.ultimo;
+    if (!r) return avisar('Não foi possível atualizar agora. Tente de novo em instantes.');
+    desenharProdutos();
+    const n = (r.produtos || 0) + (r.estoque || 0);
+    document.getElementById('prodInfo').textContent = n ? `${produtos.length} itens · ${r.produtos || 0} produto(s) e ${r.estoque || 0} estoque(s) atualizados agora` : `${produtos.length} itens · nenhuma alteração no ERP`;
+});
 window.addEventListener('online', sincronizarEmSegundoPlano);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizarEmSegundoPlano(); });
 setInterval(sincronizarEmSegundoPlano, 5 * 60000);
