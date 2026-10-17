@@ -58,22 +58,6 @@ def empresas_com_aparelhos() -> list[str]:
         return [r["cnpj"] for r in conn.execute("SELECT DISTINCT cnpj FROM pv_aparelhos WHERE revogado = 0 AND ultimo_uso >= ?", (limite,))]
 
 
-def aparelhos_da_empresa(cnpj: str) -> list[dict]:
-    """Celulares conectados (não desconectados, usados nos últimos dias de validade) — para o /admin."""
-    limite = (texto_para_data(agora_texto()) - timedelta(days=config.APARELHO_VENCE_DIAS)).strftime("%Y-%m-%d %H:%M:%S")
-    with db_session() as conn:
-        return [dict(r) for r in conn.execute(
-            "SELECT id, nome_vendedor, aparelho, criado_em, ultimo_uso FROM pv_aparelhos "
-            "WHERE cnpj = ? AND revogado = 0 AND ultimo_uso >= ? ORDER BY ultimo_uso DESC", (cnpj, limite))]
-
-
-def desconectar(cnpj: str, id_aparelho: int) -> bool:
-    """Desconecta um celular da empresa (o vendedor precisa entrar de novo com e-mail e senha do ERP)."""
-    with db_session() as conn:
-        cur = conn.execute("UPDATE pv_aparelhos SET revogado = 1 WHERE id = ? AND cnpj = ?", (int(id_aparelho), cnpj))
-        return (cur.rowcount or 0) > 0
-
-
 NAO_AUTORIZADO = HTTPException(status_code=401, detail="Acesso expirado. Entre de novo com seu e-mail e senha do ERP.")
 
 

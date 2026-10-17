@@ -43,16 +43,6 @@ def _voltar(cnpj: str = "", novo: bool = False) -> RedirectResponse:
     return RedirectResponse(destino, status_code=303)
 
 
-def _aparelhos(cnpj: str) -> list[dict] | None:
-    """Celulares conectados ao Prime Vendas. None se a tabela do Prime Vendas ainda não existe neste banco."""
-    try:
-        from vendas import sessao
-        return [{**a, "ultimo_uso": _data_br(a["ultimo_uso"]), "desde": _data_br(a["criado_em"])} for a in sessao.aparelhos_da_empresa(cnpj)]
-    except Exception:
-        logger.warning("celulares do Prime Vendas indisponíveis para o /admin")
-        return None
-
-
 async def _conferencia(cliente: dict, todos: list[dict]) -> tuple[str, str]:
     """O token do cliente aberto é da empresa do CNPJ? Está repetido em outro cadastro? (1 consulta ao ERP.)"""
     if not cliente["api_token"]:
@@ -120,8 +110,7 @@ async def admin_home(request: Request, c: str = "", novo: int = 0):
         aberto = next((t for t in clientes if t["cnpj"] == cnpj), None) or (clientes[0] if clientes else None)
     if aberto:
         texto, classe = await _conferencia(aberto, todos)
-        aberto = {**aberto, "conf_texto": texto, "conf_classe": classe,
-                  "aparelhos": _aparelhos(aberto["cnpj"])}
+        aberto = {**aberto, "conf_texto": texto, "conf_classe": classe}
     contexto = {"clientes": [{k: v for k, v in t.items() if k != "api_token"} for t in clientes],
                 "aberto": {k: v for k, v in aberto.items() if k != "api_token"} if aberto else None,
                 "novo": bool(novo) or not clientes, "aviso": request.session.pop("aviso", None),
@@ -223,16 +212,6 @@ async def admin_prime_vendas(request: Request, cnpj: str, acao: str):
     if acao in ("liberar", "bloquear"):
         set_vendas_liberado(cnpj, liberado=acao == "liberar")
         _avisar(request, "Prime Vendas ligado." if acao == "liberar" else "Prime Vendas desligado: os celulares da empresa foram desconectados.")
-    return _voltar(cnpj)
-
-
-@router.post("/tenants/{cnpj}/aparelhos/{id_aparelho}/desconectar")
-async def admin_desconectar_aparelho(request: Request, cnpj: str, id_aparelho: int):
-    if not _is_admin(request):
-        return RedirectResponse("/admin/login", status_code=303)
-    from vendas import sessao
-    if sessao.desconectar(normalize_cnpj(cnpj), id_aparelho):
-        _avisar(request, "Celular desconectado. O vendedor precisa entrar de novo com o e-mail e a senha do ERP.")
     return _voltar(cnpj)
 
 
