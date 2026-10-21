@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+from app import registro
+
+registro.configurar()
+
+from fastapi import FastAPI  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware

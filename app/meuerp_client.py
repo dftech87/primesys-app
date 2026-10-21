@@ -55,7 +55,9 @@ class _TokenBucket:
             await asyncio.sleep(espera)
         esperou = time.monotonic() - inicio
         if esperou > AVISAR_ESPERA_ACIMA_DE:
-            logger.warning("limite do ERP: cliente %s esperou %.1fs por cota", self.nome, esperou)
+            # Em segundo plano (renovações, conferências) esperar é o esperado: só informação. Com alguém usando, aviso.
+            (logger.info if segundo_plano else logger.warning)(
+                "limite do ERP: cliente %s esperou %.1fs por cota%s", self.nome, esperou, " (segundo plano)" if segundo_plano else "")
 
 
 _buckets: dict[str, _TokenBucket] = {}

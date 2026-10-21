@@ -5,6 +5,10 @@ as peças compartilhadas: cadastro das empresas (banco), criptografia dos tokens
 tentativas de login. Não tem tela de administração: isso fica no /admin do PrimeSys Info.
 """
 
+from app import registro
+
+registro.configurar()
+
 import asyncio
 import hashlib
 import logging

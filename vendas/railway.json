@@ -13,6 +13,7 @@
       "/app/security.py",
       "/app/limite.py",
       "/app/sqlquery.py",
+      "/app/registro.py",
       "/requirements.txt"
     ]
   },
