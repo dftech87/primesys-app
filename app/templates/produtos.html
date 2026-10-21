@@ -213,6 +213,9 @@
         .fd-dif { display: inline-block; min-width: 56px; padding: 2px 5px; border-radius: 5px; text-align: right; }
         .fd-dif.dif-pos { background: #dcfce7; } .fd-dif.dif-neg { background: #fee2e2; } .fd-dif.dif-zero { background: #f1f5f9; }
         .fech-aviso { margin-top: 8px; padding: 8px 10px; background: #fffbeb; border-radius: 8px; font-size: 11.5px; line-height: 1.45; color: #92400e; }
+        .btn-entradas { width: 100%; margin-top: 12px; padding: 12px 14px; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; color: var(--azul); font-size: 14px; font-weight: 700; text-align: left; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .btn-entradas small { display: block; font-size: 11.5px; font-weight: 500; color: #475569; margin-top: 2px; }
+        .btn-entradas .seta-dir { margin-left: auto; font-size: 18px; }
         /* Compras · produto: resumo, evolução do custo e lista das notas */
         .ce-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         .ce-k { background: #f8fafc; border-radius: 10px; padding: 8px 10px; }
@@ -823,10 +826,18 @@
             posicaoListaCompras = elMain.scrollTop;
             rolarParaTopo();
             mostrarViewCompras('detalhe');
-            elComprasDetalhe.innerHTML = `<button class="voltar-compras" id="comprasVoltar">&larr; Voltar à lista</button>
+            const daFicha = voltarParaFicha && String(voltarParaFicha.idVariacao) === String(idVariacao) ? voltarParaFicha : null;
+            elComprasDetalhe.innerHTML = `<button class="voltar-compras" id="comprasVoltar">&larr; ${daFicha ? 'Voltar ao produto' : 'Voltar à lista'}</button>
                 <h2 class="cab-produto">${esc(descricao)}</h2><div id="comprasEntradas"></div>`;
             document.getElementById('comprasVoltar').addEventListener('click', () => {
                 entradasSeq++;
+                if (daFicha) {
+                    voltarParaFicha = null;
+                    mostrarTab('produtos');
+                    abrirDetalhe(daFicha.idVariacao, daFicha.descricao);
+                    origemFicha = daFicha.origem;   // depois do mostrarTab, que zera a origem ao trocar de aba
+                    return;
+                }
                 mostrarViewCompras(elBuscaCompras.value.trim().length >= 2 ? 'lista' : 'vazio');
                 elMain.scrollTop = posicaoListaCompras;
             });
@@ -901,6 +912,7 @@
                                 <div id="destinoPrecoFicha"></div>
                             </details>
                         </div>
+                        <button type="button" class="btn-entradas" id="btnEntradasFicha">&#129534;<span>Ver notas de entrada<small>custo de cada compra, fornecedor e margem (aba Compras)</small></span><span class="seta-dir">&rsaquo;</span></button>
             `;
         }
 
@@ -908,6 +920,17 @@
         function desenharFicha(p, idVariacao) {
             elDetalhe.innerHTML = montarFicha(p);
             prepararBloco('blocoPrecoFicha', 'destinoPrecoFicha', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
+            document.getElementById('btnEntradasFicha').addEventListener('click', () => abrirComprasDoProduto(idVariacao, p.descricao));
+        }
+
+        // Da ficha do produto para as notas de entrada dele na aba Compras; o "voltar" de lá retorna para a ficha
+        // (e a ficha continua voltando para a tela de onde veio, ex.: a lista de margem das vendas).
+        let voltarParaFicha = null;
+        function abrirComprasDoProduto(idVariacao, descricao) {
+            const volta = { idVariacao, descricao, origem: origemFicha };
+            mostrarTab('compras');
+            voltarParaFicha = volta;   // depois do mostrarTab, que zera o "voltar" ao trocar de aba
+            abrirEntradas(idVariacao, descricao);
         }
 
         function abrirDetalhe(idVariacao, descricaoResumo) {
@@ -1034,6 +1057,7 @@
 
         function mostrarTab(tab) {
             origemFicha = null;   // trocar de aba pela barra inferior cancela o "voltar" para a tela de origem
+            voltarParaFicha = null;
             if (tab !== abaAtual) rolarParaTopo();
             abaAtual = tab;
             Object.entries(tabs).forEach(([nome, el]) => el.classList.toggle('ativo', nome === tab));
