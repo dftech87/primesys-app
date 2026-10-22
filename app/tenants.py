@@ -12,6 +12,7 @@ from app.security import normalize_cnpj
 logger = logging.getLogger(__name__)
 
 ERRO_INDISPONIVEL = "Não foi possível validar suas credenciais agora. Tente novamente."
+ERRO_ERP_LENTO = "O sistema do ERP está demorando para responder. Aguarde um instante e tente de novo."
 ERRO_TOKEN_DE_OUTRA_EMPRESA = "O cadastro desta empresa está com a chave de acesso de outra empresa. Fale com o suporte."
 TTL_DONO_DO_TOKEN = 6 * 3600
 
@@ -197,7 +198,12 @@ async def authenticate(cnpj: str, email: str, senha: str) -> tuple[dict | None, 
     client = MeuERPClient(tenant["api_token"])
     try:
         resultado = await client.post("/api/usuario/validar/v1", json={"email": email, "senha": senha})
-    except httpx.HTTPStatusError:
+    except httpx.TimeoutException:
+        # ERP lento demais (já aconteceu de levar mais de 50 s): mensagem clara em vez de "Internal Server Error".
+        logger.warning("ERP não respondeu a tempo ao validar o login (empresa %s)", tenant["cnpj"])
+        return None, ERRO_ERP_LENTO
+    except httpx.HTTPError:
+        logger.warning("ERP indisponível ao validar o login (empresa %s)", tenant["cnpj"])
         return None, ERRO_INDISPONIVEL
 
     if not resultado.get("status"):

@@ -27,7 +27,7 @@ from app import limite, meuerp_client
 from app.config import COOKIE_SEGURO
 from app.database import db_session
 from app.security import normalize_cnpj
-from app.tenants import authenticate, get_tenant_by_cnpj
+from app.tenants import ERRO_ERP_LENTO, ERRO_INDISPONIVEL, ERRO_TOKEN_DE_OUTRA_EMPRESA, authenticate, get_tenant_by_cnpj
 from vendas import catalogo, clientes, config, pdf_pedido, pedidos, sessao, vendedores
 from vendas.db import criar_tabelas
 
@@ -164,6 +164,8 @@ async def entrar(dados: Entrada, request: Request):
         return _erro(403, "O Prime Vendas não está liberado para esta empresa. Fale com a DFTECH.")
 
     tenant, erro = await authenticate(cnpj, email, dados.senha)
+    if erro in (ERRO_ERP_LENTO, ERRO_INDISPONIVEL, ERRO_TOKEN_DE_OUTRA_EMPRESA):   # falha do ERP ou cadastro, não senha errada
+        return _erro(503, erro)
     if erro:
         falhou()
         return _erro(401, erro)
