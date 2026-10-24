@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import time
 from collections.abc import Mapping
 
 import httpx
@@ -60,6 +62,28 @@ async def token_confere_com_cnpj(tenant: dict) -> bool:
         guardar_se=lambda v: v == tenant["cnpj"],
     )
     return dono is None or dono == tenant["cnpj"]
+
+
+ESPERA_MAXIMA_DA_PAGINA = 3.0     # a tela não espera o ERP mais que isso para abrir
+PULAR_CONFERENCIA_APOS_FALHA = 120   # ERP não respondeu agora há pouco: não repete a espera a cada abertura
+_conferencia_falhou_em: dict[str, float] = {}
+
+
+async def token_confere_sem_travar(tenant: dict) -> bool:
+    """Igual a token_confere_com_cnpj, mas para ABRIR UMA PÁGINA: nunca deixa a tela em branco esperando o ERP.
+    Resultado já conhecido vale na hora; sem ele, espera no máximo 3 s (a conferência continua por trás e fica
+    guardada para a próxima abertura). ERP lento ou fora do ar = deixa abrir, o mesmo que já acontecia quando
+    o ERP não conseguia responder. Só recusa quando o ERP afirma que o token é de OUTRA empresa."""
+    cnpj = tenant["cnpj"]
+    if time.monotonic() - _conferencia_falhou_em.get(cnpj, -1e9) < PULAR_CONFERENCIA_APOS_FALHA:
+        return True
+    try:
+        return await asyncio.wait_for(token_confere_com_cnpj(tenant), ESPERA_MAXIMA_DA_PAGINA)
+    except asyncio.TimeoutError:
+        _conferencia_falhou_em[cnpj] = time.monotonic()
+        logger.warning("conferência do token demorou mais de %.0f s; a página abriu sem esperar (empresa %s)",
+                       ESPERA_MAXIMA_DA_PAGINA, cnpj)
+        return True
 
 
 def _com_token_aberto(linha: Mapping) -> dict:
