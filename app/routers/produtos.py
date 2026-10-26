@@ -10,7 +10,7 @@ from app.cache import cached
 from app.deps import current_tenant
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
-from app.tenants import token_confere_sem_travar
+from app.tenants import ERRO_ERP_LENTO, token_confere_sem_travar
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -31,10 +31,17 @@ def _nao_nulo(valor) -> bool:
     return valor is not None  # falha (None) não deve ficar guardada
 
 
+def _erro_erp(erro: httpx.HTTPError) -> JSONResponse:
+    """ERP demorou (passou do tempo) ou não respondeu: mensagem clara em vez de erro 500 na tela."""
+    if isinstance(erro, httpx.TimeoutException):
+        return JSONResponse({"detail": ERRO_ERP_LENTO}, status_code=504)
+    return JSONResponse({"detail": "Não foi possível consultar o ERP agora. Tente de novo em instantes."}, status_code=502)
+
+
 async def _preco_venda(client: MeuERPClient, id_variacao: int) -> float | None:
     try:
         resultado = await client.get(f"/api/mercadoria/{id_variacao}/tabelas-preco/v1", params={"limit": 10})
-    except httpx.HTTPStatusError:
+    except httpx.HTTPError:
         return None
     ativas = [i for i in (resultado.get("items") or []) if i.get("ativo") == "S"]
     if not ativas:
@@ -48,7 +55,7 @@ async def _estoque(client: MeuERPClient, id_variacao: int, id_loja: int) -> floa
         resultado = await client.get(
             f"/api/mercadoria/{id_variacao}/local-estoque/{id_loja}/estoque/v1"
         )
-    except httpx.HTTPStatusError:
+    except httpx.HTTPError:
         return None
     return resultado.get("qtdSaldo")
 
@@ -83,8 +90,8 @@ async def api_lojas(request: Request):
             lambda: client.get("/api/local-estoque/v1", params={"limit": 100}),
             obsoleto_ate=TTL_LOJAS,
         )
-    except httpx.HTTPStatusError:
-        return JSONResponse({"detail": "erro ao consultar lojas"}, status_code=502)
+    except httpx.HTTPError as erro:
+        return _erro_erp(erro)
     lojas = [
         {"codigo": item["codigo"], "descricao": item["descricao"]}
         for item in (resultado.get("items") or [])
@@ -107,8 +114,8 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
             TTL_BUSCA,
             lambda: client.get("/api/mercadoria/v1", params={"filtro": q, "limit": MAX_RESULTADOS_LISTA}),
         )
-    except httpx.HTTPStatusError:
-        return JSONResponse({"detail": "erro ao consultar produtos"}, status_code=502)
+    except httpx.HTTPError as erro:
+        return _erro_erp(erro)
 
     itens = resultado.get("items") or []
 
@@ -143,14 +150,18 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
         mercadoria = await cached(
             (cnpj, "produto", id_variacao), TTL_PRODUTO, lambda: client.get(f"/api/mercadoria/v1/{id_variacao}")
         )
-    except httpx.HTTPStatusError:
-        return JSONResponse({"detail": "produto não encontrado"}, status_code=404)
+    except httpx.HTTPStatusError as erro:
+        if erro.response.status_code < 500:   # o ERP recusou o código: como antes, "não encontrado"
+            return JSONResponse({"detail": "produto não encontrado"}, status_code=404)
+        return _erro_erp(erro)
+    except httpx.HTTPError as erro:
+        return _erro_erp(erro)
 
     async def custo() -> float | None:
         try:
             resultado = await client.get(f"/api/mercadoria/{id_variacao}/custo/v1")
             return resultado.get("valCusto")
-        except httpx.HTTPStatusError:
+        except httpx.HTTPError:
             return None
 
     # Cada informação com a sua validade: reabrir o mesmo produto não refaz as 4 chamadas.

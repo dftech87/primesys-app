@@ -443,6 +443,7 @@
         .secao-titulo { margin: 24px 0 4px; font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; }
 
         .loading, .erro { text-align: center; padding: 40px 20px; color: #64748b; font-size: 13px; }
+        .btn-tentar { display: block; margin: 14px auto 0; padding: 9px 18px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #0b3a8f; font-weight: 700; font-size: 13px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -860,6 +861,16 @@
             });
         }
 
+        // Mensagem de falha do servidor (ERP lento ou fora do ar) com botão para tentar de novo.
+        async function mostrarFalha(el, err, padrao, tentarDeNovo) {
+            let texto = padrao;
+            if (err instanceof Response && (err.status === 502 || err.status === 504)) {
+                try { texto = (await err.json()).detail || padrao; } catch (e) { /* mantém o padrão */ }
+            }
+            el.innerHTML = `<div class="erro">${esc(texto)}<button type="button" class="btn-tentar">Tentar de novo</button></div>`;
+            el.querySelector('.btn-tentar').addEventListener('click', tentarDeNovo);
+        }
+
         // Busca com proteção contra resposta atrasada: se a pessoa digita outro termo (ou o ERP demora),
         // a resposta de uma busca antiga nunca pode sobrescrever a lista do termo atual.
         function criarBuscaProtegida(renderizar, elLista, mostrar) {
@@ -880,7 +891,7 @@
                         .then((data) => { if (meu === numero) renderizar(data.produtos || []); })
                         .catch((err) => {
                             if (err && err.name === 'AbortError') return;
-                            if (meu === numero) elLista.innerHTML = '<div class="erro">Erro ao buscar produtos.</div>';
+                            if (meu === numero) mostrarFalha(elLista, err, 'Erro ao buscar produtos.', () => buscar(termo, loja));
                         });
                 }, 250);
             };
@@ -949,15 +960,20 @@
             else elDetalhe.innerHTML = `<h2>${esc(descricaoResumo)}</h2>${esqueleto(6)}`;
             if (estaFresco(vistoFicha)) return;
 
-            fetch(`/api/produtos/${idVariacao}/detalhe?loja=${elLoja.value}`)
+            const carregar = () => fetch(`/api/produtos/${idVariacao}/detalhe?loja=${elLoja.value}`)
                 .then((r) => r.ok ? r.json() : Promise.reject(r))
                 .then((p) => {
                     guardarVisto(chaveFicha, p);
                     desenharFicha(p, idVariacao);
                 })
-                .catch(() => {
-                    elDetalhe.innerHTML = '<div class="erro">Não foi possível carregar este produto.</div>';
+                .catch((err) => {
+                    if (vistoFicha) return;   // já mostra a ficha vista há pouco: melhor que trocar por erro
+                    mostrarFalha(elDetalhe, err, 'Não foi possível carregar este produto.', () => {
+                        elDetalhe.innerHTML = `<h2>${esc(descricaoResumo)}</h2>${esqueleto(6)}`;
+                        carregar();
+                    });
                 });
+            carregar();
         }
 
         // Ficha aberta a partir de outra tela (ex.: lista de margem do Dashboard): o "voltar" retorna para lá.
@@ -1015,8 +1031,16 @@
         elBusca.addEventListener('input', () => buscarProdutos(elBusca.value.trim(), elLoja.value));
 
         async function carregarLojas() {
-            const res = await fetch('/api/produtos/lojas');
-            const data = await res.json();
+            let data;
+            try {
+                const res = await fetch('/api/produtos/lojas');
+                if (!res.ok) throw new Error('lojas');
+                data = await res.json();
+            } catch (err) {
+                // ERP lento ou fora do ar: tenta de novo sozinho (a lista de lojas fica 1 h no cache do servidor).
+                setTimeout(carregarLojas, 8000);
+                return;
+            }
             elLoja.innerHTML = (data.lojas || [])
                 .map((l) => `<option value="${esc(l.codigo)}">${esc(l.descricao)}</option>`)
                 .join('');
