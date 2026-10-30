@@ -213,6 +213,11 @@
     .qtd2 input { flex: 1; min-width: 0; border: 0; outline: 0; text-align: center; font-size: 17px; font-weight: 700; }
     .aviso-item { display: none; font-size: 12px; color: #065f46; background: #ecfdf5; border-radius: 10px; padding: 8px 10px; margin-top: 10px; }
     .aviso-item.ruim { color: #991b1b; background: #fef2f2; }
+    .equil { display: none; justify-content: space-between; align-items: center; margin-top: 12px; padding: 9px 12px; border-radius: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; font-size: 13px; color: #475569; }
+    .equil b { font-size: 15px; color: #0f172a; }
+    .margem { display: none; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; }
+    .margem.verde { background: #ecfdf5; color: #065f46; }
+    .margem.verm { background: #fef2f2; color: #991b1b; }
     .tt { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 14px; color: #64748b; }
     .tt b { font-size: 20px; color: #0f172a; }
     .btn-pdf { width: 100%; margin-top: 12px; min-height: 52px; border: 1px solid #16a34a; border-radius: 12px; background: #f0fdf4; color: #15803d; font-weight: 700; font-size: 15px; cursor: pointer; }
@@ -499,6 +504,7 @@
         <div><div class="lb">Quantidade</div><div class="qtd2"><button type="button" id="itemMenos">−</button><input id="itemQtd" inputmode="decimal" value="1"><button type="button" id="itemMais">+</button></div></div>
         <div><div class="lb">Preço</div><div class="cx" id="itemPreco">R$ 0,00</div></div>
     </div>
+    <div class="equil" id="itemEquil"><span>Ponto de equilíbrio (custo atual)</span><b id="itemEquilValor"></b></div>
     <div class="duas" id="itemBlocoDesconto">
         <div><div class="lb">Desconto (R$)</div><input class="cx" id="itemDescValor" inputmode="decimal" placeholder="0,00"></div>
         <div><div class="lb">Desconto (%)</div><input class="cx" id="itemDescPct" inputmode="decimal" placeholder="0"></div>
@@ -507,6 +513,7 @@
         <div><div class="lb">Acréscimo (R$)</div><input class="cx" id="itemAcrValor" inputmode="decimal" placeholder="0,00"></div>
         <div><div class="lb">Acréscimo (%)</div><input class="cx" id="itemAcrPct" inputmode="decimal" placeholder="0"></div>
     </div>
+    <div class="margem" id="itemMargem"><span id="itemMargemTxt"></span><span id="itemMargemDet"></span></div>
     <div class="aviso-item" id="itemAviso"></div>
     <div class="tt"><span>Total do item</span><b id="itemTotal">R$ 0,00</b></div>
     <div class="duas" style="margin-top:12px"><button type="button" class="btn-sec" id="itemRemover">Remover</button><button type="button" class="btn" style="margin:0" id="itemSalvar">Adicionar</button></div>
@@ -1610,7 +1617,8 @@ function distribuirAcrescimoPedido(valor) {
     return partes;
 }
 // Desconto no pedido todo: a API do ERP só aceita desconto por item, então ele é dividido entre os itens que aceitam
-// desconto, proporcional ao valor de cada um, sem passar do máximo de cada produto (a não ser que o perfil permita).
+// desconto, proporcional ao valor de cada um, sem passar do máximo de cada produto nem do ponto de equilíbrio
+// (a não ser que o perfil permita).
 function podeDescontoNoPedido() { const p = conta.permissoes || {}; return !!(p.desconto_documento || p.desconto_item); }
 function distribuirDescontoPedido(valor) {
     const perm = conta.permissoes || {};
@@ -1618,7 +1626,9 @@ function distribuirDescontoPedido(valor) {
         const p = produtos.find((x) => x.id === i.produto) || {};
         const bruto = centavos(i.qtd * i.preco), livre = centavos(bruto - (i.desconto || 0));
         const limitePct = !p.permite_desconto ? 0 : (p.desconto_max && !perm.desconto_acima_do_limite ? p.desconto_max : 99);
-        const teto = Math.max(0, centavos(Math.min(livre - 0.01, bruto * limitePct / 100 - (i.desconto || 0))));
+        let teto = Math.max(0, centavos(Math.min(livre - 0.01, bruto * limitePct / 100 - (i.desconto || 0))));
+        if (p.custo > 0 && !perm.desconto_acima_do_limite)   // não leva o item abaixo do ponto de equilíbrio (custo)
+            teto = Math.max(0, Math.min(teto, centavos(livre + (i.acrescimo || 0) - p.custo * i.qtd)));
         return { produto: i.produto, base: livre, teto, parte: 0 };
     });
     const maximo = centavos(itens.reduce((s, x) => s + x.teto, 0));
@@ -1689,17 +1699,37 @@ function recalcularItem(origem) {
         else { acr = centavos(lerNumero(document.getElementById('itemAcrValor').value)); document.getElementById('itemAcrPct').value = acr && bruto ? (acr / bruto * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : ''; }
     }
     const pct = bruto ? desc / bruto * 100 : 0, aviso = document.getElementById('itemAviso'), p_ = conta.permissoes || {};
-    let ok = qtd > 0, msg = '';
+    // Ponto de equilíbrio = custo atual: abaixo dele (por causa do desconto) a margem fica negativa.
+    const custo = p.custo > 0 ? p.custo : 0, liquidoUn = qtd > 0 ? (bruto - desc + acr) / qtd : 0;
+    const abaixoCusto = custo > 0 && qtd > 0 && liquidoUn < custo - 0.005;
+    let ok = qtd > 0, msg = '', alerta = false;
     if (qtd <= 0) msg = 'Informe a quantidade.';
     else if (desc >= bruto && desc > 0) { ok = false; msg = 'O desconto não pode ser igual ou maior que o valor do item.'; }
     else if (acr > bruto) { ok = false; msg = 'O acréscimo não pode passar do valor do item (100%).'; }
     else if (desc > 0 && p.desconto_max && pct > p.desconto_max + 0.01 && !p_.desconto_acima_do_limite) { ok = false; msg = `Acima do máximo deste produto (${p.desconto_max.toLocaleString('pt-BR')}%).`; }
+    else if (desc > 0 && abaixoCusto && !p_.desconto_acima_do_limite) { ok = false; msg = 'Abaixo do custo deste produto. Seu perfil no ERP não permite vender abaixo do ponto de equilíbrio.'; }
+    else if (desc > 0 && abaixoCusto) { alerta = true; msg = 'Atenção: abaixo do ponto de equilíbrio. Seu perfil permite, mas a venda fica com margem negativa.'; }
     else if (!podeDescontar(p) && !(acr > 0)) msg = !p.permite_desconto ? 'Este produto não permite desconto.' : 'Seu perfil no ERP não permite dar desconto.';
     else if (desc > 0) msg = p.desconto_max ? `✓ Dentro do limite deste produto (máx. ${p.desconto_max.toLocaleString('pt-BR')}%).` : '✓ Desconto permitido.';
-    aviso.textContent = msg; aviso.className = 'aviso-item' + (ok ? '' : ' ruim'); aviso.style.display = msg ? 'block' : 'none';
+    aviso.textContent = msg; aviso.className = 'aviso-item' + (ok && !alerta ? '' : ' ruim'); aviso.style.display = msg ? 'block' : 'none';
+    mostrarEquilibrio(custo, liquidoUn, abaixoCusto, qtd > 0, !!p_.ver_custo);
     document.getElementById('itemTotal').textContent = fmtMoeda(Math.max(0, bruto - desc + acr));
     document.getElementById('itemSalvar').disabled = !ok;
     itemAberto.qtd = qtd; itemAberto.desconto = desc; itemAberto.acrescimo = acr;
+}
+// O valor do custo e a margem só aparecem para o perfil com "visualizar custos" no ERP; os outros veem só a situação.
+function mostrarEquilibrio(custo, liquidoUn, abaixo, temQtd, verCusto) {
+    const eq = document.getElementById('itemEquil'), mg = document.getElementById('itemMargem');
+    eq.style.display = custo > 0 && verCusto ? 'flex' : 'none';
+    document.getElementById('itemEquilValor').textContent = fmtMoeda(custo);
+    mg.style.display = custo > 0 && temQtd ? 'flex' : 'none';
+    if (!(custo > 0 && temQtd)) return;
+    const margem = liquidoUn > 0 ? (liquidoUn - custo) / liquidoUn * 100 : 0;
+    mg.className = 'margem ' + (abaixo ? 'verm' : 'verde');
+    document.getElementById('itemMargemTxt').textContent = abaixo ? '🔴 Abaixo do ponto de equilíbrio' : '🟢 Acima do ponto de equilíbrio';
+    document.getElementById('itemMargemDet').textContent = verCusto
+        ? `${fmtMoeda(liquidoUn)}/un · margem ${margem.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
+        : (abaixo ? 'reduza o desconto' : '');
 }
 document.getElementById('itemQtd').addEventListener('input', () => recalcularItem('valor'));
 document.getElementById('itemDescValor').addEventListener('input', () => recalcularItem('valor'));

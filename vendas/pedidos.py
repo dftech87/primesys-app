@@ -143,7 +143,7 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
     with db_session() as conn:
         marcas = ",".join("?" * len(set(ids)))
         produtos = {int(r["id"]): dict(r) for r in conn.execute(
-            f"SELECT id, descricao, preco, permite_desconto, desconto_max, ativo FROM pv_produtos WHERE cnpj = ? AND id IN ({marcas})",
+            f"SELECT id, descricao, preco, permite_desconto, desconto_max, custo, ativo FROM pv_produtos WHERE cnpj = ? AND id IN ({marcas})",
             (cnpj, *set(ids)))}
 
     itens_erp, total_bruto, total_desconto, total_acrescimo = [], 0.0, 0.0, 0.0
@@ -177,6 +177,11 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
             raise PedidoRecusado(f"Acréscimo inválido em {produto['descricao']}.")
         if acrescimo > 0 and not permissoes.get("acrescimo_documento"):
             raise PedidoRecusado("Seu perfil no ERP não permite dar acréscimo.")
+        # Ponto de equilíbrio: o desconto não pode levar o preço líquido abaixo do custo atual (a mensagem não mostra o
+        # custo, que só alguns perfis podem ver). Preço de tabela já abaixo do custo, sem desconto, não é do vendedor.
+        custo = produto["custo"] or 0
+        if desconto > 0 and custo > 0 and (bruto - desconto + acrescimo) / qtd < custo - 0.005                 and not permissoes.get("desconto_acima_do_limite"):
+            raise PedidoRecusado(f"O desconto em {produto['descricao']} deixa o preço abaixo do ponto de equilíbrio. Reduza o desconto.")
         total_bruto += bruto
         total_desconto += desconto
         total_acrescimo += acrescimo

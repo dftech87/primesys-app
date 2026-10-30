@@ -91,6 +91,7 @@ def texto_para_data(texto: str) -> datetime:
 # Colunas acrescentadas depois que a tabela já existia na hospedagem (tabela, coluna, definição).
 COLUNAS_NOVAS = [
     ("pv_pedidos", "vendas", "TEXT NOT NULL DEFAULT ''"),   # código(s) da venda gerada ao finalizar o pedido
+    ("pv_produtos", "custo", "DOUBLE PRECISION"),            # custo atual (ponto de equilíbrio na ficha do item)
 ]
 
 

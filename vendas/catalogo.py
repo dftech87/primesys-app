@@ -1,4 +1,4 @@
-"""Cópia do catálogo de cada empresa no servidor: produtos (com preço e regras de desconto), estoque do local padrão
+"""Cópia do catálogo de cada empresa no servidor: produtos (com preço, regras de desconto e custo atual), estoque do local padrão
 e clientes. O servidor lê do ERP uma vez para todos os vendedores daquela empresa e cada celular baixa daqui só o
 que mudou. Assim o número de vendedores não aumenta o gasto da cota de 20 chamadas por minuto do ERP.
 
@@ -63,17 +63,19 @@ _VENDAVEL = f"{_ATIVO.format(a='ve')} and coalesce(p.valpreco, 0) > 0"
 
 
 def _sql_produtos(par: dict, desde: str | None) -> str:
-    alterado = "greatest(v.dtalteracao, m.dtalteracao, ve.dtalteracao, p.dtalteracao)"
+    alterado = "greatest(v.dtalteracao, m.dtalteracao, ve.dtalteracao, p.dtalteracao, c.datahora)"
     filtro = f"where {alterado} >= {_marca(desde)}" if desde else f"where {_VENDAVEL}"
     return f"""
         select v._idmercadoriavariacao as id, trim(m.descricao || ' ' || coalesce(v.descricao, '')) as descricao, coalesce(v.codigobarras, '') as barras, coalesce(v.embalagem, '') as embalagem,
                p.valpreco as preco, coalesce(ve.flagpermitirdesconto, 'T') as permite, ve.permaximodesconto as desconto_max,
+               c.valcusto as custo,
                case when {_VENDAVEL} then 1 else 0 end as ativo, {alterado} as alterado
         from mercadoria_variacao v
         join mercadoria m on m._idmercadoria = v.idmercadoria
         join mercadoria_variacao_empresa ve on ve._idmercadoriavariacao = v._idmercadoriavariacao and ve._idempresa = {i(par['empresa'])}
         left join mercadoria_tabela_preco p on p._idmercadoriavariacao = v._idmercadoriavariacao
              and p._idempresa = {i(par['empresa'])} and p._idtabela = {i(par['tabela'])} and {_ATIVO.format(a='p')}
+        left join mercadoria_custo c on c._idmercadoriavariacao = v._idmercadoriavariacao and c._idempresa = {i(par['empresa'])}
         {filtro}
         order by v._idmercadoriavariacao"""
 
@@ -132,7 +134,7 @@ def _num(v) -> float | None:
 
 # Colunas gravadas na cópia, por tabela, e como cada linha do ERP vira essas colunas.
 COLUNAS = {
-    "produtos": ("descricao", "barras", "embalagem", "preco", "permite_desconto", "desconto_max", "ativo"),
+    "produtos": ("descricao", "barras", "embalagem", "preco", "permite_desconto", "desconto_max", "custo", "ativo"),
     "estoque": ("saldo",),
     "clientes": ("nome", "fantasia", "documento", "bairro", "cidade", "uf", "fone", "ativo"),
 }
@@ -142,7 +144,7 @@ def _converter(tabela: str, l: dict) -> dict:
     if tabela == "produtos":
         return {"descricao": _limpar_texto(l["descricao"]), "barras": _limpar_texto(l["barras"]), "embalagem": _limpar_texto(l["embalagem"]),
                 "preco": _num(l["preco"]), "permite_desconto": 0 if l["permite"] == "F" else 1,
-                "desconto_max": _num(l["desconto_max"]) or None, "ativo": int(l["ativo"])}
+                "desconto_max": _num(l["desconto_max"]) or None, "custo": _num(l["custo"]) or None, "ativo": int(l["ativo"])}
     if tabela == "estoque":
         return {"saldo": _num(l["saldo"]) or 0.0}
     return {"nome": _limpar_texto(l["nome"]), "fantasia": _limpar_texto(l["fantasia"]), "documento": _documento(l["documento"]),
@@ -257,7 +259,7 @@ async def _estoque_dos_alterados(client: MeuERPClient, cnpj: str, par: dict, pro
             return
 
 
-REGRA_DO_CATALOGO = "vendavel-v1"   # mude ao trocar a regra de quais produtos entram: força uma leitura completa
+REGRA_DO_CATALOGO = "vendavel-v2-custo"   # mude ao trocar a regra ou os campos dos produtos: força uma leitura completa
 
 
 def aplicar_regra_do_catalogo() -> None:

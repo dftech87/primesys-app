@@ -4258,6 +4258,15 @@
             }
           },
           {
+            "name": "IdDocumentoOrigem",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "description": "Filtro opcional pelo código interno do documento de origem dos itens em documento_mercadoria.",
+              "format": "int32"
+            }
+          },
+          {
             "name": "IdCaixa",
             "in": "query",
             "schema": {
@@ -4332,6 +4341,126 @@
             "schema": {
               "type": "string",
               "description": "Filtro opcional pelo status do documento. Valores aceitos: C,E,I,O,R,V,X,Z."
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaPagedResponsePublicaDocumentoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaPagedResponsePublicaDocumentoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaPagedResponsePublicaDocumentoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documento/origem/v1": {
+      "get": {
+        "tags": [
+          "Documento"
+        ],
+        "summary": "Lista documentos por documento de origem",
+        "description": "Retorna a lista paginada dos documentos da empresa vinculada ao token que possuem itens em documento_mercadoria com o idDocumentoOrigem informado. O parâmetro idDocumentoOrigem é obrigatório e deve ser maior que zero. O retorno segue o mesmo contrato da listagem de documentos, sem repetir documentos que possuam vários itens da mesma origem. Utilize o header Authorization no formato: Authentication {token}.",
+        "operationId": "GET_api_documento_origem_v1",
+        "parameters": [
+          {
+            "name": "idDocumentoOrigem",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
             }
           },
           {
@@ -12189,6 +12318,228 @@
               "text/json": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nfce/inutilizar/v1": {
+      "post": {
+        "tags": [
+          "Documento"
+        ],
+        "summary": "Inutiliza numeração de NFC-e",
+        "description": "Mesmos modos da Central: T = toda a faixa; L = localizar na faixa. Máximo de 1.000 números, inclusive os extremos. Série, início, fim e justificativa são obrigatórios. Utiliza o ambiente e certificado da empresa do token e o ano corrente do serviço DFe. Resultados parciais são informados em faixas. Não reenviar automaticamente após resultado indeterminado.",
+        "operationId": "POST_api_nfce_inutilizar_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaInutilizacaoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaInutilizacaoRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaInutilizacaoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nfe/inutilizar/v1": {
+      "post": {
+        "tags": [
+          "Documento"
+        ],
+        "summary": "Inutiliza numeração de NF-e",
+        "description": "Mesmos modos da Central: T = toda a faixa; L = localizar na faixa. Máximo de 1.000 números, inclusive os extremos. Série, início, fim e justificativa são obrigatórios. Utiliza o ambiente e certificado da empresa do token e o ano corrente do serviço DFe. Resultados parciais são informados em faixas. Não reenviar automaticamente após resultado indeterminado.",
+        "operationId": "POST_api_nfe_inutilizar_v1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaInutilizacaoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaInutilizacaoRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaInutilizacaoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaInutilizacaoResponse"
                 }
               }
             }
@@ -23866,6 +24217,680 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "Ordem de serviço"
+        ],
+        "summary": "Consulta os serviços e suas sequências na OS",
+        "description": "Retorna os serviços da OS da empresa do token, inclusive a sequência usada na edição. Utilize Authorization: Authentication {token}.",
+        "operationId": "GET_api_ordem_servico_v1_id_servicos",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicaOrdemServicoServicoResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicaOrdemServicoServicoResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicaOrdemServicoServicoResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ordem-servico/v1/{id}/mercadorias/{idSequencia}": {
+      "patch": {
+        "tags": [
+          "Ordem de serviço"
+        ],
+        "summary": "Edita uma mercadoria da ordem de serviço",
+        "description": "Identifique a linha pela sequência do item na OS, não pelo código da mercadoria. Campos omitidos ou nulos são preservados. Não troca a mercadoria da linha. Bloqueia OS finalizada, cancelada, importada ou com mercadorias vinculadas a documento fiscal. Totais e impostos são recalculados ao alterar valores ou quantidade. Utilize Authorization: Authentication {token}.",
+        "operationId": "PATCH_api_ordem_servico_v1_id_mercadorias_idSequencia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "idSequencia",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoMercadoriaAlterarRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoMercadoriaAlterarRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoMercadoriaAlterarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Ordem de serviço"
+        ],
+        "summary": "Remove uma mercadoria da ordem de serviço",
+        "description": "Remove a sequência informada e seus impostos, custos, composição e ANP na mesma transação. Somente OS em edição, não importada e sem vínculo fiscal de mercadorias. OS finalizada ou cancelada retorna 409. Não renumera os outros itens. Utilize Authorization: Authentication {token}.",
+        "operationId": "DELETE_api_ordem_servico_v1_id_mercadorias_idSequencia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "idSequencia",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ordem-servico/v1/{id}/servicos/{idSequencia}": {
+      "patch": {
+        "tags": [
+          "Ordem de serviço"
+        ],
+        "summary": "Edita um serviço da ordem de serviço",
+        "description": "Identifique a linha pela sequência do item na OS, não pelo código do serviço. Campos omitidos ou nulos são preservados. Não troca o serviço da linha. Bloqueia OS finalizada, cancelada, importada ou com serviços vinculados a documento fiscal. Totais e impostos são recalculados ao alterar valores ou quantidade. Utilize Authorization: Authentication {token}.",
+        "operationId": "PATCH_api_ordem_servico_v1_id_servicos_idSequencia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "idSequencia",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoServicoAlterarRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoServicoAlterarRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoServicoAlterarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Ordem de serviço"
+        ],
+        "summary": "Remove um serviço da ordem de serviço",
+        "description": "Remove a sequência informada e seus impostos e custo técnico na mesma transação. Somente OS em edição, não importada e sem vínculo fiscal de serviços. OS finalizada ou cancelada retorna 409. Não renumera os outros itens. Utilize Authorization: Authentication {token}.",
+        "operationId": "DELETE_api_ordem_servico_v1_id_servicos_idSequencia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "idSequencia",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaDocumentoSalvarResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ordem-servico/v1/{id}/pagamentos": {
+      "post": {
+        "tags": [
+          "Ordem de serviço"
+        ],
+        "summary": "Adiciona o cabeçalho de um pagamento à OS",
+        "description": "Acrescenta um registro em documento_pagamento. Respeita a configuração da empresa: no pagamento separado, exige tipoOrigem M ou S; no conjunto, omita ou envie M. Aceita as formas ativas cadastradas, sem gerar parcelas, baixas, boletos, TEF, cheques ou cobranças externas. Não confirma processamento de integração. Bloqueia OS finalizada, cancelada ou importada. Utilize Authorization: Authentication {token}.",
+        "operationId": "POST_api_ordem_servico_v1_id_pagamentos",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicaOrdemServicoPagamentoResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/ordem-servico/v1/{id}/finalizar": {
@@ -33653,6 +34678,10 @@
             "format": "int32",
             "nullable": true
           },
+          "modeloOrigem": {
+            "type": "string",
+            "nullable": true
+          },
           "idSequenciaPedido": {
             "type": "integer",
             "format": "int32",
@@ -33844,6 +34873,15 @@
           "valDescontoCashback": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          },
+          "valDescontoCupom": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "cupomDesconto": {
+            "type": "string",
             "nullable": true
           },
           "valDescontoPagamento": {
@@ -42215,6 +43253,103 @@
         },
         "additionalProperties": false
       },
+      "PublicaInutilizacaoFaixaResponse": {
+        "type": "object",
+        "properties": {
+          "numeroInicial": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numeroFinal": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "situacao": {
+            "type": "string",
+            "nullable": true
+          },
+          "codigo": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "mensagem": {
+            "type": "string",
+            "nullable": true
+          },
+          "protocolo": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicaInutilizacaoRequest": {
+        "required": [
+          "justificativa",
+          "serie",
+          "tipo"
+        ],
+        "type": "object",
+        "properties": {
+          "serie": {
+            "minLength": 1,
+            "pattern": "^[0-9]{1,3}$",
+            "type": "string"
+          },
+          "tipo": {
+            "minLength": 1,
+            "pattern": "^(T|L)$",
+            "type": "string"
+          },
+          "numeroInicial": {
+            "maximum": 999999999,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "numeroFinal": {
+            "maximum": 999999999,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32"
+          },
+          "justificativa": {
+            "maxLength": 255,
+            "minLength": 15,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicaInutilizacaoResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean"
+          },
+          "mensagem": {
+            "type": "string",
+            "nullable": true
+          },
+          "modelo": {
+            "type": "string",
+            "nullable": true
+          },
+          "serie": {
+            "type": "string",
+            "nullable": true
+          },
+          "faixas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicaInutilizacaoFaixaResponse"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicaInventarioEncerramentoResponse": {
         "type": "object",
         "properties": {
@@ -45788,6 +46923,66 @@
         },
         "additionalProperties": false
       },
+      "PublicaOrdemServicoMercadoriaAlterarRequest": {
+        "type": "object",
+        "properties": {
+          "qtd": {
+            "maximum": 999999999,
+            "minimum": 1,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valPreco": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valDesconto": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valAcrescimo": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "idPessoaFuncionario": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "observacao": {
+            "maxLength": 1024,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "idLocalEstoque": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "lote": {
+            "maxLength": 60,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicaOrdemServicoMercadoriaRequest": {
         "required": [
           "valPreco"
@@ -45854,6 +47049,59 @@
         },
         "additionalProperties": false
       },
+      "PublicaOrdemServicoPagamentoRequest": {
+        "type": "object",
+        "properties": {
+          "idPagamento": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "description": "Código da forma de pagamento ativa na empresa do token.",
+            "format": "int32"
+          },
+          "valor": {
+            "maximum": 99999999999999,
+            "minimum": 1,
+            "type": "number",
+            "description": "Valor positivo, com no máximo duas casas decimais.",
+            "format": "double"
+          },
+          "tipoOrigem": {
+            "type": "string",
+            "description": "M = mercadorias, S = serviços. Obrigatório no pagamento separado. No conjunto, omita ou envie M.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicaOrdemServicoPagamentoResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "Indica se a operacao foi concluida com sucesso."
+          },
+          "mensagem": {
+            "type": "string",
+            "description": "Mensagem de retorno do processamento.",
+            "nullable": true
+          },
+          "idDocumento": {
+            "type": "integer",
+            "description": "Codigo do documento gerado. Retorna 0 quando a operacao nao for concluida.",
+            "format": "int32"
+          },
+          "idSequencia": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tipoOrigem": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicaOrdemServicoSalvarRequest": {
         "type": "object",
         "properties": {
@@ -45911,6 +47159,74 @@
           },
           "termoGarantia": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicaOrdemServicoServicoAlterarRequest": {
+        "type": "object",
+        "properties": {
+          "qtd": {
+            "maximum": 999999999,
+            "minimum": 1,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valPreco": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valDesconto": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valAcrescimo": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "idPessoaFuncionario": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "observacao": {
+            "maxLength": 1024,
+            "minLength": 0,
+            "type": "string",
+            "nullable": true
+          },
+          "valHoraTecnica": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valCustoTecnico": {
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "idIbgeMunicipioPrestacao": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },
@@ -45981,6 +47297,79 @@
           "idIbgeMunicipioPrestacao": {
             "maximum": 2147483647,
             "minimum": 1,
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicaOrdemServicoServicoResponse": {
+        "type": "object",
+        "properties": {
+          "idSequencia": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "idServico": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "descricao": {
+            "type": "string",
+            "nullable": true
+          },
+          "qtd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valPreco": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valDesconto": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valAcrescimo": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valTotalLiquido": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valHoraTecnica": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "valCustoTecnico": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "idPessoaFuncionario": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "idIbgeMunicipioPrestacao": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "observacao": {
+            "type": "string",
+            "nullable": true
+          },
+          "idDocumentoServico": {
             "type": "integer",
             "format": "int32",
             "nullable": true

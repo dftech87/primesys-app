@@ -169,7 +169,7 @@ async def renovar_se_preciso(tenant: dict) -> None:
     gravar(cnpj, CHAVE_MAPA, mapa, TTL_MAPA)
     for id_perfil in {v["id_perfil"] for v in mapa.values() if v.get("id_perfil")}:
         try:
-            gravar(cnpj, f"permissoes-perfil-{int(id_perfil)}", await _ler_permissoes(tenant["api_token"], int(id_perfil)), TTL_PERMISSOES)
+            gravar(cnpj, _chave_permissoes(id_perfil), await _ler_permissoes(tenant["api_token"], int(id_perfil)), TTL_PERMISSOES)
         except Exception:
             logger.warning("não foi possível renovar as permissões do perfil %s", id_perfil)
 
@@ -191,10 +191,16 @@ async def _ler_permissoes(token: str, id_perfil: int) -> dict:
         "desconto_documento": config.PERMISSAO_DESCONTO_DOCUMENTO in liberadas,
         "desconto_acima_do_limite": config.PERMISSAO_DESCONTO_ACIMA_DO_LIMITE in liberadas,
         "acrescimo_documento": config.PERMISSAO_ACRESCIMO_DOCUMENTO in liberadas,
+        "ver_custo": config.PERMISSAO_VER_CUSTO in liberadas,
     }
 
 
-SEM_PERMISSAO = {"desconto_item": False, "desconto_documento": False, "desconto_acima_do_limite": False, "acrescimo_documento": False}
+SEM_PERMISSAO = {"desconto_item": False, "desconto_documento": False, "desconto_acima_do_limite": False, "acrescimo_documento": False,
+                 "ver_custo": False}
+
+
+def _chave_permissoes(id_perfil: int) -> str:
+    return f"permissoes-v2-perfil-{int(id_perfil)}"   # v2: inclui ver_custo (as guardadas antes não tinham)
 
 
 async def permissoes(tenant: dict, id_perfil: int | None) -> dict:
@@ -202,7 +208,7 @@ async def permissoes(tenant: dict, id_perfil: int | None) -> dict:
     if not id_perfil:
         return dict(SEM_PERMISSAO)
     try:
-        return await guardado(tenant["cnpj"], f"permissoes-perfil-{int(id_perfil)}", TTL_PERMISSOES,
+        return await guardado(tenant["cnpj"], _chave_permissoes(id_perfil), TTL_PERMISSOES,
                               lambda: _ler_permissoes(tenant["api_token"], int(id_perfil)))
     except Exception:
         logger.exception("permissões do perfil %s indisponíveis; desconto bloqueado por segurança", id_perfil)
