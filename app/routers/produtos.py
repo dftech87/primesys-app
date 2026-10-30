@@ -5,9 +5,9 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import compras, versao
+from app import acessos, compras, versao
 from app.cache import cached
-from app.deps import current_tenant
+from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
 from app.tenants import ERRO_ERP_LENTO, token_confere_sem_travar
@@ -69,10 +69,12 @@ async def produtos_page(request: Request):
     if not await token_confere_sem_travar(tenant):
         request.session.clear()
         return RedirectResponse("/login?next=/produtos", status_code=303)
+    # Abas e informações da ficha conforme o perfil do usuário no ERP (recalculado a cada abertura).
+    liberado = await acessos.atualizar(request, tenant)
     return templates.TemplateResponse(
         request,
         "produtos.html",
-        {"empresa_nome": tenant["nome_fantasia"], "versao": versao.VERSAO},
+        {"empresa_nome": tenant["nome_fantasia"], "versao": versao.VERSAO, "acessos": liberado},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -105,6 +107,8 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "produtos", "compras"):
+        return sem_permissao()
 
     client = MeuERPClient(tenant["api_token"])
     try:
@@ -143,6 +147,9 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "produtos"):
+        return sem_permissao()
+    ver_custo, ver_estoque = acessos.pode(request, "custo"), acessos.pode(request, "estoque")
 
     client = MeuERPClient(tenant["api_token"])
     cnpj = tenant["cnpj"]
@@ -164,11 +171,16 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
         except httpx.HTTPError:
             return None
 
-    # Cada informação com a sua validade: reabrir o mesmo produto não refaz as 4 chamadas.
+    async def nada():
+        return None
+
+    # Cada informação com a sua validade: reabrir o mesmo produto não refaz as 4 chamadas. Custo e estoque só são
+    # consultados para quem o perfil deixa ver (nem chegam ao celular dos outros).
     custo_valor, preco, estoque = await asyncio.gather(
-        cached((cnpj, "custo", id_variacao), TTL_CUSTO_PRECO, custo, guardar_se=_nao_nulo),
+        cached((cnpj, "custo", id_variacao), TTL_CUSTO_PRECO, custo, guardar_se=_nao_nulo) if ver_custo else nada(),
         cached((cnpj, "preco", id_variacao), TTL_CUSTO_PRECO, lambda: _preco_venda(client, id_variacao), guardar_se=_nao_nulo),
-        cached((cnpj, "saldo", id_variacao, loja), TTL_SALDO, lambda: _estoque(client, id_variacao, loja), guardar_se=_nao_nulo),
+        cached((cnpj, "saldo", id_variacao, loja), TTL_SALDO, lambda: _estoque(client, id_variacao, loja), guardar_se=_nao_nulo)
+        if ver_estoque else nada(),
     )
 
     return {
@@ -189,6 +201,8 @@ async def api_entradas(request: Request, id_variacao: int, limite: int = Query(1
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "compras"):
+        return sem_permissao()
 
     client = MeuERPClient(tenant["api_token"])
     cnpj = tenant["cnpj"]
@@ -213,6 +227,8 @@ async def api_historico_preco(request: Request, id_variacao: int):
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "historico_preco"):
+        return sem_permissao()
 
     client = MeuERPClient(tenant["api_token"])
     try:

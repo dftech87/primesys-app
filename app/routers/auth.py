@@ -1,12 +1,15 @@
+import logging
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import limite
+from app import acessos, limite
 from app.security import normalize_cnpj
 from app.tenants import ERRO_ERP_LENTO, ERRO_INDISPONIVEL, ERRO_TOKEN_DE_OUTRA_EMPRESA, authenticate
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="app/templates")
 
 
@@ -67,7 +70,16 @@ async def login_submit(
         return recusar(erro, 401)
 
     limite.limpar(chave_usuario)
+    # Senha certa: agora o perfil do usuário no ERP diz o que ele pode ver (sem perfil na empresa, não entra).
+    try:
+        dados, motivo = await acessos.no_login(tenant, email)
+    except Exception:
+        logger.exception("não foi possível ler o perfil do usuário no ERP (empresa %s)", tenant["cnpj"])
+        dados, motivo = None, ERRO_INDISPONIVEL
+    if dados is None:
+        return recusar(motivo, 403)
     request.session["cnpj"] = tenant["cnpj"]
+    acessos.gravar_na_sessao(request, dados)
     return RedirectResponse(destino, status_code=303)
 
 

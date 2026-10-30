@@ -8,9 +8,9 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
-from app import alertas, caixa, estoque, financeiro, vendas
+from app import acessos, alertas, caixa, estoque, financeiro, vendas
 from app.cache import cached, descartar
-from app.deps import current_tenant
+from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
 
@@ -115,6 +115,8 @@ async def dashboard_mobile(request: Request, inicio: str | None = Query(None), f
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "dashboard"):
+        return sem_permissao()
 
     hoje = date.today()
     data_inicio, data_fim = _data(inicio, hoje), _data(fim, hoje)
@@ -125,11 +127,13 @@ async def dashboard_mobile(request: Request, inicio: str | None = Query(None), f
 
     client = MeuERPClient(tenant["api_token"])
     try:
-        return await cached(
+        resultado = await cached(
             (tenant["cnpj"], "dashboard", data_inicio, data_fim),
             TTL_DASHBOARD if data_fim >= hoje else TTL_DASHBOARD_ENCERRADO,
             lambda: _montar_dashboard(client, data_inicio, data_fim),
         )
+        # Margem e lucro só para o perfil com o dashboard 'Resumo - Lucro' (cópia: o guardado serve a todos).
+        return resultado if acessos.pode(request, "lucro") else {**resultado, "margem": None}
     except ConsultaIndisponivel:
         logger.exception("consulta SQL indisponível (dashboard) para %s", tenant["cnpj"])
         return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)
@@ -183,6 +187,8 @@ async def alertas_mobile(
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "dashboard"):
+        return sem_permissao()
 
     data_hoje = _data_do_cliente(hoje)
     # segundo_plano=1 (selo da aba, carregado sem ninguém esperando) usa só a cota que sobra do ERP
@@ -196,6 +202,8 @@ async def fechamento_caixa(request: Request, inicio: str | None = Query(None), f
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "conferencia"):
+        return sem_permissao()
 
     hoje = date.today()
     data_inicio, data_fim = _data(inicio, hoje), _data(fim, hoje)
@@ -221,6 +229,8 @@ async def estoque_resumo(request: Request, atualizar: bool = Query(False)):
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "estoque_painel"):
+        return sem_permissao()
 
     client = MeuERPClient(tenant["api_token"])
     chave = (tenant["cnpj"], "estoque-resumo")
@@ -233,7 +243,7 @@ async def estoque_resumo(request: Request, atualizar: bool = Query(False)):
         if atualizar and time.time() - posicao["geradoEm"] > INTERVALO_MIN_ATUALIZAR:
             descartar(chave)
             posicao = await produzir()
-        return posicao
+        return posicao if acessos.pode(request, "custo") else {**posicao, "valorCusto": None, "semCusto": 0}
     except ConsultaIndisponivel:
         logger.exception("consulta SQL indisponível (estoque) para %s", tenant["cnpj"])
         return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)
@@ -245,16 +255,21 @@ async def financeiro_mobile(request: Request, hoje: str | None = Query(None)):
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "financeiro"):
+        return sem_permissao()
 
     data_hoje = _data_do_cliente(hoje)
     client = MeuERPClient(tenant["api_token"])
     try:
-        return await cached(
+        posicao = await cached(
             (tenant["cnpj"], "financeiro", data_hoje),
             TTL_FINANCEIRO,
             lambda: financeiro.posicao(client, data_hoje),
             obsoleto_ate=TTL_FINANCEIRO,
         )
+        # A pagar e a receber são permissões separadas no ERP (cópia: o guardado serve a todos).
+        return {**posicao, "pagar": posicao["pagar"] if acessos.pode(request, "pagar") else None,
+                "receber": posicao["receber"] if acessos.pode(request, "receber") else None}
     except ConsultaIndisponivel:
         logger.exception("consulta SQL indisponível (financeiro) para %s", tenant["cnpj"])
         return JSONResponse({"detail": "Consulta indisponível para esta empresa no momento."}, status_code=502)

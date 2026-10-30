@@ -214,6 +214,7 @@
         .fd-dif.dif-pos { background: #dcfce7; } .fd-dif.dif-neg { background: #fee2e2; } .fd-dif.dif-zero { background: #f1f5f9; }
         .fech-aviso { margin-top: 8px; padding: 8px 10px; background: #fffbeb; border-radius: 8px; font-size: 11.5px; line-height: 1.45; color: #92400e; }
         .btn-entradas { width: 100%; margin-top: 12px; padding: 12px 14px; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; color: var(--azul); font-size: 14px; font-weight: 700; text-align: left; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .btn-entradas[hidden] { display: none; }
         .btn-entradas small { display: block; font-size: 11.5px; font-weight: 500; color: #475569; margin-top: 2px; }
         .btn-entradas .seta-dir { margin-left: auto; font-size: 18px; }
         /* Compras · produto: resumo, evolução do custo e lista das notas */
@@ -521,8 +522,8 @@
                 <div class="dash-kpis">
                     <div class="dash-card"><div class="rotulo">Vendas</div><div class="valor" id="dashVendas">-</div><div class="delta" id="dashVendasDelta"></div></div>
                     <div class="dash-card"><div class="rotulo">Ticket médio</div><div class="valor" id="dashTicket">-</div><div class="delta" id="dashTicketDelta"></div></div>
-                    <div class="dash-card"><div class="rotulo">Margem</div><div class="valor" id="dashMargemPct">-</div><div class="delta" id="dashMargemDelta"></div></div>
-                    <div class="dash-card"><div class="rotulo">Lucro bruto</div><div class="valor" id="dashLucro">-</div><div class="delta" id="dashLucroSub"></div></div>
+                    <div class="dash-card"{% if not acessos.lucro %} style="display:none"{% endif %}><div class="rotulo">Margem</div><div class="valor" id="dashMargemPct">-</div><div class="delta" id="dashMargemDelta"></div></div>
+                    <div class="dash-card"{% if not acessos.lucro %} style="display:none"{% endif %}><div class="rotulo">Lucro bruto</div><div class="valor" id="dashLucro">-</div><div class="delta" id="dashLucroSub"></div></div>
                 </div>
                 <div class="dash-panel">
                     <h3>Formas de pagamento</h3>
@@ -608,23 +609,23 @@
         </div>
 
         <nav class="tabbar">
-            <button id="tabDashboard">
+            <button id="tabDashboard"{% if not acessos.dashboard %} hidden{% endif %}>
                 <span class="tab-icone">&#128202;</span>
                 Dashboard
             </button>
-            <button class="ativo" id="tabProdutos">
+            <button class="ativo" id="tabProdutos"{% if not acessos.produtos %} hidden{% endif %}>
                 <span class="tab-icone">&#128269;</span>
                 Produtos
             </button>
-            <button id="tabCompras">
+            <button id="tabCompras"{% if not acessos.compras %} hidden{% endif %}>
                 <span class="tab-icone">&#128722;</span>
                 Compras
             </button>
-            <button id="tabConferencia">
+            <button id="tabConferencia"{% if not acessos.conferencia %} hidden{% endif %}>
                 <span class="tab-icone">&#128181;</span>
                 Conferência
             </button>
-            <button id="tabFinanceiro">
+            <button id="tabFinanceiro"{% if not acessos.financeiro %} hidden{% endif %}>
                 <span class="tab-icone">&#127974;</span>
                 Financeiro
             </button>
@@ -645,6 +646,9 @@
     </div>
 
     <script>
+        // O que o perfil do usuário no Meu ERP libera (o servidor também bloqueia as rotas; aqui só some da tela).
+        const ACESSOS = {{ acessos | tojson }};
+        const ABAS_EM_ORDEM = ['dashboard', 'produtos', 'compras', 'conferencia', 'financeiro'];
         const fmtMoney = (v) => v == null ? '-' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const fmtQtd = (v) => v == null ? '-' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 3 });
         // Tudo que vem do ERP (nomes de produto etc.) é digitado por pessoas: trate sempre como texto.
@@ -859,6 +863,8 @@
             elComprasLista.querySelectorAll('.card').forEach((card) => {
                 card.addEventListener('click', () => abrirEntradas(card.dataset.id, card.dataset.desc));
             });
+            const lido = produtoDoCodigoLido(produtos, elBuscaCompras.value.trim());
+            if (lido) abrirEntradas(lido.idVariacao, lido.descricao);
         }
 
         // Mensagem de falha do servidor (ERP lento ou fora do ar) com botão para tentar de novo.
@@ -909,28 +915,28 @@
                         <div class="campo"><span class="rotulo">Código interno</span><span class="valor">${esc(p.codigoInterno ?? '-')}</span></div>
                         <div class="campo"><span class="rotulo">Ativo</span><span class="valor ${p.ativo ? 'sim' : 'nao'}">${p.ativo ? 'Sim' : 'Não'}</span></div>
                         <div class="campo"><span class="rotulo">Unidade</span><span class="valor">${esc(p.unidade || '-')}</span></div>
-                        <div class="campo"><span class="rotulo">Preço de custo</span><span class="valor">${fmtMoney(p.precoCusto)}</span></div>
+                        ${ACESSOS.custo ? `<div class="campo"><span class="rotulo">Preço de custo</span><span class="valor">${fmtMoney(p.precoCusto)}</span></div>` : ''}
                         <div class="campo"><span class="rotulo">Preço de venda</span><span class="valor">${fmtMoney(p.precoVenda)}</span></div>
                         ${p.precoCusto > 0 && p.precoVenda > 0 ? (() => {
                             const m = (p.precoVenda - p.precoCusto) / p.precoVenda * 100;
                             return `<div class="campo"><span class="rotulo">Margem</span><span class="valor ${m < 0 ? 'nao' : m > 0 ? 'sim' : ''}">${m.toFixed(1).replace('.', ',')}%${m < 0 ? ' (abaixo do custo)' : ''}</span></div>`;
                         })() : ''}
-                        <div class="secao-titulo">Estoque na loja selecionada</div>
-                        <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>
-                        <div class="dash-panel gestao" style="margin-top:16px">
+                        ${ACESSOS.estoque ? `<div class="secao-titulo">Estoque na loja selecionada</div>
+                        <div class="campo"><span class="rotulo">Quantidade</span><span class="valor">${fmtQtd(p.estoque)} ${esc(p.unidade || '')}</span></div>` : ''}
+                        ${ACESSOS.historico_preco ? `<div class="dash-panel gestao" style="margin-top:16px">
                             <details id="blocoPrecoFicha">
                                 <summary><div><div class="tit">Histórico de preço de venda</div><div class="sub-resumo">mudanças de preço e quem alterou</div></div></summary>
                                 <div id="destinoPrecoFicha"></div>
                             </details>
-                        </div>
-                        <button type="button" class="btn-entradas" id="btnEntradasFicha">&#129534;<span>Ver notas de entrada<small>custo de cada compra, fornecedor e margem (aba Compras)</small></span><span class="seta-dir">&rsaquo;</span></button>
+                        </div>` : ''}
+                        <button type="button" class="btn-entradas" id="btnEntradasFicha"${ACESSOS.compras ? '' : ' hidden'}>&#129534;<span>Ver notas de entrada<small>custo de cada compra, fornecedor e margem (aba Compras)</small></span><span class="seta-dir">&rsaquo;</span></button>
             `;
         }
 
         // Monta a ficha e liga o bloco recolhido do histórico de preço (só consulta o ERP quando a pessoa o abre).
         function desenharFicha(p, idVariacao) {
             elDetalhe.innerHTML = montarFicha(p);
-            prepararBloco('blocoPrecoFicha', 'destinoPrecoFicha', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
+            if (ACESSOS.historico_preco) prepararBloco('blocoPrecoFicha', 'destinoPrecoFicha', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
             document.getElementById('btnEntradasFicha').addEventListener('click', () => abrirComprasDoProduto(idVariacao, p.descricao));
         }
 
@@ -945,6 +951,7 @@
         }
 
         function abrirDetalhe(idVariacao, descricaoResumo) {
+            if (!ACESSOS.produtos) return;
             elBtnVoltar.classList.add('mostrar');
             elBuscaWrap.style.display = 'none';
             elLoja.style.display = 'none';
@@ -980,6 +987,7 @@
         let origemFicha = null;
 
         function irParaProduto(idVariacao, descricao) {
+            if (!ACESSOS.produtos) return;   // perfil sem a consulta de produtos: a lista fica só informativa
             const origem = { aba: abaAtual, rolagem: elMain.scrollTop };
             mostrarTab('produtos');
             abrirDetalhe(idVariacao, descricao);
@@ -1025,6 +1033,8 @@
             elLista.querySelectorAll('.card').forEach((card) => {
                 card.addEventListener('click', () => abrirDetalhe(card.dataset.id, card.dataset.desc));
             });
+            const lido = produtoDoCodigoLido(produtos, elBusca.value.trim());
+            if (lido) abrirDetalhe(lido.idVariacao, lido.descricao);
         }
 
         const buscarProdutos = criarBuscaProtegida(renderLista, elLista, mostrarView);
@@ -1080,6 +1090,7 @@
         const fmtDataBR = (iso) => iso.split('-').reverse().join('/');
 
         function mostrarTab(tab) {
+            if (tab !== 'alertas' && !ACESSOS[tab]) return;
             origemFicha = null;   // trocar de aba pela barra inferior cancela o "voltar" para a tela de origem
             voltarParaFicha = null;
             if (tab !== abaAtual) rolarParaTopo();
@@ -1258,11 +1269,14 @@
         function desenharFinanceiro() {
             const alvo = document.getElementById('finPainel');
             if (!finDados) return;
+            const lados = ['pagar', 'receber'].filter((t) => finDados[t]);
+            if (!lados.length) return;
+            if (!finDados[finTipo]) finTipo = lados[0];
             const bloco = finDados[finTipo];
             const sinal = finTipo === 'pagar' ? '−' : '+';
             const n = (v) => Number(v).toLocaleString('pt-BR');
-            const seg = `<div class="fin-seg"><button type="button" data-tipo="pagar" class="${finTipo === 'pagar' ? 'on' : ''}">A pagar</button>
-                <button type="button" data-tipo="receber" class="${finTipo === 'receber' ? 'on' : ''}">A receber</button></div>`;
+            const rotulos = { pagar: 'A pagar', receber: 'A receber' };
+            const seg = `<div class="fin-seg">${lados.map((t) => `<button type="button" data-tipo="${t}" class="${finTipo === t ? 'on' : ''}">${rotulos[t]}</button>`).join('')}</div>`;
             if (!bloco.quantidade) {
                 alvo.innerHTML = `${seg}<div class="dash-panel"><div class="indisponivel">Nenhuma conta ${finTipo === 'pagar' ? 'a pagar' : 'a receber'} em aberto.</div></div>`;
                 return;
@@ -1342,7 +1356,8 @@
 
         function renderEstoque(d) {
             document.getElementById('gestaoEstoque').style.display = 'block';
-            document.getElementById('estoqueResumo').textContent = `${fmtReais(d.valorCusto)} a custo · ${fmtReais(d.valorVenda)} a preço de venda`;
+            const temCusto = d.valorCusto != null;
+            document.getElementById('estoqueResumo').textContent = temCusto ? `${fmtReais(d.valorCusto)} a custo · ${fmtReais(d.valorVenda)} a preço de venda` : `${fmtReais(d.valorVenda)} a preço de venda`;
             const n = (v) => Number(v).toLocaleString('pt-BR');
             const linha = (rotulo, valor, classe) => `<div class="linha-info"><span class="desc">${rotulo}</span><span class="val ${classe || ''}">${valor}</span></div>`;
             const hora = new Date(d.geradoEm * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -1352,7 +1367,7 @@
             if (d.semPreco) avisos.push(`${n(d.semPreco)} ${d.semPreco === 1 ? 'produto com estoque e sem preço de venda fica fora' : 'produtos com estoque e sem preço de venda ficam fora'} do valor a preço de venda.`);
             document.getElementById('estoqueDetalhe').innerHTML = `
                 <div class="est-g2">
-                    <div class="est-k"><div class="rotulo">A preço de custo</div><div class="valor">${fmtMoney(d.valorCusto)}</div></div>
+                    ${temCusto ? `<div class="est-k"><div class="rotulo">A preço de custo</div><div class="valor">${fmtMoney(d.valorCusto)}</div></div>` : ''}
                     <div class="est-k"><div class="rotulo">A preço de venda</div><div class="valor">${fmtMoney(d.valorVenda)}</div></div>
                 </div>
                 <div class="sub-titulo">PRODUTOS</div>
@@ -2054,6 +2069,7 @@
                     if (codigos.length > 0) {
                         const valor = codigos[0].rawValue;
                         fecharScanner();
+                        codigoLido = valor;
                         alvoScanner.value = valor;
                         alvoScanner.dispatchEvent(new Event('input'));
                         return;
@@ -2064,6 +2080,16 @@
                 requestAnimationFrame(loop);
             };
             requestAnimationFrame(loop);
+        }
+
+        // Produto lido pela câmera: quando a busca volta com ele, abre direto (sem precisar tocar na lista).
+        let codigoLido = null;
+        function produtoDoCodigoLido(produtos, termo) {
+            const lido = codigoLido;
+            codigoLido = null;
+            if (!lido || lido !== termo) return null;
+            const exatos = produtos.filter((p) => (p.codigoBarras || '') === lido);
+            return exatos.length === 1 ? exatos[0] : (produtos.length === 1 ? produtos[0] : null);
         }
 
         function fecharScanner() {
@@ -2137,7 +2163,7 @@
             sessionStorage.removeItem('primesys_restaurar');
             // Ao abrir o app começa no Dashboard (o dono quer os números do dia); ao recarregar por causa de uma
             // atualização, volta para a aba em que a pessoa estava.
-            const inicial = aba && aba !== 'alertas' && tabs[aba] ? aba : 'dashboard';
+            const inicial = aba && aba !== 'alertas' && tabs[aba] && ACESSOS[aba] ? aba : (ABAS_EM_ORDEM.find((a) => ACESSOS[a]) || 'produtos');
             if (inicial !== 'produtos') mostrarTab(inicial);
         } catch (err) {}
 

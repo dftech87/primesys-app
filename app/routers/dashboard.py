@@ -6,9 +6,9 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import vendas
+from app import acessos, vendas
 from app.cache import cached
-from app.deps import current_tenant
+from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.rest import safe_get
 from app.sqlquery import ConsultaIndisponivel
@@ -22,11 +22,17 @@ TTL_VENDAS_ENCERRADO = 900  # período já fechado
 TTL_CONTAS = 300
 
 
+def _pode_ver(request: Request) -> bool:
+    return acessos.pode(request, "dashboard") and acessos.pode(request, "pagar") and acessos.pode(request, "receber")
+
+
 @router.get("/", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
     tenant = current_tenant(request)
     if tenant is None:
         return RedirectResponse("/login", status_code=303)
+    if not _pode_ver(request):   # página antiga (computador): vendas e contas a pagar/receber juntas
+        return RedirectResponse("/produtos", status_code=303)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -44,6 +50,8 @@ async def dashboard_summary(
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not _pode_ver(request):
+        return sem_permissao()
 
     hoje = date.today()
     try:
