@@ -352,7 +352,13 @@
         #comprasVazio, #comprasLista, #comprasDetalhe { animation: entrada .22s ease-out; }
         main { overscroll-behavior-y: contain; }
         button, .card, .cx-topo, select, input { touch-action: manipulation; }
-        .tabbar button { transition: color .15s ease, transform .1s ease; }
+        .tabbar button { transition: color .15s ease, transform .1s ease; position: relative; }
+        /* Aba escolhida: traço azul que se abre no topo e ícone que cresce um pouco (suave, sem esperar os dados). */
+        .tabbar button::before { content: ''; position: absolute; top: 0; left: 28%; right: 28%; height: 3px; border-radius: 0 0 3px 3px;
+            background: var(--azul); transform: scaleX(0); transition: transform .22s ease; }
+        .tabbar button.ativo::before { transform: scaleX(1); }
+        .tabbar button .tab-icone { transition: transform .2s ease; }
+        .tabbar button.ativo .tab-icone { transform: scale(1.18) translateY(-1px); }
         .tabbar button:active { transform: scale(.93); }
         .card, .cx-topo, .btn-scan, #dashFiltrar, #confFiltrar, .mais, .voltar-compras { transition: background-color .12s ease, transform .1s ease; }
         .card:active { transform: scale(.985); background: #f8fafc; }
@@ -368,6 +374,7 @@
             #dashboardView, #comprasView, #conferenciaView, #financeiroView, #alertasView, #vazio, #lista, #detalhe,
             #comprasVazio, #comprasLista, #comprasDetalhe { animation: entradaSuave .16s ease-out; }
             .sk { animation: none; }
+            .tabbar button::before, .tabbar button .tab-icone { transition: none; }
             .tabbar button:active, .card:active, #dashFiltrar:active, #confFiltrar:active, .mais:active { transform: none; }
         }
         .aviso-versao { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: #0b3895; color: #fff;

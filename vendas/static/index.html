@@ -81,6 +81,19 @@
     .nav div { display: flex; flex-direction: column; align-items: center; gap: 3px; }
     .nav b { font-size: 20px; font-weight: 400; }
     .nav .on { color: #047857; font-weight: 700; }
+    /* Transições suaves: ícone da aba escolhida cresce, traço verde se abre no topo e cada tela aparece com um fade
+       curto. Só opacidade nas telas (elas têm barras fixas por dentro, que não podem "pular" durante a animação). */
+    .nav button b { display: inline-block; transition: transform .2s ease; }
+    .nav button.on b { transform: scale(1.18); }
+    .nav button::before { content: ''; position: absolute; top: 0; left: 26%; right: 26%; height: 3px; border-radius: 0 0 3px 3px;
+        background: #047857; transform: scaleX(0); transition: transform .22s ease; }
+    .nav button.on::before { transform: scaleX(1); }
+    @keyframes telaEntra { from { opacity: 0; } to { opacity: 1; } }
+    .tela.ativa { animation: telaEntra .2s ease-out; }
+    @media (prefers-reduced-motion: reduce) {
+        .tela.ativa { animation: none; }
+        .nav button b, .nav button::before { transition: none; }
+    }
     .sair { background: none; border: 0; color: #a7f3d0; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0; margin-top: 6px; }
     .nav { z-index: 20; }
     .nav button { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #64748b; cursor: pointer; padding: 6px 10px; }
