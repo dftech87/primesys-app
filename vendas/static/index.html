@@ -84,6 +84,19 @@
     .sair { background: none; border: 0; color: #a7f3d0; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0; margin-top: 6px; }
     .nav { z-index: 20; }
     .nav button { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #64748b; cursor: pointer; padding: 6px 10px; }
+    .nav button { position: relative; }
+    .nav .selo { position: absolute; top: 0; right: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+    .ini-rascunho { margin-top: 14px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 14px; padding: 12px 14px; }
+    .ini-rascunho .t { font-size: 14px; font-weight: 700; color: #92400e; }
+    .ini-rascunho .d { font-size: 13px; color: #78350f; margin-top: 3px; }
+    .ini-rascunho .b { display: flex; gap: 8px; margin-top: 10px; }
+    .ini-rascunho button { flex: 1; height: 42px; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; }
+    .ini-rascunho .continuar { border: 0; background: #047857; color: #fff; }
+    .ini-rascunho .descartar { border: 1px solid #fcd34d; background: #fff; color: #92400e; }
+    .ini-aviso { margin-top: 10px; border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .ini-aviso.fila { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+    .ini-aviso.erro { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .ini-aviso.prazo { background: #eff6ff; color: #1e3a8a; border: 1px solid #bfdbfe; cursor: default; }
     .nav button.on { color: #047857; font-weight: 700; }
     .nav button b { font-size: 20px; font-weight: 400; }
     .sync-linha { font-size: 12px; color: #64748b; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -338,6 +351,12 @@
     </div>
     <div class="wrap">
         <div class="sync-linha"><span id="iniSync">Dados do aparelho: —</span><button type="button" id="btnSyncAgora">Atualizar agora</button></div>
+        <div id="iniAvisos"></div>
+        <div class="ini-rascunho" id="iniRascunho" hidden>
+            <div class="t">📝 Pedido em andamento</div>
+            <div class="d" id="iniRascunhoTexto"></div>
+            <div class="b"><button type="button" class="continuar" id="btnContinuarRascunho">Continuar</button><button type="button" class="descartar" id="btnDescartarRascunho">Descartar</button></div>
+        </div>
         <button type="button" class="btn-novo" id="btnNovoPedido">＋ Novo pedido</button>
         <div class="tit" id="iniHojeTit">Hoje</div>
         <div class="lista" id="iniHoje"></div>
@@ -559,7 +578,7 @@
 
 <nav class="nav" id="nav" hidden>
     <button type="button" data-aba="telaInicio" class="on"><b>🏠</b>Início</button>
-    <button type="button" data-aba="telaPedidos"><b>🧾</b>Pedidos</button>
+    <button type="button" data-aba="telaPedidos"><b>🧾</b>Pedidos<span class="selo" id="seloPedidos" hidden></span></button>
     <button type="button" data-aba="telaClientes"><b>👥</b>Clientes</button>
     <button type="button" data-aba="telaProdutos"><b>📦</b>Produtos</button>
 </nav>
@@ -683,7 +702,7 @@ async function abrirAcesso() {
 // Sair: apaga o acesso e o que é do vendedor (pedidos, cadastros na fila). O catálogo (produtos, clientes, estoque)
 // fica, porque o próximo login quase sempre é da mesma empresa; se vier outro CNPJ, ele é apagado no login.
 async function esquecerAparelho() {
-    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'cursor_pedidos', 'clientesFila', 'donoFila']);
+    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'cursor_pedidos', 'clientesFila', 'donoFila', 'rascunho']);
     await limparPedidos();
     tokenEmUso = null; conta = null; pedidos = [];
 }
@@ -707,7 +726,7 @@ async function conferirFilaGuardada() {
     const dono = (await lerLocal('donoFila')) || (antiga && antiga.empresa && antiga.vendedor ? { cnpj: antiga.empresa.cnpj, vendedor: antiga.vendedor.id } : null);
     if (!dono) return;
     if (dono.cnpj !== conta.empresa.cnpj || dono.vendedor !== conta.vendedor.id) {
-        await apagarLocal(['clientesFila', 'cursor_pedidos']);
+        await apagarLocal(['clientesFila', 'cursor_pedidos', 'rascunho']);
         await limparPedidos();
     }
     await apagarLocal(['donoFila']);
@@ -977,6 +996,8 @@ function abrirInicio() {
     mostrarUltimaSync();
     desenharInicioPedidos();
     mostrar('telaInicio');
+    mostrarRascunhoInicio();
+    mostrarAvisosInicio();
 }
 document.getElementById('btnSair').addEventListener('click', async () => {
     if (!(await confirmar('Desconectar este aparelho? Para entrar de novo será preciso e-mail, senha do ERP e internet. Produtos e clientes continuam guardados; pedidos ainda não enviados serão perdidos.', 'Desconectar', true))) return;
@@ -1230,6 +1251,7 @@ let rascunho = null;         // pedido sendo montado agora
 async function carregarPedidos() {
     pedidos = (await lerTodos('pedidos')).sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || ''));
     configPedido = (await lerLocal('configPedido')) || null;
+    atualizarSeloPedidos();
 }
 async function salvarPedido(p) { await gravarLinhas('pedidos', [p]); await carregarPedidos(); }
 
@@ -1297,6 +1319,7 @@ function pedidoDoServidor(s) {   // pedido feito em outro aparelho do mesmo vend
              pagamentos: d.pagamentos || [], observacao: d.observacao || '', situacao: s.situacao, documento: s.documento, mensagem: s.mensagem || '', vendas: s.vendas || '' };
 }
 function atualizarTelasDePedidos() {
+    atualizarSeloPedidos();
     if (document.getElementById('telaPedidos').classList.contains('ativa')) desenharPedidos();
     if (document.getElementById('telaInicio').classList.contains('ativa')) desenharInicioPedidos();
 }
@@ -1476,7 +1499,7 @@ function baixarArquivo(arquivo) {   // aparelho sem compartilhamento de arquivos
 document.getElementById('btnReenviar').addEventListener('click', async () => { await enviarFila(); abrirDetalhe(detalheAtual.id); });
 document.getElementById('btnRepetir').addEventListener('click', () => {   // pedido novo, igual (o enviado não se edita)
     const p = detalheAtual;
-    iniciarPedido('PA', { cliente: p.cliente, cliente_nome: p.cliente_nome, itens: p.itens.map((i) => ({ ...i })), observacao: p.observacao });
+    comecarPedido('PA', { cliente: p.cliente, cliente_nome: p.cliente_nome, itens: p.itens.map((i) => ({ ...i })), observacao: p.observacao });
 });
 
 // ---- Leitor de código de barras pela câmera ----
@@ -1550,6 +1573,90 @@ document.querySelectorAll('[data-camera]').forEach((b) => b.addEventListener('cl
     if (noPedido) abrirItem(p.id); else abrirFicha(p.id);
 })));
 
+// ---- Rascunho guardado no aparelho: ligação, troca de app ou atualização não apagam o pedido em montagem ----
+let tempoRascunho = null;
+function guardarRascunho() { clearTimeout(tempoRascunho); tempoRascunho = setTimeout(gravarRascunhoAgora, 400); }
+async function gravarRascunhoAgora() {
+    clearTimeout(tempoRascunho);
+    if (!rascunho || !conta) return;
+    rascunho.observacao = document.getElementById('pedObservacao').value;
+    if (!rascunho.cliente && !rascunho.itens.length && !rascunho.observacao.trim()) return apagarLocal(['rascunho']);
+    await gravarLocal('rascunho', { pedido: rascunho, dono: { cnpj: conta.empresa.cnpj, vendedor: conta.vendedor.id }, em: Date.now() });
+}
+async function descartarRascunhoGuardado() { clearTimeout(tempoRascunho); await apagarLocal(['rascunho']); }
+async function rascunhoGuardado() {   // só vale para o mesmo vendedor da mesma empresa
+    const r = await lerLocal('rascunho');
+    if (!r || !r.pedido || !conta || !r.dono || r.dono.cnpj !== conta.empresa.cnpj || r.dono.vendedor !== conta.vendedor.id) return null;
+    return r;
+}
+function resumoRascunho(r) {
+    const ped = r.pedido, n = ped.itens.length, total = ped.itens.reduce((s, i) => s + centavos(i.qtd * i.preco - (i.desconto || 0) + (i.acrescimo || 0)), 0);
+    const quando = new Date(r.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `${ped.cliente_nome || 'Sem cliente'} · ${n} ${n === 1 ? 'item' : 'itens'}${n ? ' · ' + fmtMoeda(total) : ''} · ${quando}`;
+}
+async function mostrarRascunhoInicio() {
+    const r = rascunho ? null : await rascunhoGuardado(), caixa = document.getElementById('iniRascunho');
+    caixa.hidden = !r;
+    if (r) document.getElementById('iniRascunhoTexto').textContent = resumoRascunho(r);
+}
+// Volta ao pedido guardado. Preço que mudou desde então é atualizado (o servidor recusaria o antigo) e o vendedor é avisado.
+async function continuarRascunho(r) {
+    const ped = r.pedido;
+    let mudou = 0, saiu = 0;
+    ped.itens = ped.itens.filter((i) => { const ok = produtos.some((x) => x.id === i.produto); if (!ok) saiu++; return ok; }).map((i) => {
+        const atual = produtos.find((x) => x.id === i.produto);
+        if (Math.abs(atual.preco - i.preco) > 0.005) mudou++;
+        return { ...i, preco: atual.preco, descricao: atual.descricao };
+    });
+    ped.pagamentos = [];
+    rascunho = ped;
+    abrirTelaPedido(ped.cliente ? 2 : 1);
+    const avisos = [];
+    if (mudou) avisos.push(`${mudou} ${mudou === 1 ? 'produto teve o preço atualizado' : 'produtos tiveram o preço atualizado'}`);
+    if (saiu) avisos.push(`${saiu} ${saiu === 1 ? 'produto saiu do catálogo e foi retirado' : 'produtos saíram do catálogo e foram retirados'}`);
+    if (avisos.length) avisar(avisos.join(' e ') + ' desde que o pedido foi começado. Confira antes de enviar.');
+}
+// Começar um pedido quando há um guardado: pergunta antes, para não perder o que estava montado.
+async function comecarPedido(tipo, base) {
+    const r = await rascunhoGuardado();
+    if (r) {
+        const continuar = await dialogo(`Você tem um pedido em andamento: ${resumoRascunho(r)}. Quer continuar esse pedido?`, { ok: 'Continuar', cancelar: 'Começar outro' });
+        if (continuar) return continuarRascunho(r);
+        if (!(await confirmar('Descartar o pedido em andamento e começar outro?', 'Descartar', true))) return;
+        await descartarRascunhoGuardado();
+    }
+    iniciarPedido(tipo, base);
+}
+document.getElementById('btnContinuarRascunho').addEventListener('click', async () => { const r = await rascunhoGuardado(); if (r) continuarRascunho(r); else mostrarRascunhoInicio(); });
+document.getElementById('btnDescartarRascunho').addEventListener('click', async () => {
+    if (!(await confirmar('Descartar o pedido em andamento? Os produtos escolhidos serão perdidos.', 'Descartar', true))) return;
+    await descartarRascunhoGuardado(); mostrarRascunhoInicio();
+});
+// O Android pode encerrar o app em segundo plano: grava na hora ao sair da tela.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') gravarRascunhoAgora(); });
+window.addEventListener('pagehide', () => gravarRascunhoAgora());
+
+// ---- Selo de pendentes na aba Pedidos e avisos na Início ----
+function contarPendentes() {
+    return { fila: pedidos.filter(naFila).length, recusados: pedidos.filter((p) => p.situacao === 'recusado' && !p.documento).length };
+}
+function atualizarSeloPedidos() {
+    const { fila, recusados } = contarPendentes(), total = fila + recusados, selo = document.getElementById('seloPedidos');
+    selo.hidden = !total; selo.textContent = total > 99 ? '99+' : String(total);
+}
+async function mostrarAvisosInicio() {
+    const { fila, recusados } = contarPendentes(), avisos = [];
+    if (fila) avisos.push(`<div class="ini-aviso fila" data-ir-pedidos>⏳ ${fila} ${fila === 1 ? 'pedido aguardando envio' : 'pedidos aguardando envio'}${navigator.onLine ? '' : ' · conecte à internet para enviar'}</div>`);
+    if (recusados) avisos.push(`<div class="ini-aviso erro" data-ir-pedidos>⚠ ${recusados} ${recusados === 1 ? 'pedido recusado pelo ERP' : 'pedidos recusados pelo ERP'}: toque para ver</div>`);
+    // Prazo para conectar: depois de N dias sem internet o app trava; avisa nos 2 últimos dias.
+    const ultimo = (await lerLocal('ultimoOnline')) || 0, limite = (conta && conta.pinOfflineDias) || 7;
+    const restam = Math.ceil(limite - (Date.now() - ultimo) / 86400000);
+    if (ultimo && !navigator.onLine && restam <= 2) avisos.push(`<div class="ini-aviso prazo">📶 Conecte à internet ${restam <= 0 ? 'hoje' : `em até ${restam} ${restam === 1 ? 'dia' : 'dias'}`} para continuar usando o app.</div>`);
+    document.getElementById('iniAvisos').innerHTML = avisos.join('');
+    atualizarSeloPedidos();
+}
+document.getElementById('iniAvisos').addEventListener('click', (e) => { if (e.target.closest('[data-ir-pedidos]')) document.querySelector('#nav [data-aba="telaPedidos"]').click(); });
+
 // ---- Novo pedido ----
 function abrirFolha(id) { document.getElementById(id).hidden = false; document.getElementById('velaItem').hidden = false; }
 function fecharFolha(id) { document.getElementById(id).hidden = true; document.getElementById('velaItem').hidden = true; }
@@ -1559,7 +1666,7 @@ document.getElementById('btnNovoPedido').addEventListener('click', () => {
         return;
     }
     if (!(configPedido.PA || {}).disponivel) return avisar('A natureza "Pedido de venda" não foi encontrada no ERP desta empresa.');
-    iniciarPedido('PA');   // só pedido de venda: pré-venda ou NFC-e é escolhido na finalização (caixa ou nuvem)
+    comecarPedido('PA');   // só pedido de venda: pré-venda ou NFC-e é escolhido na finalização (caixa ou nuvem)
 });
 
 function iniciarPedido(tipo, base) {
@@ -1568,12 +1675,15 @@ function iniciarPedido(tipo, base) {
         const p = produtos.find((x) => x.id === i.produto);   // repetir usa o preço de hoje
         return { produto: p.id, descricao: p.descricao, qtd: i.qtd, preco: p.preco, desconto: 0, acrescimo: 0 };
     });
-    document.getElementById('cabPedido').className = 'cab-ped ' + (tipo === 'PA' ? 'pa' : 'pv');
-    document.getElementById('pedTitulo').textContent = NOMES_TIPO[tipo];
+    abrirTelaPedido(rascunho.cliente ? 2 : 1);
+}
+function abrirTelaPedido(passo) {
+    document.getElementById('cabPedido').className = 'cab-ped ' + (rascunho.tipo === 'PA' ? 'pa' : 'pv');
+    document.getElementById('pedTitulo').textContent = NOMES_TIPO[rascunho.tipo];
     document.getElementById('pedObservacao').value = rascunho.observacao || '';
     document.getElementById('buscaPedCliente').value = ''; document.getElementById('buscaPedProduto').value = '';
     mostrar('telaPedido');
-    irPasso(rascunho.cliente ? 2 : 1);
+    irPasso(passo);
 }
 function irPasso(n) {
     document.querySelectorAll('#telaPedido .passo').forEach((el) => { el.style.display = el.id === 'passo' + n ? 'block' : 'none'; });
@@ -1585,11 +1695,12 @@ function irPasso(n) {
     if (n === 1) desenharPedClientes();
     if (n === 2) { desenharPedProdutos(); atualizarBarra(); }
     if (n === 3) desenharResumo();
+    guardarRascunho();
 }
 document.getElementById('btnVoltarPedido').addEventListener('click', async () => {
     if (rascunho.passo > 1) return irPasso(rascunho.passo - 1);
     if (rascunho.itens.length && !(await confirmar('Descartar este pedido? Os produtos escolhidos serão perdidos.', 'Descartar', true))) return;
-    rascunho = null; abrirInicio();
+    rascunho = null; await descartarRascunhoGuardado(); abrirInicio();
 });
 document.querySelectorAll('#cabPedido .passos div').forEach((d) => d.addEventListener('click', () => {
     const n = +d.dataset.passo;
@@ -1796,6 +1907,7 @@ document.getElementById('itemRemover').addEventListener('click', () => {
     fecharFolha('folhaItem'); rascunho.pagamentos = []; aposMudarItens();
 });
 function aposMudarItens() {
+    guardarRascunho();
     rascunho.pagamentos = []; if (rascunho.passo === 3) { if (!rascunho.itens.length) return irPasso(2); desenharResumo(); } else { desenharPedProdutos(); atualizarBarra(); } }
 
 // Passo 3: resumo + pagamento (só as formas permitidas para este tipo de documento) + observação
@@ -1877,6 +1989,7 @@ document.getElementById('resumoPagamentos').addEventListener('click', (ev) => {
     if (ev.target.dataset.forma) { g.forma = +ev.target.dataset.forma; const f = formasDoTipo().find((x) => x.id === g.forma); g.parcelamento = f && !f.a_vista && f.parcelamentos.length ? f.parcelamentos[0].id : 0; desenharPagamentos(); }
     if (ev.target.dataset.tirar !== undefined) { rascunho.pagamentos.splice(+ev.target.dataset.tirar, 1); desenharPagamentos(); }
 });
+document.getElementById('pedObservacao').addEventListener('input', () => { if (rascunho) guardarRascunho(); });
 document.getElementById('resumoPagamentos').addEventListener('change', (ev) => {
     const caixa = ev.target.closest('[data-pag]'); if (!caixa) return;
     const g = rascunho.pagamentos[+caixa.dataset.pag];
@@ -1906,7 +2019,7 @@ document.getElementById('btnEnviarPedido').addEventListener('click', async () =>
         situacao: 'fila', documento: null, mensagem: '',
     };
     await salvarPedido(pedido);
-    rascunho = null;
+    rascunho = null; await descartarRascunhoGuardado();
     document.querySelector('#nav [data-aba="telaPedidos"]').click();
     try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) return encerrarAcesso(e.message); }
     abrirDetalhe(pedido.id);
@@ -2152,7 +2265,7 @@ document.getElementById('btnEstoqueAgora').addEventListener('click', async () =>
 document.getElementById('btnPedidoComProduto').addEventListener('click', () => {
     if (!configPedido) return avisar('Para o primeiro pedido o aparelho precisa baixar as formas de pagamento. Conecte à internet e toque em "Atualizar agora".');
     const p = fichaAtual;
-    iniciarPedido('PA', { itens: [{ produto: p.id, descricao: p.descricao, qtd: 1, preco: p.preco, desconto: 0 }] });
+    comecarPedido('PA', { itens: [{ produto: p.id, descricao: p.descricao, qtd: 1, preco: p.preco, desconto: 0 }] });
 });
 
 // ============================================================================================================
