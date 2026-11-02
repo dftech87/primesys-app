@@ -708,22 +708,25 @@
         const elDetalhe = document.getElementById('detalhe');
         const elBusca = document.getElementById('busca');
         const elBuscaWrap = document.getElementById('buscaWrap');
-        // Aparência: Automático (segue o celular) -> Claro -> Escuro. A escolha fica só neste aparelho.
+        // Aparência: Claro <-> Escuro. Sem escolha guardada, vale o modo do celular; depois de tocar, a escolha fica só neste aparelho.
         (function iniciarTema() {
             const botao = document.getElementById('btnTema'), aviso = document.getElementById('temaAviso');
-            const ORDEM = ['auto', 'claro', 'escuro'];
-            const ROTULO = { auto: 'Aparência: automática', claro: 'Aparência: clara', escuro: 'Aparência: escura' };
-            const ICONE = { auto: '◐', claro: '☀︎', escuro: '☾︎' };
-            const ler = () => { try { const t = localStorage.getItem('prime-tema'); return t === 'claro' || t === 'escuro' ? t : 'auto'; } catch (e) { return 'auto'; } };
+            const ROTULO = { claro: 'Modo claro', escuro: 'Modo escuro' };
+            const ICONE = { claro: '☀︎', escuro: '☾︎' };
+            const atual = () => document.documentElement.dataset.tema
+                || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
             let tempo;
-            function aplicar(modo, avisar) {
-                if (modo === 'auto') delete document.documentElement.dataset.tema; else document.documentElement.dataset.tema = modo;
-                try { modo === 'auto' ? localStorage.removeItem('prime-tema') : localStorage.setItem('prime-tema', modo); } catch (e) {}
-                botao.textContent = ICONE[modo]; botao.title = ROTULO[modo]; botao.setAttribute('aria-label', ROTULO[modo]);
+            function mostrar(modo, avisar) {
+                botao.textContent = ICONE[modo]; botao.title = ROTULO[modo]; botao.setAttribute('aria-label', ROTULO[modo] + ' (toque para trocar)');
                 if (avisar) { aviso.textContent = ROTULO[modo]; aviso.classList.add('mostrar'); clearTimeout(tempo); tempo = setTimeout(() => aviso.classList.remove('mostrar'), 1600); }
             }
-            botao.addEventListener('click', () => aplicar(ORDEM[(ORDEM.indexOf(ler()) + 1) % ORDEM.length], true));
-            aplicar(ler(), false);
+            botao.addEventListener('click', () => {
+                const modo = atual() === 'escuro' ? 'claro' : 'escuro';
+                document.documentElement.dataset.tema = modo;
+                try { localStorage.setItem('prime-tema', modo); } catch (e) {}
+                mostrar(modo, true);
+            });
+            mostrar(atual(), false);
         })();
 
         const elLoja = document.getElementById('loja');
