@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app import acessos, alertas, caixa, estoque, financeiro, vendas
 from app.cache import cached, descartar
+from app.datas import hoje_loja
 from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
@@ -36,10 +37,10 @@ def _data(texto: str | None, padrao: date) -> date:
 
 
 def _data_do_cliente(texto: str | None) -> date:
-    """A data do aparelho vale (o servidor pode estar em outro fuso), mas só ±1 dia da do servidor."""
-    servidor = date.today()
-    informada = _data(texto, servidor)
-    return informada if abs((informada - servidor).days) <= 1 else servidor
+    """A data do aparelho vale (a loja pode estar em outro fuso), mas só ±1 dia da de Brasília."""
+    brasilia = hoje_loja()
+    informada = _data(texto, brasilia)
+    return informada if abs((informada - brasilia).days) <= 1 else brasilia
 
 
 def _comparacao_margem(inicio: date, fim: date, comp_ini: date, comp_fim: date):
@@ -118,7 +119,7 @@ async def dashboard_mobile(request: Request, inicio: str | None = Query(None), f
     if not acessos.pode(request, "dashboard"):
         return sem_permissao()
 
-    hoje = date.today()
+    hoje = hoje_loja()
     data_inicio, data_fim = _data(inicio, hoje), _data(fim, hoje)
     if data_fim < data_inicio:
         data_inicio, data_fim = data_fim, data_inicio
@@ -205,7 +206,7 @@ async def fechamento_caixa(request: Request, inicio: str | None = Query(None), f
     if not acessos.pode(request, "conferencia"):
         return sem_permissao()
 
-    hoje = date.today()
+    hoje = hoje_loja()
     data_inicio, data_fim = _data(inicio, hoje), _data(fim, hoje)
     if data_fim < data_inicio:
         data_inicio, data_fim = data_fim, data_inicio

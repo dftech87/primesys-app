@@ -4,11 +4,16 @@ Rate limit is per API token (per docs): 20 requests burst, refilling at
 20/minute, with a 10-request server-side queue before HTTP 429 kicks in.
 We enforce the same budget client-side with a token bucket so we stay
 under the limit instead of reacting to 429s after the fact.
+
+The two apps (Prime Info and Prime Vendas) are separate processes sharing each client's token, so each one gets a
+slice of the 20/min: Info 12 (ERP_COTA_POR_MINUTO) + Vendas 8 (VENDAS_COTA_ERP_POR_MINUTO). The sum must stay <= 20.
 """
 
 import asyncio
 import hashlib
 import logging
+import math
+import os
 import time
 
 import httpx
@@ -17,12 +22,12 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-RATE_LIMIT_CAPACITY = 20
+RATE_LIMIT_CAPACITY = int(os.getenv("ERP_COTA_POR_MINUTO", "12"))   # fatia do Prime Info (o Vendas ajusta a dele)
 RATE_LIMIT_REFILL_SECONDS = 60
 MAX_RETRIES = 3
 # Chamadas em segundo plano (ex.: o selo da aba Alertas) só usam a cota que passar desta reserva,
 # para nunca atrasar o que a pessoa está esperando na tela (busca, dashboard...).
-RESERVA_PARA_INTERATIVAS = 6
+RESERVA_PARA_INTERATIVAS = 5
 AVISAR_ESPERA_ACIMA_DE = 2.0
 
 
@@ -101,7 +106,13 @@ class MeuERPClient:
             await self.bucket.acquire(self.segundo_plano)
             response = await client.request(method, path, headers=headers, **kwargs)
             if response.status_code == 429 and attempt < MAX_RETRIES:
-                retry_after = float(response.headers.get("Retry-After", 5))
+                try:
+                    retry_after = float(response.headers.get("Retry-After", 5))
+                except ValueError:   # Retry-After em formato de data: espera o padrão
+                    retry_after = 5.0
+                retry_after = max(0.0, min(retry_after, 30.0)) if math.isfinite(retry_after) else 5.0
+                # Não deveria acontecer com as fatias somando 20/min: se aparecer, é sinal de cota estourada.
+                logger.warning("ERP recusou por limite de chamadas (429); nova tentativa em %.0f s", retry_after)
                 await asyncio.sleep(retry_after)
                 continue
             response.raise_for_status()

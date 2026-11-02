@@ -12,12 +12,12 @@ API do Meu ERP Online, cadastrado localmente. O primeiro tenant de teste é a **
 - **SQLite** (`primesys.db`) guarda os tenants: CNPJ, nome, token da API do ERP e senha
   de acesso ao dashboard (hash bcrypt). Tabela `empresas` em [app/database.py](app/database.py).
 - **`app/meuerp_client.py`**: cliente HTTP assíncrono para a API do Meu ERP Online, com
-  rate limiting client-side (token bucket) respeitando o limite documentado: 20
-  requisições por token, repondo 20/min. Em caso de HTTP 429 faz retry com backoff.
-- **Login** (`app/routers/auth.py`): `GET/POST /login` por CNPJ + senha → sessão.
-- **Dashboard** (`app/routers/dashboard.py`): `GET /` (página) e
-  `GET /api/dashboard/summary` (dados: contas a receber/pagar pendentes e mercadorias
-  mais vendidas nos últimos 30 dias, via NF-e modelo 55).
+  rate limiting client-side (token bucket). O ERP aceita 20 requisições/min por token, somando
+  os dois apps: o Prime Info usa 12 (`ERP_COTA_POR_MINUTO`) e o Prime Vendas 8
+  (`VENDAS_COTA_ERP_POR_MINUTO`). Em caso de HTTP 429 registra no log e tenta de novo.
+- **Login** (`app/routers/auth.py`): `GET/POST /login` por CNPJ + e-mail e senha do ERP → sessão.
+- **App** (`app/routers/produtos.py` e `painel_mobile.py`): `GET /` abre `/produtos`, a tela única com
+  Dashboard, Produtos, Compras, Conferência e Financeiro (abas conforme o perfil do usuário no ERP).
 
 ## Rodando localmente
 

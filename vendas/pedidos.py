@@ -11,6 +11,7 @@ formas de pagamento têm que ser as permitidas para aquele tipo de documento (co
 Cada pedido tem um identificador criado no celular (idExterno no ERP): reenviar o mesmo pedido nunca duplica.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -21,7 +22,7 @@ import httpx
 from app.cache import cached
 from app.database import db_session
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar, i
+from app.sqlquery import ConsultaIndisponivel, executar, i
 from vendas import vendedores
 from vendas.db import agora_texto, carimbo_agora, texto_para_data
 
@@ -44,6 +45,16 @@ class PedidoRecusado(Exception):
 
 class ErpIndisponivel(Exception):
     """ERP fora do ar / limite de chamadas: o celular tenta de novo depois."""
+
+
+class PedidoEmEnvio(Exception):
+    """Outro envio deste mesmo pedido está em andamento: o celular mantém na fila e tenta depois."""
+
+
+# O trecho que fala com o ERP tem tempo máximo; um envio parado há mais que o dobro disso (servidor reiniciou no meio)
+# pode ser retomado por outro, sem risco de os dois estarem falando com o ERP ao mesmo tempo.
+TEMPO_MAXIMO_ENVIO = 120   # segundos
+ENVIO_TRAVADO_APOS = timedelta(minutes=5)
 
 
 # ---- Configuração por empresa: natureza e formas de pagamento de cada tipo de documento ---------------------------
@@ -125,7 +136,10 @@ async def conferir(aparelho: dict, dados: dict) -> dict:
     id_usuario = int(aparelho["id_usuario"] or vendedor.get("id_usuario") or 0)
     if not id_usuario:
         raise PedidoRecusado("Para enviar pedidos, o funcionário precisa ter um usuário do ERP vinculado no cadastro.")
-    permissoes = await vendedores.permissoes(tenant, vendedor.get("id_perfil"))
+    try:
+        permissoes = await vendedores.permissoes(tenant, vendedor.get("id_perfil"), estrito=True)
+    except vendedores.PermissoesIndisponiveis as erro:
+        raise ErpIndisponivel() from erro
 
     try:
         id_cliente = int(dados.get("cliente"))
@@ -254,6 +268,36 @@ def _gravar(id_pedido: str, **campos) -> None:
             conn.execute(f"UPDATE pv_pedidos SET {coluna} = ? WHERE id = ?", (valor, id_pedido))
 
 
+def _reservar_envio(id_pedido: str) -> str | None:
+    """Marca 'enviando' só se ninguém estiver enviando (ou se o envio anterior travou). Atômico no banco.
+    Devolve o carimbo da reserva (quem tem o carimbo é o dono do envio) ou None se outro está enviando."""
+    agora = datetime.now(timezone.utc)
+    limite = (agora - ENVIO_TRAVADO_APOS).strftime("%Y-%m-%d %H:%M:%S")
+    carimbo = carimbo_agora()
+    with db_session() as conn:
+        cursor = conn.execute(
+            "UPDATE pv_pedidos SET situacao = 'enviando', atualizado_em = ?, carimbo = ? "
+            "WHERE id = ? AND id_documento IS NULL AND situacao <> 'cancelado' AND (situacao <> 'enviando' OR atualizado_em < ?)",
+            (agora.strftime("%Y-%m-%d %H:%M:%S"), carimbo, id_pedido, limite))
+        return carimbo if cursor.rowcount == 1 else None
+
+
+def _gravar_se_dono(id_pedido: str, reserva: str, **campos) -> bool:
+    """Grava o resultado do envio só se a reserva ainda é deste envio (ninguém a retomou). Um UPDATE só."""
+    campos["carimbo"] = carimbo_agora()
+    colunas = ", ".join(f"{c} = ?" for c in campos)   # colunas fixas deste módulo
+    with db_session() as conn:
+        cursor = conn.execute(f"UPDATE pv_pedidos SET {colunas} WHERE id = ? AND carimbo = ?", (*campos.values(), id_pedido, reserva))
+        gravou = cursor.rowcount == 1
+    if not gravou:
+        logger.warning("envio do pedido %s foi retomado por outro envio; resultado deste descartado", id_pedido)
+    return gravou
+
+
+def _liberar_envio(id_pedido: str, reserva: str) -> None:
+    _gravar_se_dono(id_pedido, reserva, situacao="pendente", atualizado_em=agora_texto())
+
+
 def _linha(id_pedido: str) -> dict | None:
     with db_session() as conn:
         r = conn.execute("SELECT * FROM pv_pedidos WHERE id = ?", (id_pedido,)).fetchone()
@@ -275,8 +319,10 @@ async def receber(aparelho: dict, dados: dict) -> dict:
     existente = _linha(id_pedido)
     if existente and existente["cnpj"] != aparelho["cnpj"]:
         raise PedidoRecusado("Identificador do pedido inválido.")
-    if existente and existente["id_documento"]:
+    if existente and (existente["id_documento"] or existente["situacao"] == "cancelado"):
         return _para_celular(existente)
+    if existente and existente["situacao"] == "enviando" and not _envio_travado(existente):
+        raise PedidoEmEnvio()   # outro envio em andamento: nem confere de novo
 
     conferido = await conferir(aparelho, dados)
     if existente is None:
@@ -285,37 +331,67 @@ async def receber(aparelho: dict, dados: dict) -> dict:
             conn.execute(
                 """INSERT INTO pv_pedidos (id, cnpj, id_aparelho, id_funcionario, tipo, dados, resumo, situacao, mensagem,
                                            criado_em, atualizado_em, carimbo)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'enviando', '', ?, ?, ?) ON CONFLICT (id) DO NOTHING""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', '', ?, ?, ?) ON CONFLICT (id) DO NOTHING""",
                 (id_pedido, aparelho["cnpj"], aparelho["id"], aparelho["id_funcionario"], conferido["resumo"]["tipo"],
                  json.dumps(dados, ensure_ascii=False), json.dumps(conferido["resumo"], ensure_ascii=False), agora, agora, carimbo_agora()))
 
+    # Reserva: só um envio por vez do mesmo pedido (o ERP não barra idExterno repetido). Dois reenvios ao mesmo tempo
+    # (celular que perdeu a resposta e tentou de novo) não passam juntos pela procura no ERP.
+    reserva = _reservar_envio(id_pedido)
+    if reserva is None:
+        linha = _linha(id_pedido)
+        # Só devolve o que é definitivo (enviado, cancelado, recusado); o resto o celular mantém na fila.
+        if linha and (linha["id_documento"] or linha["situacao"] in ("cancelado", "recusado")):
+            return _para_celular(linha)
+        raise PedidoEmEnvio()
+
     client = MeuERPClient(aparelho["tenant"]["api_token"])
     try:
-        id_documento = await _ja_existe_no_erp(client, id_pedido)
-        if id_documento is None:
-            resposta = await client.post("/api/documento/v1", json=conferido["corpo"])
-            if not resposta.get("status") or not resposta.get("idDocumento"):
-                mensagem = resposta.get("mensagem") or "O ERP recusou o pedido."
-                _gravar(id_pedido, situacao="recusado", mensagem=mensagem[:300], atualizado_em=agora_texto())
-                logger.warning("ERP recusou pedido %s (empresa %s): %s", id_pedido, aparelho["cnpj"], mensagem)
-                return _para_celular(_linha(id_pedido))
-            id_documento = int(resposta["idDocumento"])
+        resultado = await asyncio.wait_for(_enviar_ao_erp(client, id_pedido, conferido["corpo"]), TEMPO_MAXIMO_ENVIO)
     except httpx.HTTPStatusError as erro:
         if erro.response.status_code in (400, 404, 409, 422):
             try:
                 mensagem = erro.response.json().get("mensagem") or erro.response.text
             except Exception:
                 mensagem = erro.response.text
-            _gravar(id_pedido, situacao="recusado", mensagem=str(mensagem)[:300], atualizado_em=agora_texto())
+            _gravar_se_dono(id_pedido, reserva, situacao="recusado", mensagem=str(mensagem)[:300], atualizado_em=agora_texto())
             return _para_celular(_linha(id_pedido))
+        _liberar_envio(id_pedido, reserva)
         raise ErpIndisponivel() from erro
-    except (httpx.HTTPError, RuntimeError) as erro:
+    except (httpx.HTTPError, ConsultaIndisponivel, asyncio.TimeoutError, RuntimeError, ValueError) as erro:
+        # Volta para 'pendente' (antes ficava 'enviando' para sempre e o celular parava de reenviar). Se o ERP aceitou
+        # e só a resposta se perdeu, o próximo envio acha o documento pelo idExterno e não cria outro.
+        _liberar_envio(id_pedido, reserva)
         raise ErpIndisponivel() from erro
 
+    if isinstance(resultado, str):   # o ERP respondeu, mas recusou o pedido
+        _gravar_se_dono(id_pedido, reserva, situacao="recusado", mensagem=resultado[:300], atualizado_em=agora_texto())
+        logger.warning("ERP recusou pedido %s (empresa %s): %s", id_pedido, aparelho["cnpj"], resultado)
+        return _para_celular(_linha(id_pedido))
     situacao = "rascunho" if conferido["resumo"]["tipo"] == "PV" else "no_caixa"
-    _gravar(id_pedido, id_documento=id_documento, situacao=situacao, mensagem="", enviado_em=agora_texto(), atualizado_em=agora_texto())
-    logger.info("pedido %s enviado ao ERP: documento %s (empresa %s)", id_pedido, id_documento, aparelho["cnpj"])
+    if _gravar_se_dono(id_pedido, reserva, id_documento=resultado, situacao=situacao, mensagem="",
+                       enviado_em=agora_texto(), atualizado_em=agora_texto()):
+        logger.info("pedido %s enviado ao ERP: documento %s (empresa %s)", id_pedido, resultado, aparelho["cnpj"])
     return _para_celular(_linha(id_pedido))
+
+
+async def _enviar_ao_erp(client: MeuERPClient, id_pedido: str, corpo: dict) -> int | str:
+    """Número do documento no ERP (o que já existia com este idExterno, ou o criado agora); texto = recusa do ERP."""
+    id_documento = await _ja_existe_no_erp(client, id_pedido)
+    if id_documento is not None:
+        return id_documento
+    resposta = await client.post("/api/documento/v1", json=corpo)
+    if not resposta.get("status") or not resposta.get("idDocumento"):
+        return str(resposta.get("mensagem") or "O ERP recusou o pedido.")
+    return int(resposta["idDocumento"])
+
+
+def _envio_travado(linha: dict) -> bool:
+    try:
+        desde = datetime.strptime(linha["atualizado_em"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return True
+    return datetime.now(timezone.utc) - desde > ENVIO_TRAVADO_APOS
 
 
 def _para_celular(linha: dict) -> dict:
@@ -410,14 +486,34 @@ async def conferir_situacoes(tenant: dict) -> None:
 async def cancelar(aparelho: dict, id_pedido: str) -> dict:
     """Vendedor cancela um pedido seu que ainda não foi finalizado (o cliente desistiu)."""
     linha = _linha(str(id_pedido).lower())
-    if linha is None or linha["cnpj"] != aparelho["cnpj"] or int(linha["id_funcionario"]) != int(aparelho["id_funcionario"]):
+    if linha is None:   # nunca chegou ao servidor (feito sem internet e não enviado): pode excluir do aparelho
+        return {"id": str(id_pedido).lower(), "documento": None, "situacao": "cancelado", "mensagem": ""}
+    if linha["cnpj"] != aparelho["cnpj"] or int(linha["id_funcionario"]) != int(aparelho["id_funcionario"]):
         raise PedidoRecusado("Pedido não encontrado.")
     if linha["situacao"] == "cancelado":
         return _para_celular(linha)
-    if not linha["id_documento"]:   # recusado pelo ERP: nunca entrou lá
+    client = MeuERPClient(aparelho["tenant"]["api_token"])
+    if not linha["id_documento"] and linha["situacao"] != "recusado":
+        # Pendente: um envio pode ter entrado no ERP e só a resposta se perdeu. Usa a mesma reserva do envio (nenhum
+        # envio começa enquanto confere) e procura no ERP antes de dar como cancelado.
+        reserva = _reservar_envio(linha["id"])
+        if reserva is None:
+            raise PedidoRecusado("O pedido está sendo enviado agora. Tente cancelar de novo em instantes.")
+        try:
+            achado = await _ja_existe_no_erp(client, linha["id"])
+        except ConsultaIndisponivel as erro:
+            _liberar_envio(linha["id"], reserva)
+            raise ErpIndisponivel() from erro
+        if achado is None:
+            _gravar_se_dono(linha["id"], reserva, situacao="cancelado", atualizado_em=agora_texto())
+            return _para_celular(_linha(linha["id"]))
+        # Tinha entrado no ERP: fica registrado como enviado (acompanhado e cancelável) e segue o cancelamento no ERP.
+        _gravar_se_dono(linha["id"], reserva, id_documento=achado, situacao="rascunho" if linha["tipo"] == "PV" else "no_caixa",
+                        mensagem="", enviado_em=agora_texto(), atualizado_em=agora_texto())
+        linha = _linha(linha["id"])
+    if not linha["id_documento"]:   # recusado pelo ERP: nunca chegou lá
         _gravar(linha["id"], situacao="cancelado", atualizado_em=agora_texto())
         return _para_celular(_linha(linha["id"]))
-    client = MeuERPClient(aparelho["tenant"]["api_token"])
     try:
         atual = await executar(client, f"select status, coalesce(flagimportado, 'F') as importado from documento "
                                        f"where _iddocumento = {i(linha['id_documento'])}", max_paginas=1)
@@ -456,6 +552,8 @@ def do_vendedor(cnpj: str, id_funcionario: int, cursor: str, limite: int = 200) 
     with db_session() as conn:
         linhas = [dict(r) for r in conn.execute(
             "SELECT * FROM pv_pedidos WHERE cnpj = ? AND id_funcionario = ? AND (carimbo > ? OR (carimbo = ? AND id > ?)) "
+            # Ainda não enviado ao ERP (pendente/enviando): o celular é quem manda; não troca a fila dele.
+            "AND NOT (id_documento IS NULL AND situacao IN ('pendente', 'enviando')) "
             "ORDER BY carimbo, id LIMIT ?", (cnpj, id_funcionario, carimbo, carimbo, ultimo, limite + 1))]
     mais = len(linhas) > limite
     linhas = linhas[:limite]

@@ -12,9 +12,9 @@ CNPJS_LIBERADOS = {normalize_cnpj(c) for c in os.getenv("VENDAS_CNPJS_LIBERADOS"
 def empresa_liberada(tenant: dict | None) -> bool:
     return bool(tenant) and (tenant["cnpj"] in CNPJS_LIBERADOS or bool(tenant.get("vendas_liberado")))
 
-# O ERP deixa 20 chamadas por minuto por token, somando os dois apps. O Vendas fica com uma parte menor
-# (quase tudo dele é sincronização em segundo plano) para nunca deixar o PrimeSys Info lento.
-COTA_ERP_POR_MINUTO = int(os.getenv("VENDAS_COTA_ERP_POR_MINUTO", "10"))
+# O ERP deixa 20 chamadas por minuto por token, somando os dois apps: Prime Info 12 (ERP_COTA_POR_MINUTO) + Vendas 8.
+# O Vendas fica com a parte menor (quase tudo dele é sincronização em segundo plano) para nunca deixar o Info lento.
+COTA_ERP_POR_MINUTO = int(os.getenv("VENDAS_COTA_ERP_POR_MINUTO", "8"))
 
 # Acesso do aparelho no servidor: vence se o celular ficar esse tempo sem usar (aí entra de novo com e-mail e senha).
 APARELHO_VENCE_DIAS = int(os.getenv("VENDAS_APARELHO_VENCE_DIAS", "30"))

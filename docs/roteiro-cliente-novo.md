@@ -49,8 +49,8 @@ Se algo não bater, **não publique o cliente**: investigue primeiro (veja "Arma
 - **Contas atrasadas muito antigas**: costumam ser títulos já pagos e sem baixa no ERP.
 - **Inativo**: o ERP grava `T`/`F` em `flaginativo` (alguns cadastros antigos usam `S`/`N`).
 - **Nome do favorecido**: em alguns lançamentos o nome é "CONSUMIDOR FINAL" e o favorecido está na descrição.
-- **Cota do ERP**: 20 chamadas por minuto por token. O app já usa cache; testes em paralelo com o uso real
-  dividem essa cota.
+- **Cota do ERP**: 20 chamadas por minuto por token, divididas entre os dois apps (Prime Info 12, Prime Vendas 8).
+  O app já usa cache; testes em paralelo com o uso real dividem essa cota.
 
 ## 6. Entrega ao cliente
 1. Passar CNPJ e orientar o login com o **e-mail do ERP** (não o nome de usuário).

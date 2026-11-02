@@ -60,6 +60,12 @@ async def _estoque(client: MeuERPClient, id_variacao: int, id_loja: int) -> floa
     return resultado.get("qtdSaldo")
 
 
+@router.get("/")
+async def inicio():
+    """O endereço raiz abre o app (a tela antiga de computador foi retirada: somava só 100 contas e era vulnerável)."""
+    return RedirectResponse("/produtos", status_code=303)
+
+
 @router.get("/produtos", response_class=HTMLResponse)
 async def produtos_page(request: Request):
     tenant = current_tenant(request)

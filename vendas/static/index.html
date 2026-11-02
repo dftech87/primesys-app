@@ -683,9 +683,34 @@ async function abrirAcesso() {
 // Sair: apaga o acesso e o que é do vendedor (pedidos, cadastros na fila). O catálogo (produtos, clientes, estoque)
 // fica, porque o próximo login quase sempre é da mesma empresa; se vier outro CNPJ, ele é apagado no login.
 async function esquecerAparelho() {
-    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'cursor_pedidos', 'clientesFila']);
+    await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'cursor_pedidos', 'clientesFila', 'donoFila']);
     await limparPedidos();
     tokenEmUso = null; conta = null; pedidos = [];
+}
+// Acesso encerrado pelo servidor (empresa bloqueada e liberada de novo, aparelho vencido...): apaga só o acesso.
+// Pedidos e cadastros que ainda não subiram ficam guardados e são enviados quando o MESMO vendedor entrar de novo.
+async function encerrarAcesso(mensagem) {
+    const dono = conta && conta.empresa && conta.vendedor ? { cnpj: conta.empresa.cnpj, vendedor: conta.vendedor.id } : null;
+    const temPendente = (await lerTodos('pedidos')).some(naFila) || ((await lerLocal('clientesFila')) || []).length > 0;
+    if (dono && temPendente) {
+        await gravarLocal('donoFila', dono);
+        await apagarLocal(['cofre', 'conta', 'tentativas', 'ultimoOnline', 'cursor_pedidos']);
+        tokenEmUso = null; conta = null;
+        return prepararLogin((mensagem || 'Acesso encerrado.') + ' Os pedidos que ainda não foram enviados continuam guardados: entre de novo para enviá-los.');
+    }
+    await esquecerAparelho();
+    return prepararLogin(mensagem);
+}
+// Depois de entrar: a fila guardada só vale para o mesmo vendedor da mesma empresa (senão iria no nome de outro).
+async function conferirFilaGuardada() {
+    const antiga = await lerLocal('conta');   // no login, ainda é a conta da sessão anterior (se não saiu pelo "Sair")
+    const dono = (await lerLocal('donoFila')) || (antiga && antiga.empresa && antiga.vendedor ? { cnpj: antiga.empresa.cnpj, vendedor: antiga.vendedor.id } : null);
+    if (!dono) return;
+    if (dono.cnpj !== conta.empresa.cnpj || dono.vendedor !== conta.vendedor.id) {
+        await apagarLocal(['clientesFila', 'cursor_pedidos']);
+        await limparPedidos();
+    }
+    await apagarLocal(['donoFila']);
 }
 async function apagarCatalogoDeOutraEmpresa(cnpj) {
     const dona = await lerLocal('empresaCatalogo');
@@ -789,6 +814,7 @@ document.getElementById('formLogin').addEventListener('submit', async (ev) => {
         conta = { empresa: corpo.empresa, vendedor: corpo.vendedor, permissoes: corpo.permissoes, pinOfflineDias: corpo.pin_offline_dias };
         document.getElementById('senha').value = '';
         await apagarCatalogoDeOutraEmpresa(corpo.empresa.cnpj);
+        await conferirFilaGuardada();
         await guardarAcesso(corpo.token);
         await gravarLocal('conta', conta);
         await gravarLocal('ultimoOnline', Date.now());
@@ -910,10 +936,7 @@ async function entrarComAcesso(token) {
     if (navigator.onLine) {
         try {
             const { status, corpo } = await api('/api/eu');
-            if (status === 401 || status === 403) {
-                await esquecerAparelho();
-                return prepararLogin(corpo.detail || 'Seu acesso neste aparelho foi encerrado. Entre de novo.');
-            }
+            if (status === 401 || status === 403) return encerrarAcesso(corpo.detail || 'Seu acesso neste aparelho foi encerrado. Entre de novo.');
             if (status === 200) {
                 await gravarLocal('ultimoOnline', Date.now());
                 conta.empresa = corpo.empresa;
@@ -1058,7 +1081,7 @@ async function primeiraSincronizacao() {
         document.getElementById('syncEstoque').textContent = `${estoque.size} saldos do local padrão`;
         btn.disabled = false;
     } catch (e) {
-        if (e instanceof AcessoEncerrado) { await esquecerAparelho(); return prepararLogin(e.message); }
+        if (e instanceof AcessoEncerrado) return encerrarAcesso(e.message);
         erro.textContent = 'Não foi possível terminar de baixar. Confira a internet.';
         erro.classList.add('mostrar');
         btn.disabled = false; btn.textContent = 'Tentar de novo';
@@ -1082,7 +1105,7 @@ async function sincronizarEmSegundoPlano(opcoes) {
         if (document.getElementById('telaProdutos').classList.contains('ativa')) desenharProdutos();
         if (document.getElementById('telaClientes').classList.contains('ativa')) desenharClientes();
     } catch (e) {
-        if (e instanceof AcessoEncerrado) { await esquecerAparelho(); sincronizando = false; return prepararLogin(e.message); }
+        if (e instanceof AcessoEncerrado) { sincronizando = false; return encerrarAcesso(e.message); }
     } finally {
         sincronizando = false;
         mostrarUltimaSync();
@@ -1114,11 +1137,13 @@ document.getElementById('btnAtualizarProdutos').addEventListener('click', async 
 window.addEventListener('online', sincronizarEmSegundoPlano);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizarEmSegundoPlano(); });
 setInterval(sincronizarEmSegundoPlano, 5 * 60000);
-const temFila = () => pedidos.some((x) => x.situacao === 'fila' && x.cliente > 0);
+// Na fila: ainda não chegou ao ERP. 'enviando' sem número = ficou preso numa versão antiga: reenvia (o servidor não duplica).
+const naFila = (p) => p.situacao === 'fila' || (p.situacao === 'enviando' && !p.documento);
+const temFila = () => pedidos.some((x) => naFila(x) && x.cliente > 0);
 window.addEventListener('online', () => { [3000, 10000].forEach((ms) => setTimeout(() => { if (temFila()) enviarFilaComAviso(); }, ms)); });
 setInterval(() => { if (temFila() && document.visibilityState === 'visible') enviarFilaComAviso(); }, 20000);
 async function enviarFilaComAviso() {
-    try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) { await esquecerAparelho(); return prepararLogin(e.message); } }
+    try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) return encerrarAcesso(e.message); }
 }
 
 // ---- Produtos: lista + busca (nome, código, código de barras) e estoque colorido ----
@@ -1194,7 +1219,7 @@ document.getElementById('nav').addEventListener('click', (ev) => {
 // ============================================================================================================
 const NOMES_TIPO = { PA: 'Pedido de venda', PV: 'Pré-venda' };
 const SITUACOES = {
-    fila: ['⏳ aguardando envio', 's-fila'], recusado: ['⚠ recusado pelo ERP', 's-err'], no_caixa: ['🧾 aguardando finalizar', 's-cx'],
+    fila: ['⏳ aguardando envio', 's-fila'], enviando: ['⏳ aguardando envio', 's-fila'], recusado: ['⚠ recusado pelo ERP', 's-err'], no_caixa: ['🧾 aguardando finalizar', 's-cx'],
     finalizado: ['✓ finalizado', 's-ok'], rascunho: ['☁ rascunho na nuvem', 's-nuv'], faturado: ['✓ faturado', 's-ok'],
     cancelado: ['✕ cancelado', 's-can'],
 };
@@ -1219,13 +1244,15 @@ const fmtNum = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDi
 
 // ---- Envio da fila e situação dos pedidos ----
 let enviando = false;
+let excluindo = null;   // id do pedido sendo excluído: o envio automático não mexe nele
 async function enviarFila() {
     if (enviando || !navigator.onLine || !tokenEmUso) return;
     enviando = true;
     try {
         await enviarClientesPendentes();
-        for (const p of pedidos.filter((x) => x.situacao === 'fila' && x.cliente > 0)) {
+        for (const p of pedidos.filter((x) => naFila(x) && x.cliente > 0 && x.id !== excluindo)) {
             let r;
+            if (!p.tentado) { p.tentado = true; await salvarPedido(p); }
             try {
                 r = await api('/api/pedidos', { method: 'POST', body: JSON.stringify({
                     id: p.id, tipo: p.tipo, cliente: p.cliente, criado_em: p.criado_em, observacao: p.observacao,
@@ -1233,9 +1260,10 @@ async function enviarFila() {
                     pagamentos: p.pagamentos.map((g) => ({ forma: g.forma, valor: g.valor, parcelamento: g.parcelamento || 0 })) }) });
             } catch (e) { break; }   // sem conexão: tenta depois
             if (r.status === 401 || r.status === 403) throw new AcessoEncerrado(r.corpo.detail || r.corpo.erro || 'Acesso encerrado.');
-            if (r.status === 200) { Object.assign(p, { situacao: r.corpo.situacao, documento: r.corpo.documento, mensagem: r.corpo.mensagem || '' }); await salvarPedido(p); }
+            if (r.status === 200 && (r.corpo.documento || ['recusado', 'cancelado'].includes(r.corpo.situacao))) { Object.assign(p, { situacao: r.corpo.situacao, documento: r.corpo.documento, mensagem: r.corpo.mensagem || '' }); await salvarPedido(p); }
+            else if (r.status === 200 || r.status === 409) { if (p.situacao !== 'fila') { p.situacao = 'fila'; await salvarPedido(p); } continue; }   // outro envio em andamento: este fica na fila
             else if (r.status === 422) { Object.assign(p, { situacao: 'recusado', mensagem: r.corpo.erro || 'Pedido recusado.' }); await salvarPedido(p); }
-            else break;   // ERP fora do ar (503): fica na fila
+            else { if (p.situacao !== 'fila') { p.situacao = 'fila'; await salvarPedido(p); } break; }   // ERP fora (503): fica na fila
         }
         // Situação dos pedidos já enviados (no caixa, finalizado, faturado...)
         let cursor = (await lerLocal('cursor_pedidos')) || '';
@@ -1244,6 +1272,7 @@ async function enviarFila() {
             if (r.status !== 200) break;
             for (const s of r.corpo.itens) {
                 const local = pedidos.find((x) => x.id === s.id);
+                if (local && naFila(local) && !s.documento && s.situacao !== 'recusado' && s.situacao !== 'cancelado') continue;   // a fila é do celular
                 if (local) Object.assign(local, { situacao: s.situacao, documento: s.documento, mensagem: s.mensagem || local.mensagem, vendas: s.vendas || '' });
                 else pedidos.push(pedidoDoServidor(s));
             }
@@ -1302,7 +1331,7 @@ function desenharPedidos() {
     desenharFiltroData();
     const doTipo = filtroDia ? pedidos.filter((p) => (p.criado_em || '').startsWith(filtroDia)) : pedidos;
     const conta = (lista) => doTipo.filter((p) => lista.includes(p.situacao)).length;
-    const problema = conta(['recusado']) + conta(['fila']);
+    const problema = conta(['recusado']) + doTipo.filter(naFila).length;
     document.getElementById('resumoPedidos').innerHTML = `<div>Aguardando finalizar<b>${conta(['no_caixa'])}</b></div><div>Finalizados<b>${conta(['finalizado', 'faturado'])}</b></div><div>Pendentes<b class="${problema ? 'vermelho' : ''}">${problema}</b></div>`;
     const lista = doTipo.filter((p) => !termo || semAcento(`${p.cliente_nome} ${p.documento || ''}`).includes(termo));
     const grupos = new Map();
@@ -1361,11 +1390,11 @@ function abrirDetalhe(id) {
         + `<div class="item"><span class="n"><b>Total</b></span><span class="p">${fmtMoeda(p.total)}</span></div>`;
     document.getElementById('detPagamentos').innerHTML = p.pagamentos.map((g) => `<div class="item"><span class="n"><b>${esc(g.forma_nome || 'Forma ' + g.forma)}</b>${g.parcelamento_nome ? `<small>${esc(g.parcelamento_nome)}</small>` : ''}</span><span class="p">${fmtMoeda(g.valor)}</span></div>`).join('');
     document.getElementById('detObs').innerHTML = p.observacao ? `<div class="tit">Observação</div><div class="lista" style="padding:12px 14px;font-size:14px">${esc(p.observacao)}</div>` : '';
-    document.getElementById('btnReenviar').hidden = p.situacao !== 'fila';
+    document.getElementById('btnReenviar').hidden = !naFila(p);
     document.getElementById('btnPdfPedido').hidden = !p.documento || ['recusado', 'cancelado'].includes(p.situacao);
     // Cancelar: só o que ainda não virou venda. Na fila (nem chegou ao ERP) é só excluir do aparelho.
     const btnCancelar = document.getElementById('btnCancelarPedido');
-    btnCancelar.hidden = !['no_caixa', 'fila', 'recusado'].includes(p.situacao);
+    btnCancelar.hidden = !(['no_caixa', 'recusado'].includes(p.situacao) || naFila(p));
     btnCancelar.disabled = false;
     btnCancelar.textContent = p.situacao === 'no_caixa' ? 'Cancelar pedido' : 'Excluir pedido';
     document.getElementById('detNotaCancelar').textContent = p.situacao === 'finalizado'
@@ -1379,13 +1408,30 @@ async function apagarPedidoLocal(id) {
     await carregarPedidos();
 }
 document.getElementById('btnCancelarPedido').addEventListener('click', async () => {
-    const p = detalheAtual, botao = document.getElementById('btnCancelarPedido');
-    if (p.situacao === 'fila' || (p.situacao === 'recusado' && !p.documento)) {
+    const botao = document.getElementById('btnCancelarPedido');
+    let p = pedidos.find((x) => x.id === detalheAtual.id) || detalheAtual;   // o da tela pode estar desatualizado
+    if (naFila(p) || (p.situacao === 'recusado' && !p.documento)) {
         if (enviando) return avisar('Enviando pedidos agora. Aguarde um instante e tente de novo.');
         if (!(await confirmar('Excluir este pedido do aparelho? Ele não chegou ao ERP.', 'Excluir', true))) return;
-        if (navigator.onLine) { try { await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' }); } catch (e) {} }
-        await apagarPedidoLocal(p.id);
-        mostrar('telaPedidos'); return desenharPedidos();
+        if (enviando) return avisar('Enviando pedidos agora. Aguarde um instante e tente de novo.');
+        excluindo = p.id;
+        try {
+            p = pedidos.find((x) => x.id === p.id) || p;
+            if (navigator.onLine) {   // o servidor confere se ele chegou ao ERP antes de excluir
+                let r;
+                try { r = await api(`/api/pedidos/${p.id}/cancelar`, { method: 'POST' }); } catch (e) { return avisar('Sem resposta do servidor. Tente de novo.'); }
+                if (r.status !== 200) return avisar(r.corpo.erro || r.corpo.detail || 'Não foi possível excluir agora. Tente de novo.');
+                if (r.corpo.documento && r.corpo.situacao !== 'cancelado') {   // tinha entrado no ERP: vira um pedido enviado
+                    Object.assign(p, { situacao: r.corpo.situacao, documento: r.corpo.documento, mensagem: r.corpo.mensagem || '' });
+                    await salvarPedido(p);
+                    return avisar(`Este pedido já tinha chegado ao ERP (nº ${r.corpo.documento}). Para cancelar, use "Cancelar pedido".`);
+                }
+            } else if (p.tentado || p.situacao === 'enviando') {
+                return avisar('Sem internet. Este pedido já foi enviado uma vez e pode ter chegado ao ERP: conecte para excluir.');
+            }
+            await apagarPedidoLocal(p.id);
+            mostrar('telaPedidos'); return desenharPedidos();
+        } finally { excluindo = null; }
     }
     if (!navigator.onLine) return avisar('Sem internet. Para cancelar no ERP é preciso estar conectado.');
     if (!(await confirmar(`Cancelar o pedido nº ${p.documento}? Ele sai do caixa e da nuvem.`, 'Cancelar pedido', true))) return;
@@ -1862,7 +1908,7 @@ document.getElementById('btnEnviarPedido').addEventListener('click', async () =>
     await salvarPedido(pedido);
     rascunho = null;
     document.querySelector('#nav [data-aba="telaPedidos"]').click();
-    try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) { await esquecerAparelho(); return prepararLogin(e.message); } }
+    try { await enviarFila(); } catch (e) { if (e instanceof AcessoEncerrado) return encerrarAcesso(e.message); }
     abrirDetalhe(pedido.id);
 });
 
@@ -2008,7 +2054,7 @@ document.getElementById('btnSalvarCliente').addEventListener('click', async () =
             const r = await api('/api/clientes', { method: 'POST', body: JSON.stringify(d) });
             if (r.status === 200) return await clienteSalvo(r.corpo.cliente, r.corpo.existente);
             if (r.status === 422 || r.status === 400) { erro.textContent = r.corpo.erro || 'Cadastro recusado.'; erro.classList.add('mostrar'); return; }
-            if (r.status === 401 || r.status === 403) { await esquecerAparelho(); return prepararLogin(r.corpo.detail || 'Acesso encerrado.'); }
+            if (r.status === 401 || r.status === 403) return encerrarAcesso(r.corpo.detail || 'Acesso encerrado.');
         }
         // Sem internet (ou ERP fora): guarda o cadastro; o pedido desse cliente espera ele ser enviado.
         const tempId = -Date.now();
@@ -2049,7 +2095,7 @@ async function enviarClientesPendentes() {
             await gravarLinhas('pedidos', pedidos.filter((x) => x.cliente === real.id));
         } else if (r.status === 422) {
             // Cadastro recusado (ex.: dado inválido): o pedido desse cliente fica parado com o aviso.
-            for (const p of pedidos.filter((x) => x.cliente === item.temp && x.situacao === 'fila')) { p.situacao = 'recusado'; p.mensagem = 'Cadastro do cliente recusado: ' + (r.corpo.erro || ''); }
+            for (const p of pedidos.filter((x) => x.cliente === item.temp && naFila(x))) { p.situacao = 'recusado'; p.mensagem = 'Cadastro do cliente recusado: ' + (r.corpo.erro || ''); }
             await gravarLinhas('pedidos', pedidos.filter((x) => x.cliente === item.temp));
         } else restantes.push(item);
     }

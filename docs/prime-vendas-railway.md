@@ -43,6 +43,6 @@ Assim, mudar só o Vendas não reinicia o PrimeSys Info.
 
 | Variável | Padrão | Para que |
 |---|---|---|
-| `VENDAS_COTA_ERP_POR_MINUTO` | 10 | Parte da cota de 20/min do ERP que o Vendas pode usar |
+| `VENDAS_COTA_ERP_POR_MINUTO` | 8 | Parte da cota de 20/min do ERP que o Vendas pode usar (o Prime Info usa `ERP_COTA_POR_MINUTO`, padrão 12; a soma deve ficar em até 20) |
 | `VENDAS_APARELHO_VENCE_DIAS` | 30 | Aparelho sem uso por esse tempo precisa entrar de novo |
 | `VENDAS_PIN_OFFLINE_DIAS` | 7 | Dias que o PIN funciona sem falar com o servidor |

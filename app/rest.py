@@ -1,16 +1,6 @@
 """Auxiliares para os endpoints REST (paginados) da API do Meu ERP Online."""
 
-import httpx
-
 from app.meuerp_client import MeuERPClient
-
-
-async def safe_get(client: MeuERPClient, path: str, params: dict) -> dict:
-    """GET que devolve lista vazia em vez de levantar erro (uso em telas não críticas)."""
-    try:
-        return await client.get(path, params=params)
-    except httpx.HTTPStatusError:
-        return {"items": []}
 
 
 async def todas_paginas(

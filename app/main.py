@@ -11,7 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import versao
 from app.config import COOKIE_SEGURO, SESSAO_MAX_IDADE, settings
 from app.database import db_session, init_db
-from app.routers import admin, auth, dashboard, painel_mobile, produtos
+from app.routers import admin, auth, painel_mobile, produtos
 from app.tenants import create_tenant_if_missing, criptografar_tokens_existentes
 
 
@@ -118,6 +118,5 @@ criptografar_tokens_existentes()
 
 app.include_router(auth.router)
 app.include_router(admin.router)
-app.include_router(dashboard.router)
 app.include_router(produtos.router)
 app.include_router(painel_mobile.router)

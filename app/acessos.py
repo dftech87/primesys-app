@@ -95,13 +95,20 @@ async def _perfil_do_email(tenant: dict, email: str) -> int | None:
             # A API às vezes não traz o perfil: vale o do banco do ERP (mesma empresa).
             perfil = int(u.get("idPerfil") or dados["perfil_banco"].get(uid) or 0)
             dados["por_id"][uid] = {"email": (u.get("email") or "").strip().lower(), "perfil": perfil, "em": agora}
-        except httpx.HTTPStatusError:
-            dados["por_id"][uid] = {"email": "", "perfil": 0, "em": agora}   # não ligado a esta empresa
+        except httpx.HTTPStatusError as erro:
+            if erro.response.status_code == 429 or erro.response.status_code >= 500:
+                # ERP sobrecarregado ou fora: não dá para afirmar que o usuário não tem perfil. Recusa o login
+                # (a tela diz para tentar de novo) em vez de cair em "sem perfil = vê tudo".
+                raise
+            dados["por_id"][uid] = {"email": "", "perfil": 0, "em": agora}   # 4xx: não ligado a esta empresa
 
     conhecido = next((uid for uid, u in dados["por_id"].items() if u["email"] == email), None)
     if conhecido is not None:
         if agora - dados["por_id"][conhecido]["em"] > TTL_USUARIO:
-            await ler_usuario(conhecido)   # o perfil pode ter mudado
+            try:
+                await ler_usuario(conhecido)   # o perfil pode ter mudado
+            except httpx.HTTPError:
+                logger.warning("perfil do usuário não reconferido agora (ERP indisponível); vale o guardado")
         perfil = dados["por_id"][conhecido]["perfil"]
         if perfil > 0 and dados["por_id"][conhecido]["email"] == email:
             return perfil

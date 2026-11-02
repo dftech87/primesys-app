@@ -17,6 +17,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # Fatia da cota do ERP que este processo pode usar (o PrimeSys Info usa a dele). Ajustado antes de qualquer chamada.
 meuerp_client.RATE_LIMIT_CAPACITY = config.COTA_ERP_POR_MINUTO
-meuerp_client.RESERVA_PARA_INTERATIVAS = 4   # login e pedido nunca esperam pela sincronização em segundo plano
+meuerp_client.RESERVA_PARA_INTERATIVAS = 3   # login e pedido nunca esperam pela sincronização em segundo plano
 
 ESTATICOS = Path(__file__).parent / "static"
 
@@ -273,6 +274,10 @@ async def pedido_enviar(request: Request, aparelho: dict = Depends(sessao.aparel
     except pedidos.PedidoRecusado as erro:
         return _erro(422, str(erro))
     except pedidos.ErpIndisponivel:
+        return _erro(503, "ERP indisponível agora. O pedido fica guardado e é enviado depois.")
+    except pedidos.PedidoEmEnvio:
+        return _erro(409, "Este pedido já está sendo enviado. Ele continua na fila.")
+    except (vendedores.MapaIncompleto, httpx.HTTPError):   # ERP falhou ao conferir o vendedor: tenta depois
         return _erro(503, "ERP indisponível agora. O pedido fica guardado e é enviado depois.")
 
 

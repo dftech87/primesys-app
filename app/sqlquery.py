@@ -38,7 +38,7 @@ async def executar(client: MeuERPClient, sql: str, max_paginas: int = 5) -> list
                 f"/api/consulta/sql/v1?limit={TAMANHO_PAGINA}&offset={pagina * TAMANHO_PAGINA}",
                 json={"sql": sql},
             )
-        except httpx.HTTPError as erro:
+        except (httpx.HTTPError, ValueError) as erro:   # ValueError: resposta que não é JSON (página de manutenção)
             raise ConsultaIndisponivel(str(erro)) from erro
         linhas.extend(resposta.get("items") or [])
         if not resposta.get("hasNext"):
