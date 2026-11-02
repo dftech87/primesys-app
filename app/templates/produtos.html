@@ -5,20 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
     <title>PrimeSys | Consulta de Produtos</title>
     <meta name="theme-color" content="#0b3895" />
+    <script>
+        try { const t = localStorage.getItem('prime-tema'); if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; } catch (e) {}
+    </script>
     <link rel="manifest" href="/static/manifest.json" />
     <link rel="icon" href="/static/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
     <style>
+        /* Tema: claro por padrão; escuro quando o celular está no escuro (Automático) ou quando a pessoa escolhe no botão do topo
+           (a escolha fica guardada no aparelho e é lida no <head>, antes de pintar, para não piscar). */
         :root {
             --azul: #0b3895;
             --azul-escuro: #082a6e;
             --ciano: #10ebff;
-            --bg: #f1f5f9;
+            color-scheme: light;
+            --bg: #f1f5f9; --card: #fff; --card-2: #f8fafc; --chip: #f1f5f9; --trilho: #e2e8f0;
+            --borda: #e2e8f0; --borda-forte: #cbd5e1; --linha: #f1f5f9;
+            --texto: #0f172a; --texto-1: #334155; --texto-2: #64748b; --texto-3: #94a3b8;
+            --azul-grafico: #0b3895; --azul-texto: #0b3895; --azul-fundo: #eff6ff; --azul-borda: #bfdbfe;
+            --ok: #15803d; --ok-texto: #166534; --ok-fundo: #dcfce7;
+            --erro: #b91c1c; --erro-texto: #991b1b; --erro-fundo: #fee2e2; --erro-borda: #fecaca;
+            --aviso: #b45309; --aviso-texto: #92400e; --aviso-fundo: #fef3c7;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-tema="claro"]) {
+            color-scheme: dark;
+            --bg: #0b1220; --card: #131f33; --card-2: #182741; --chip: #1b2b47; --trilho: #26385a;
+            --borda: #243654; --borda-forte: #36496b; --linha: #1d2c47;
+            --texto: #e6ebf3; --texto-1: #cbd5e1; --texto-2: #9aa9c0; --texto-3: #7585a0;
+            --azul-grafico: #4f8cff; --azul-texto: #7fb0ff; --azul-fundo: #14284d; --azul-borda: #28487f;
+            --ok: #4ade80; --ok-texto: #86efac; --ok-fundo: #11301f;
+            --erro: #f87171; --erro-texto: #fca5a5; --erro-fundo: #3b161a; --erro-borda: #7f2a30;
+            --aviso: #fbbf24; --aviso-texto: #fcd34d; --aviso-fundo: #3a2b0c;
+            }
+        }
+        :root[data-tema="escuro"] {
+            color-scheme: dark;
+            --bg: #0b1220; --card: #131f33; --card-2: #182741; --chip: #1b2b47; --trilho: #26385a;
+            --borda: #243654; --borda-forte: #36496b; --linha: #1d2c47;
+            --texto: #e6ebf3; --texto-1: #cbd5e1; --texto-2: #9aa9c0; --texto-3: #7585a0;
+            --azul-grafico: #4f8cff; --azul-texto: #7fb0ff; --azul-fundo: #14284d; --azul-borda: #28487f;
+            --ok: #4ade80; --ok-texto: #86efac; --ok-fundo: #11301f;
+            --erro: #f87171; --erro-texto: #fca5a5; --erro-fundo: #3b161a; --erro-borda: #7f2a30;
+            --aviso: #fbbf24; --aviso-texto: #fcd34d; --aviso-fundo: #3a2b0c;
         }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body {
             margin: 0; min-height: 100%; overflow-y: auto;
-            font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: #0f172a;
+            font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--texto);
         }
         /* 100vh mede a tela toda em alguns Android, sem descontar barra de status
            e navegação por gestos, o que empurra a barra inferior pra fora da área
@@ -44,20 +78,25 @@
         .header-textos h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .header-textos p { margin: 2px 0 0; font-size: 12px; color: #cfe0ff; }
         .header-logo { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 8px; background: #fff; padding: 3px; }
+        .btn-tema { flex: 0 0 auto; width: 34px; height: 34px; border: 0; border-radius: 10px; background: rgba(255,255,255,0.15);
+            color: #fff; font-size: 17px; line-height: 1; cursor: pointer; touch-action: manipulation; }
+        #temaAviso { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: rgba(15,23,42,.92); color: #fff;
+            font-size: 13px; padding: 8px 14px; border-radius: 18px; z-index: 60; opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+        #temaAviso.mostrar { opacity: 1; }
         .btn-sair { flex: 0 0 auto; color: #cfe0ff; text-decoration: none; font-size: 13px; }
 
         select#loja {
             margin-top: 12px; width: 100%; border: none; border-radius: 12px;
-            padding: 12px 14px; font-size: 14px; background: #fff; color: #0f172a;
+            padding: 12px 14px; font-size: 14px; background: var(--card); color: var(--texto);
         }
         .busca-wrap { margin-top: 10px; position: relative; }
         .busca-wrap input {
             width: 100%; border: none; border-radius: 12px; padding: 12px 44px 12px 40px;
-            font-size: 14px; background: #fff; color: #0f172a;
+            font-size: 14px; background: var(--card); color: var(--texto);
         }
         .busca-wrap .icone-busca {
             position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-            color: #94a3b8; font-size: 16px;
+            color: var(--texto-3); font-size: 16px;
         }
         .btn-scan {
             position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
@@ -92,13 +131,13 @@
         main { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
         .tabbar {
-            flex: 0 0 auto; display: flex; background: #fff; border-top: 1px solid #e2e8f0;
+            flex: 0 0 auto; display: flex; background: var(--card); border-top: 1px solid var(--borda);
             padding-bottom: env(safe-area-inset-bottom, 0);
         }
         .tabbar button {
             flex: 1; border: 0; background: none; padding: 10px 4px 8px; cursor: pointer;
             display: flex; flex-direction: column; align-items: center; gap: 2px;
-            color: #94a3b8; font-size: 11px;
+            color: var(--texto-3); font-size: 11px;
         }
         .tabbar button .tab-icone { font-size: 20px; line-height: 1; position: relative; }
         .selo {
@@ -107,16 +146,16 @@
             font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
         }
         .selo.mostrar { display: block; }
-        .tabbar button.ativo { color: var(--azul); font-weight: 700; }
+        .tabbar button.ativo { color: var(--azul-texto); font-weight: 700; }
 
         #dashboardView { display: none; padding: 16px; }
         .dash-filtro {
             display: flex; align-items: flex-end; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
         }
         .dash-filtro[hidden] { display: none; }
-        .dash-filtro label { display: block; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+        .dash-filtro label { display: block; font-size: 11px; font-weight: 600; color: var(--texto-2); margin-bottom: 4px; }
         .dash-filtro input {
-            border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; font-size: 13px;
+            border: 1px solid var(--borda-forte); border-radius: 8px; padding: 8px 10px; font-size: 13px;
         }
         .dash-filtro button {
             border: 0; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 700;
@@ -126,7 +165,7 @@
         /* Atalhos de período */
         .dash-atalhos { display: flex; gap: 6px; margin-bottom: 12px; }
         .dash-atalhos button {
-            border: 1px solid #e2e8f0; background: #fff; color: #475569; border-radius: 18px; padding: 7px 13px;
+            border: 1px solid var(--borda); background: var(--card); color: var(--texto-2); border-radius: 18px; padding: 7px 13px;
             font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; touch-action: manipulation;
         }
         .dash-atalhos button.on { background: var(--azul); border-color: var(--azul); color: #fff; font-weight: 700; }
@@ -154,196 +193,196 @@
         .rosca-lado .legenda { flex: 1; min-width: 0; }
         .rosca-lado .linha-info { padding: 6px 0; }
         .dash-card {
-            background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            background: var(--card); border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
         .dash-card.dash-card-full { grid-column: 1 / -1; }
-        .dash-card .rotulo { font-size: 12px; color: #64748b; margin-bottom: 4px; }
-        .dash-card .valor { font-size: 20px; font-weight: 700; color: var(--azul); }
+        .dash-card .rotulo { font-size: 12px; color: var(--texto-2); margin-bottom: 4px; }
+        .dash-card .valor { font-size: 20px; font-weight: 700; color: var(--azul-texto); }
         .dash-panel {
-            background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            background: var(--card); border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             margin-bottom: 16px;
         }
-        .dash-panel h3 { margin: 0 0 12px; font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; }
-        .dash-card .delta { font-size: 12px; margin-top: 4px; color: #64748b; }
-        .dash-card .delta.up { color: #15803d; }
-        .dash-card .delta.down { color: #b91c1c; }
+        .dash-panel h3 { margin: 0 0 12px; font-size: 13px; font-weight: 700; color: var(--texto-1); text-transform: uppercase; }
+        .dash-card .delta { font-size: 12px; margin-top: 4px; color: var(--texto-2); }
+        .dash-card .delta.up { color: var(--ok); }
+        .dash-card .delta.down { color: var(--erro); }
         .forma { margin-bottom: 12px; }
         .forma .topo { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-        .forma .barra { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
+        .forma .barra { height: 8px; border-radius: 4px; background: var(--trilho); overflow: hidden; }
         .forma .barra span { display: block; height: 100%; background: var(--azul); border-radius: 4px; }
-        .nota { font-size: 12px; color: #64748b; line-height: 1.4; margin-top: 8px; }
+        .nota { font-size: 12px; color: var(--texto-2); line-height: 1.4; margin-top: 8px; }
         .linha-info { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-            padding: 9px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+            padding: 9px 0; border-bottom: 1px solid var(--linha); font-size: 13px; }
         .linha-info:last-child { border-bottom: 0; }
-        .linha-info .desc { color: #334155; min-width: 0; overflow-wrap: anywhere; }
+        .linha-info .desc { color: var(--texto-1); min-width: 0; overflow-wrap: anywhere; }
         .linha-info .val { font-weight: 700; white-space: nowrap; }
-        .val.ruim { color: #b91c1c; }
-        .val.ok { color: #15803d; }
-        .val.aviso { color: #b45309; }
-        .indisponivel { color: #94a3b8; font-size: 13px; }
+        .val.ruim { color: var(--erro); }
+        .val.ok { color: var(--ok); }
+        .val.aviso { color: var(--aviso); }
+        .indisponivel { color: var(--texto-3); font-size: 13px; }
         .fd-linha { display: grid; grid-template-columns: 1fr 58px 58px 66px; gap: 4px; align-items: center; }
-        .fd-cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
+        .fd-cab { font-size: 10px; color: var(--texto-2); padding: 4px 6px; }
         .fd-linha .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-        .cx { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; border-left: 5px solid #94a3b8;
+        .cx { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 10px; border-left: 5px solid #94a3b8;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
         .cx.cx-ok { border-left-color: #16a34a; } .cx.cx-neg { border-left-color: #dc2626; }
         .cx.cx-pos { border-left-color: #1d4fd8; } .cx.cx-neutro { border-left-color: #d97706; }
         .cx { cursor: pointer; }
-        .cx:active { background: #f8fafc; }
+        .cx:active { background: var(--card-2); }
         .cx-formas { cursor: default; }
         .cx-topo { display: flex; align-items: baseline; gap: 8px; cursor: pointer; -webkit-tap-highlight-color: rgba(11,56,149,.08); }
         .cx-nome { font-weight: 700; font-size: 14px; flex: 1; min-width: 0; }
-        .cx-ab { font-size: 11px; color: #64748b; white-space: nowrap; }
-        .cx-topo .chev { color: #94a3b8; font-size: 12px; }
+        .cx-ab { font-size: 11px; color: var(--texto-2); white-space: nowrap; }
+        .cx-topo .chev { color: var(--texto-3); font-size: 12px; }
         .cx.aberto .chev { transform: rotate(180deg); }
-        .cx-sub { font-size: 11px; color: #64748b; margin-top: 3px; line-height: 1.4; }
+        .cx-sub { font-size: 11px; color: var(--texto-2); margin-top: 3px; line-height: 1.4; }
         .cx-totais { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 10px; }
-        .cx-totais .lb { font-size: 10.5px; color: #64748b; }
+        .cx-totais .lb { font-size: 10.5px; color: var(--texto-2); }
         .cx-totais b { font-size: 14px; font-variant-numeric: tabular-nums; }
-        .cx-din { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9;
+        .cx-din { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--linha);
             font-size: 12px; font-weight: 700; }
-        .cx-din span:first-child { font-weight: 400; color: #475569; }
-        .cx-formas { margin-top: 10px; padding-top: 4px; border-top: 1px solid #f1f5f9; }
-        .dif-pos { color: #15803d; font-weight: 700; }
-        .dif-neg { color: #b91c1c; font-weight: 700; }
-        .dif-zero { color: #94a3b8; }
-        .fech-aviso-texto { color: #92400e; font-size: 10.5px; }
-        .fd-linha { padding: 6px 2px; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
-        .fd-total { font-weight: 700; border-top: 1px solid #e2e8f0; }
+        .cx-din span:first-child { font-weight: 400; color: var(--texto-2); }
+        .cx-formas { margin-top: 10px; padding-top: 4px; border-top: 1px solid var(--linha); }
+        .dif-pos { color: var(--ok); font-weight: 700; }
+        .dif-neg { color: var(--erro); font-weight: 700; }
+        .dif-zero { color: var(--texto-3); }
+        .fech-aviso-texto { color: var(--aviso-texto); font-size: 10.5px; }
+        .fd-linha { padding: 6px 2px; font-size: 12px; border-bottom: 1px solid var(--linha); }
+        .fd-total { font-weight: 700; border-top: 1px solid var(--borda); }
         .fd-dif { display: inline-block; min-width: 56px; padding: 2px 5px; border-radius: 5px; text-align: right; }
-        .fd-dif.dif-pos { background: #dcfce7; } .fd-dif.dif-neg { background: #fee2e2; } .fd-dif.dif-zero { background: #f1f5f9; }
-        .fech-aviso { margin-top: 8px; padding: 8px 10px; background: #fffbeb; border-radius: 8px; font-size: 11.5px; line-height: 1.45; color: #92400e; }
-        .btn-entradas { width: 100%; margin-top: 12px; padding: 12px 14px; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; color: var(--azul); font-size: 14px; font-weight: 700; text-align: left; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .fd-dif.dif-pos { background: var(--ok-fundo); } .fd-dif.dif-neg { background: var(--erro-fundo); } .fd-dif.dif-zero { background: var(--chip); }
+        .fech-aviso { margin-top: 8px; padding: 8px 10px; background: var(--aviso-fundo); border-radius: 8px; font-size: 11.5px; line-height: 1.45; color: var(--aviso-texto); }
+        .btn-entradas { width: 100%; margin-top: 12px; padding: 12px 14px; border: 1px solid var(--azul-borda); border-radius: 12px; background: var(--azul-fundo); color: var(--azul-texto); font-size: 14px; font-weight: 700; text-align: left; display: flex; align-items: center; gap: 10px; cursor: pointer; }
         .btn-entradas[hidden] { display: none; }
-        .btn-entradas small { display: block; font-size: 11.5px; font-weight: 500; color: #475569; margin-top: 2px; }
+        .btn-entradas small { display: block; font-size: 11.5px; font-weight: 500; color: var(--texto-2); margin-top: 2px; }
         .btn-entradas .seta-dir { margin-left: auto; font-size: 18px; }
         /* Compras · produto: resumo, evolução do custo e lista das notas */
         .ce-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .ce-k { background: #f8fafc; border-radius: 10px; padding: 8px 10px; }
-        .ce-k .r { font-size: 11px; color: #64748b; }
-        .ce-k .v { font-size: 15px; font-weight: 700; color: var(--azul); margin-top: 2px; white-space: nowrap; }
-        .ce-k .v.ok { color: #15803d; } .ce-k .v.ruim { color: #b91c1c; }
+        .ce-k { background: var(--card-2); border-radius: 10px; padding: 8px 10px; }
+        .ce-k .r { font-size: 11px; color: var(--texto-2); }
+        .ce-k .v { font-size: 15px; font-weight: 700; color: var(--azul-texto); margin-top: 2px; white-space: nowrap; }
+        .ce-k .v.ok { color: var(--ok); } .ce-k .v.ruim { color: var(--erro); }
         .ce-tab { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
-        .ce-tab th { text-align: left; color: #64748b; font-weight: 600; font-size: 11px; padding: 6px 4px; border-bottom: 1px solid #e2e8f0; }
-        .ce-tab td { padding: 8px 4px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+        .ce-tab th { text-align: left; color: var(--texto-2); font-weight: 600; font-size: 11px; padding: 6px 4px; border-bottom: 1px solid var(--borda); }
+        .ce-tab td { padding: 8px 4px; border-bottom: 1px solid var(--linha); vertical-align: top; }
         .ce-tab .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .ce-tab .forn .nome { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.3; }
-        .ce-tab .sub { display: block; font-size: 10.5px; color: #64748b; font-weight: 400; margin-top: 2px; }
-        .ce-tab tr.ult td { background: #eff6ff; font-weight: 700; color: #0b3895; }
-        .ce-tab .sub.ce-igual { color: #94a3b8; }
+        .ce-tab .sub { display: block; font-size: 10.5px; color: var(--texto-2); font-weight: 400; margin-top: 2px; }
+        .ce-tab tr.ult td { background: var(--azul-fundo); font-weight: 700; color: var(--azul-texto); }
+        .ce-tab .sub.ce-igual { color: var(--texto-3); }
         /* Selo da variação do custo em relação à nota anterior: sobe = verde, cai = vermelho */
         .ce-tab .custo { display: block; }
         .ce-selo { display: inline-block; margin-top: 4px; padding: 2px 7px; border-radius: 10px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
-        .ce-selo.sobe { background: #dcfce7; color: #15803d; }
-        .ce-selo.desce { background: #fee2e2; color: #b91c1c; }
+        .ce-selo.sobe { background: var(--ok-fundo); color: var(--ok); }
+        .ce-selo.desce { background: var(--erro-fundo); color: var(--erro); }
         .ce-tab tr.ult td:first-child { border-radius: 8px 0 0 8px; } .ce-tab tr.ult td:last-child { border-radius: 0 8px 8px 0; }
-        .ce-sobe { color: #15803d; } .ce-desce { color: #b91c1c; } .ce-igual { color: #94a3b8; }
-        .ce-k .v.ce-sobe { color: #15803d; } .ce-k .v.ce-desce { color: #b91c1c; } .ce-k .v.ce-igual { color: #94a3b8; }
+        .ce-sobe { color: var(--ok); } .ce-desce { color: var(--erro); } .ce-igual { color: var(--texto-3); }
+        .ce-k .v.ce-sobe { color: var(--ok); } .ce-k .v.ce-desce { color: var(--erro); } .ce-k .v.ce-igual { color: var(--texto-3); }
         .tab-ent .cab, .tab-ent .ent-linha { display: grid; grid-template-columns: 60px 1fr 30px 60px 64px; gap: 4px; align-items: center; }
-        .tab-ent .cab { font-size: 10px; color: #64748b; padding: 4px 6px; }
-        .tab-ent .ent-linha { padding: 9px 6px; font-size: 12px; border: 1px solid transparent; border-bottom: 1px solid #eef2f7; }
-        .tab-ent .ent-forn { grid-column: 1 / -1; font-size: 11px; font-weight: 400; color: #64748b; line-height: 1.3;
+        .tab-ent .cab { font-size: 10px; color: var(--texto-2); padding: 4px 6px; }
+        .tab-ent .ent-linha { padding: 9px 6px; font-size: 12px; border: 1px solid transparent; border-bottom: 1px solid var(--linha); }
+        .tab-ent .ent-forn { grid-column: 1 / -1; font-size: 11px; font-weight: 400; color: var(--texto-2); line-height: 1.3;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .tab-ent .ent-linha.ultima .ent-forn { font-weight: 700; color: #1d4fd8; }
+        .tab-ent .ent-linha.ultima .ent-forn { font-weight: 700; color: var(--azul-texto); }
         .tab-ent .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .tab-ent .ent-linha.ultima { margin-bottom: 4px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
-            font-weight: 800; color: #0b3895; }
+        .tab-ent .ent-linha.ultima { margin-bottom: 4px; background: var(--azul-fundo); border: 1px solid var(--azul-borda); border-radius: 8px;
+            font-weight: 800; color: var(--azul-texto); }
         .tab-ent .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
-        .tab-ent .sem { color: #94a3b8; }
-        .tab-ent .sobe { color: #15803d; font-size: 10px; }   /* custo subiu: verde */
-        .tab-ent .desce { color: #b91c1c; font-size: 10px; }  /* custo caiu: vermelho */
-        .tab-ent .mg-ruim { color: #b91c1c; }
-        .tab-ent .mg-ok { color: #15803d; }
+        .tab-ent .sem { color: var(--texto-3); }
+        .tab-ent .sobe { color: var(--ok); font-size: 10px; }   /* custo subiu: verde */
+        .tab-ent .desce { color: var(--erro); font-size: 10px; }  /* custo caiu: vermelho */
+        .tab-ent .mg-ruim { color: var(--erro); }
+        .tab-ent .mg-ok { color: var(--ok); }
         .linha-preco { display: grid; grid-template-columns: 56px 1fr 1fr 82px; gap: 4px; align-items: center; padding: 8px 6px;
-            border-bottom: 1px solid #eef2f7; font-size: 12px; }
-        .linha-preco.cab { font-size: 10px; color: #64748b; padding: 4px 6px; border: 0; }
+            border-bottom: 1px solid var(--linha); font-size: 12px; }
+        .linha-preco.cab { font-size: 10px; color: var(--texto-2); padding: 4px 6px; border: 0; }
         .linha-preco .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .linha-preco .lp-quem { padding-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .linha-preco.atual { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-weight: 800; color: #0b3895; }
+        .linha-preco.atual { background: var(--azul-fundo); border: 1px solid var(--azul-borda); border-radius: 8px; font-weight: 800; color: var(--azul-texto); }
         .linha-preco .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
-        .linha-preco .sobe { color: #b91c1c; } .linha-preco .desce { color: #15803d; } .linha-preco .sem { color: #94a3b8; }
-        .tab-ent .legenda, #destinoPrecoFicha .legenda { font-size: 11px; color: #64748b; margin: 2px 0 8px; }
-        .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid #cbd5e1;
-            border-radius: 8px; background: #fff; color: var(--azul); font-size: 13px; font-weight: 700; cursor: pointer; }
+        .linha-preco .sobe { color: var(--erro); } .linha-preco .desce { color: var(--ok); } .linha-preco .sem { color: var(--texto-3); }
+        .tab-ent .legenda, #destinoPrecoFicha .legenda { font-size: 11px; color: var(--texto-2); margin: 2px 0 8px; }
+        .mais { display: block; width: 100%; margin-top: 8px; padding: 9px; border: 1px solid var(--borda-forte);
+            border-radius: 8px; background: var(--card); color: var(--azul-texto); font-size: 13px; font-weight: 700; cursor: pointer; }
 
         .rosca { text-align: center; margin-bottom: 8px; }
         .rosca svg { max-width: 190px; width: 100%; height: auto; }
         .tipo-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .tipo-cards.um { grid-template-columns: 1fr; }   /* cliente que vende com um tipo só */
-        .tipo-card { background: #f8fafc; border: 2px solid transparent; border-radius: 12px; padding: 12px; cursor: pointer;
+        .tipo-card { background: var(--card-2); border: 2px solid transparent; border-radius: 12px; padding: 12px; cursor: pointer;
             touch-action: manipulation; text-align: left; font: inherit; color: inherit; width: 100%; }
-        .tipo-card.sel { background: #fff; border-color: var(--azul); }
-        .tipo-card .nome { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #64748b; }
+        .tipo-card.sel { background: var(--card); border-color: var(--azul-texto); }
+        .tipo-card .nome { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--texto-2); }
         .tipo-card .cor { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
-        .tipo-card .nome .seta { color: #94a3b8; font-size: 13px; }
-        .tipo-card .valor { font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 4px; white-space: nowrap; }
-        .tipo-card .qtd { font-size: 12px; color: #64748b; margin-top: 2px; }
-        .tipo-det { margin-top: 10px; background: #f8fafc; border-radius: 10px; padding: 4px 12px; }
-        .tipo-det .qtd-forma { font-size: 11px; color: #94a3b8; margin-left: 5px; }
+        .tipo-card .nome .seta { color: var(--texto-3); font-size: 13px; }
+        .tipo-card .valor { font-size: 16px; font-weight: 700; color: var(--texto); margin-top: 4px; white-space: nowrap; }
+        .tipo-card .qtd { font-size: 12px; color: var(--texto-2); margin-top: 2px; }
+        .tipo-det { margin-top: 10px; background: var(--card-2); border-radius: 10px; padding: 4px 12px; }
+        .tipo-det .qtd-forma { font-size: 11px; color: var(--texto-3); margin-left: 5px; }
         .legenda .cor { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
         .legenda .linha-info .desc { display: flex; align-items: center; }
-        .insight { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9;
-            font-size: 13px; line-height: 1.45; color: #334155; }
+        .insight { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--linha);
+            font-size: 13px; line-height: 1.45; color: var(--texto-1); }
         .insight:last-child { border-bottom: 0; }
         .insight .ico { font-size: 20px; flex-shrink: 0; }
         #alertasView { display: none; padding: 16px; }
         .pill { float: right; font-size: 10px; font-weight: 700; text-transform: none; padding: 2px 9px; border-radius: 10px; }
-        .pill.ok { background: #dcfce7; color: #166534; }
-        .pill.aviso { background: #fef3c7; color: #92400e; }
-        .pill.ruim { background: #fee2e2; color: #991b1b; }
-        .pill.nd { background: #e2e8f0; color: #475569; }
-        .resumo-alertas { border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; background: #fff;
+        .pill.ok { background: var(--ok-fundo); color: var(--ok-texto); }
+        .pill.aviso { background: var(--aviso-fundo); color: var(--aviso-texto); }
+        .pill.ruim { background: var(--erro-fundo); color: var(--erro-texto); }
+        .pill.nd { background: var(--trilho); color: var(--texto-2); }
+        .resumo-alertas { border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; background: var(--card);
             box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 5px solid #94a3b8; }
         .resumo-alertas.ok { border-left-color: #16a34a; }
         .resumo-alertas.aviso { border-left-color: #d97706; }
         .resumo-alertas.ruim { border-left-color: #dc2626; }
         .resumo-alertas .titulo { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-        .resumo-alertas .item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; color: #334155; }
+        .resumo-alertas .item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; color: var(--texto-1); }
         .ponto { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: #94a3b8; }
         .ponto.ok { background: #16a34a; }
         .ponto.aviso { background: #d97706; }
         .ponto.ruim { background: #dc2626; }
         .gestao summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
         .gestao summary::-webkit-details-marker { display: none; }
-        .gestao summary::after { content: '\25BE'; color: #94a3b8; font-size: 14px; }
+        .gestao summary::after { content: '\25BE'; color: var(--texto-3); font-size: 14px; }
         .gestao details[open] > summary::after { content: '\25B4'; }
-        .gestao .tit { font-size: 13px; font-weight: 700; color: #334155; text-transform: uppercase; }
+        .gestao .tit { font-size: 13px; font-weight: 700; color: var(--texto-1); text-transform: uppercase; }
         .gestao .pill { float: none; margin-left: 6px; text-transform: none; }
-        .sub-resumo { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: #475569; }
+        .sub-resumo { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; color: var(--texto-2); }
         /* Aviso de venda com margem negativa: caixa vermelha em destaque, visível com o painel fechado.
            (vem depois de .sub-resumo e com mais especificidade, senão a cor cinza do resumo vence) */
         .sub-resumo.alerta-margem {
             margin-top: 8px; padding: 8px 10px; border-radius: 10px; line-height: 1.35;
-            background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-weight: 700;
+            background: var(--erro-fundo); border: 1px solid var(--erro-borda); color: var(--erro); font-weight: 700;
         }
         .sub-resumo.alerta-margem:empty { display: none; }
         .gestao details > div { margin-top: 10px; }
         .est-g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 8px; }
-        .est-k { background: #f8fafc; border-radius: 12px; padding: 12px; }
-        .est-k .rotulo { font-size: 12px; color: #64748b; }
-        .est-k .valor { font-size: 16px; font-weight: 700; color: var(--azul); margin-top: 3px; white-space: nowrap; }
-        .est-rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: #64748b; }
-        .est-rodape button { background: none; border: 0; color: var(--azul); font: inherit; font-weight: 700; padding: 6px 0; cursor: pointer; touch-action: manipulation; }
+        .est-k { background: var(--card-2); border-radius: 12px; padding: 12px; }
+        .est-k .rotulo { font-size: 12px; color: var(--texto-2); }
+        .est-k .valor { font-size: 16px; font-weight: 700; color: var(--azul-texto); margin-top: 3px; white-space: nowrap; }
+        .est-rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--texto-2); }
+        .est-rodape button { background: none; border: 0; color: var(--azul-texto); font: inherit; font-weight: 700; padding: 6px 0; cursor: pointer; touch-action: manipulation; }
         .abre-produto { cursor: pointer; touch-action: manipulation; transition: background-color .12s ease; }
-        .abre-produto:active { background: #f1f5f9; }
-        .abre-produto .val::after { content: ' \203A'; color: #94a3b8; font-weight: 400; margin-left: 4px; }
-        .sub-titulo { font-size: 11px; font-weight: 700; color: #64748b; margin: 10px 0 2px; }
-        .sub { display: block; font-size: 11px; color: #64748b; margin-top: 2px; }
-        .val small { display: block; font-weight: 400; color: #15803d; }
-        details.grupo { border-bottom: 1px solid #f1f5f9; }
+        .abre-produto:active { background: var(--chip); }
+        .abre-produto .val::after { content: ' \203A'; color: var(--texto-3); font-weight: 400; margin-left: 4px; }
+        .sub-titulo { font-size: 11px; font-weight: 700; color: var(--texto-2); margin: 10px 0 2px; }
+        .sub { display: block; font-size: 11px; color: var(--texto-2); margin-top: 2px; }
+        .val small { display: block; font-weight: 400; color: var(--ok); }
+        details.grupo { border-bottom: 1px solid var(--linha); }
         details.grupo:last-child { border-bottom: 0; }
         details.grupo > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between;
-            align-items: baseline; gap: 12px; padding: 10px 0; font-size: 13px; color: #334155; }
+            align-items: baseline; gap: 12px; padding: 10px 0; font-size: 13px; color: var(--texto-1); }
         details.grupo > summary::-webkit-details-marker { display: none; }
-        details.grupo > summary .desc::after { content: ' \25BE'; color: #94a3b8; }
+        details.grupo > summary .desc::after { content: ' \25BE'; color: var(--texto-3); }
         details.grupo[open] > summary .desc::after { content: ' \25B4'; }
         details.grupo > summary.vazio { cursor: default; }
         details.grupo > summary.vazio .desc::after { content: ''; }
-        .titulo-conta { padding: 8px 0 8px 10px; border-top: 1px dashed #e2e8f0; font-size: 12px; color: #475569; }
+        .titulo-conta { padding: 8px 0 8px 10px; border-top: 1px dashed var(--borda); font-size: 12px; color: var(--texto-2); }
         .titulo-conta .linha1 { display: flex; justify-content: space-between; gap: 10px; }
-        .titulo-conta .nome { color: #0f172a; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-        .titulo-conta .quando { color: #64748b; font-size: 11px; margin-top: 2px; }
-        .titulo-conta .quando.atraso { color: #b91c1c; }
+        .titulo-conta .nome { color: var(--texto); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+        .titulo-conta .quando { color: var(--texto-2); font-size: 11px; margin-top: 2px; }
+        .titulo-conta .quando.atraso { color: var(--erro); }
 
         /* Fluidez: entrada suave das telas, resposta ao toque e esqueletos no lugar de "Carregando..." */
         @keyframes entrada { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -361,10 +400,10 @@
         .tabbar button.ativo .tab-icone { transform: scale(1.18) translateY(-1px); }
         .tabbar button:active { transform: scale(.93); }
         .card, .cx-topo, .btn-scan, #dashFiltrar, #confFiltrar, .mais, .voltar-compras { transition: background-color .12s ease, transform .1s ease; }
-        .card:active { transform: scale(.985); background: #f8fafc; }
+        .card:active { transform: scale(.985); background: var(--card-2); }
         #dashFiltrar:active, #confFiltrar:active, .mais:active { transform: scale(.97); }
         .sk { display: block; height: 14px; margin: 9px 0; border-radius: 6px;
-            background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 40%, #e2e8f0 60%); background-size: 300% 100%;
+            background: linear-gradient(90deg, var(--trilho) 25%, var(--chip) 40%, var(--trilho) 60%); background-size: 300% 100%;
             animation: brilho 1.3s ease-in-out infinite; }
         .sk.alto { height: 26px; } .sk.card-sk { height: 74px; border-radius: 12px; margin: 0 0 10px; }
         /* Quem pede menos movimento (opção "remover animações" do Android) não vê deslocamento nem brilho, mas ainda
@@ -387,10 +426,10 @@
         .tabbar button[hidden] { display: none; }
         #conferenciaView { display: none; padding: 16px; }
         #financeiroView { display: none; padding: 16px; }
-        .fin-seg { display: flex; background: #e2e8f0; border-radius: 10px; padding: 3px; gap: 3px; margin-bottom: 14px; }
+        .fin-seg { display: flex; background: var(--trilho); border-radius: 10px; padding: 3px; gap: 3px; margin-bottom: 14px; }
         .fin-seg button { flex: 1; border: 0; background: none; border-radius: 8px; padding: 9px 4px; font: inherit; font-size: 14px;
-            color: #64748b; cursor: pointer; touch-action: manipulation; }
-        .fin-seg button.on { background: #fff; color: #0f172a; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+            color: var(--texto-2); cursor: pointer; touch-action: manipulation; }
+        .fin-seg button.on { background: var(--card); color: var(--texto); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
         .fin-total { font-size: 24px; font-weight: 700; }
         /* Destaque no topo: vermelho em A pagar, verde em A receber, com a barra dividida por faixa */
         .fin-hero { border-radius: 16px; padding: 16px; color: #fff; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18); }
@@ -403,56 +442,56 @@
         .fin-pilha i { display: block; height: 100%; }
         .fin-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 11px; color: rgba(255, 255, 255, 0.95); }
         .fin-leg span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; background: var(--c); }
-        .fin-total.pagar { color: #b91c1c; } .fin-total.receber { color: #15803d; }
-        .fin-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
-        .fin-faixa { padding: 10px 0; border-bottom: 1px solid #f1f5f9; cursor: pointer; touch-action: manipulation; }
+        .fin-total.pagar { color: var(--erro); } .fin-total.receber { color: var(--ok); }
+        .fin-sub { font-size: 12px; color: var(--texto-2); margin-top: 2px; }
+        .fin-faixa { padding: 10px 0; border-bottom: 1px solid var(--linha); cursor: pointer; touch-action: manipulation; }
         .fin-faixa:last-of-type { border-bottom: 0; }
         .fin-faixa .topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
-        .fin-faixa .topo .qtd { color: #64748b; font-size: 12px; margin-left: 4px; }
+        .fin-faixa .topo .qtd { color: var(--texto-2); font-size: 12px; margin-left: 4px; }
         .fin-faixa .topo b { white-space: nowrap; }
-        .fin-faixa .topo .seta { color: #94a3b8; margin-left: 6px; font-size: 13px; }
+        .fin-faixa .topo .seta { color: var(--texto-3); margin-left: 6px; font-size: 13px; }
         .fin-faixa.vazia { cursor: default; opacity: .55; }
-        .fin-faixa .barra { height: 6px; border-radius: 3px; background: #e2e8f0; overflow: hidden; margin-top: 7px; }
+        .fin-faixa .barra { height: 6px; border-radius: 3px; background: var(--trilho); overflow: hidden; margin-top: 7px; }
         .fin-faixa .barra i { display: block; height: 100%; border-radius: 3px; }
         .fin-cor { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 7px; }
-        .fin-titulos { background: #f8fafc; border-radius: 10px; padding: 2px 12px; margin-top: 8px; cursor: default; }
-        .fin-titulos .val.pagar { color: #b91c1c; } .fin-titulos .val.receber { color: #15803d; }
+        .fin-titulos { background: var(--card-2); border-radius: 10px; padding: 2px 12px; margin-top: 8px; cursor: default; }
+        .fin-titulos .val.pagar { color: var(--erro); } .fin-titulos .val.receber { color: var(--ok); }
         #comprasView { display: none; }
         #comprasDetalhe { padding: 16px; }
-        .voltar-compras { border: 0; background: none; color: var(--azul); font-size: 14px; font-weight: 700;
+        .voltar-compras { border: 0; background: none; color: var(--azul-texto); font-size: 14px; font-weight: 700;
             padding: 0 0 10px; cursor: pointer; }
         .cab-produto { margin: 0 0 10px; font-size: 17px; line-height: 1.3; }
-        #vazio, #comprasVazio { padding: 60px 32px; text-align: center; color: #475569; }
+        #vazio, #comprasVazio { padding: 60px 32px; text-align: center; color: var(--texto-2); }
         #vazio .emoji, #comprasVazio .emoji { font-size: 48px; margin-bottom: 16px; }
-        #vazio .aviso, #comprasVazio .aviso { color: var(--azul); font-size: 13px; margin-top: 10px; }
+        #vazio .aviso, #comprasVazio .aviso { color: var(--azul-texto); font-size: 13px; margin-top: 10px; }
 
         #lista, #comprasLista { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
         .card {
-            background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            background: var(--card); border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             cursor: pointer;
         }
         .card .descricao { font-weight: 700; font-size: 14px; margin-bottom: 8px; line-height: 1.3; }
-        .card .linha { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #334155; margin-top: 4px; }
-        .card .linha .rotulo { color: #64748b; }
+        .card .linha { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--texto-1); margin-top: 4px; }
+        .card .linha .rotulo { color: var(--texto-2); }
         .card .rodape { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
-        .card .preco { font-weight: 700; color: var(--azul); font-size: 16px; }
-        .card .preco .un { font-size: 11px; font-weight: 600; color: #64748b; margin-left: 2px; }
-        .card .estoque { font-size: 12px; color: #64748b; }
+        .card .preco { font-weight: 700; color: var(--azul-texto); font-size: 16px; }
+        .card .preco .un { font-size: 11px; font-weight: 600; color: var(--texto-2); margin-left: 2px; }
+        .card .estoque { font-size: 12px; color: var(--texto-2); }
 
         #detalhe { padding: 16px; }
         #detalhe h2 { font-size: 17px; margin: 0 0 16px; }
         .campo {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 12px 0; border-bottom: 1px solid #e2e8f0; font-size: 14px;
+            padding: 12px 0; border-bottom: 1px solid var(--borda); font-size: 14px;
         }
-        .campo .rotulo { color: #475569; }
+        .campo .rotulo { color: var(--texto-2); }
         .campo .valor { font-weight: 600; }
-        .campo .valor.sim { color: #15803d; }
-        .campo .valor.nao { color: #b91c1c; }
-        .secao-titulo { margin: 24px 0 4px; font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; }
+        .campo .valor.sim { color: var(--ok); }
+        .campo .valor.nao { color: var(--erro); }
+        .secao-titulo { margin: 24px 0 4px; font-size: 13px; font-weight: 700; color: var(--texto-2); text-transform: uppercase; }
 
-        .loading, .erro { text-align: center; padding: 40px 20px; color: #64748b; font-size: 13px; }
-        .btn-tentar { display: block; margin: 14px auto 0; padding: 9px 18px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #0b3a8f; font-weight: 700; font-size: 13px; cursor: pointer; }
+        .loading, .erro { text-align: center; padding: 40px 20px; color: var(--texto-2); font-size: 13px; }
+        .btn-tentar { display: block; margin: 14px auto 0; padding: 9px 18px; border: 1px solid var(--borda-forte); border-radius: 10px; background: var(--card); color: var(--azul-texto); font-weight: 700; font-size: 13px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -465,6 +504,7 @@
                     <h1 id="tituloHeader">PrimeSys &middot; {{ empresa_nome }}</h1>
                     <p id="subtituloHeader">Consulta de produtos</p>
                 </div>
+                <button type="button" class="btn-tema" id="btnTema" aria-label="Aparência"></button>
                 <a href="/logout" class="btn-sair">Sair</a>
             </div>
             <select id="loja"></select>
@@ -616,6 +656,7 @@
             <button type="button" class="dispensar" id="btnDispensarAviso" aria-label="Agora não">&#10005;</button>
         </div>
 
+        <div id="temaAviso" role="status"></div>
         <nav class="tabbar">
             <button id="tabDashboard"{% if not acessos.dashboard %} hidden{% endif %}>
                 <span class="tab-icone">&#128202;</span>
@@ -667,6 +708,24 @@
         const elDetalhe = document.getElementById('detalhe');
         const elBusca = document.getElementById('busca');
         const elBuscaWrap = document.getElementById('buscaWrap');
+        // Aparência: Automático (segue o celular) -> Claro -> Escuro. A escolha fica só neste aparelho.
+        (function iniciarTema() {
+            const botao = document.getElementById('btnTema'), aviso = document.getElementById('temaAviso');
+            const ORDEM = ['auto', 'claro', 'escuro'];
+            const ROTULO = { auto: 'Aparência: automática', claro: 'Aparência: clara', escuro: 'Aparência: escura' };
+            const ICONE = { auto: '◐', claro: '☀︎', escuro: '☾︎' };
+            const ler = () => { try { const t = localStorage.getItem('prime-tema'); return t === 'claro' || t === 'escuro' ? t : 'auto'; } catch (e) { return 'auto'; } };
+            let tempo;
+            function aplicar(modo, avisar) {
+                if (modo === 'auto') delete document.documentElement.dataset.tema; else document.documentElement.dataset.tema = modo;
+                try { modo === 'auto' ? localStorage.removeItem('prime-tema') : localStorage.setItem('prime-tema', modo); } catch (e) {}
+                botao.textContent = ICONE[modo]; botao.title = ROTULO[modo]; botao.setAttribute('aria-label', ROTULO[modo]);
+                if (avisar) { aviso.textContent = ROTULO[modo]; aviso.classList.add('mostrar'); clearTimeout(tempo); tempo = setTimeout(() => aviso.classList.remove('mostrar'), 1600); }
+            }
+            botao.addEventListener('click', () => aplicar(ORDEM[(ORDEM.indexOf(ler()) + 1) % ORDEM.length], true));
+            aplicar(ler(), false);
+        })();
+
         const elLoja = document.getElementById('loja');
         const elBtnVoltar = document.getElementById('btnVoltar');
         const elTitulo = document.getElementById('tituloHeader');
@@ -1233,7 +1292,7 @@
             }
         }
 
-        const CORES_ROSCA = ['#0b3895', '#10b5d9', '#0f766e', '#b45309', '#7c3aed', '#94a3b8', '#db2777', '#65a30d'];
+        const CORES_ROSCA = ['var(--azul-grafico)', '#10b5d9', '#0f766e', '#b45309', '#7c3aed', '#94a3b8', '#db2777', '#65a30d'];
 
         function valorCurto(v) {
             if (v >= 1e6) return `${(v / 1e6).toFixed(1).replace('.', ',')} mi`;
@@ -1261,14 +1320,14 @@
                     <span class="val">${fmtMoney(f.valor)}</span>
                 </div>`).join('');
             return `<div class="rosca-lado"><svg viewBox="0 0 150 150" role="img" aria-label="Formas de pagamento">${arcos}
-                    <text x="75" y="70" text-anchor="middle" font-size="11" fill="#64748b">Total</text>
-                    <text x="75" y="89" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">${valorCurto(soma)}</text>
+                    <text x="75" y="70" text-anchor="middle" font-size="11" style="fill:var(--texto-2)">Total</text>
+                    <text x="75" y="89" text-anchor="middle" font-size="15" font-weight="700" style="fill:var(--texto)">${valorCurto(soma)}</text>
                 </svg><div class="legenda">${legenda}</div></div>`;
         }
 
         // Financeiro: contas em aberto, uma lista por vez (A pagar | A receber), com faixas de vencimento.
         // Os totais vêm exatos do servidor (10 min de cache); o app reaproveita o que já buscou por 5 min.
-        const FAIXA_COR = { atrasadas: '#b91c1c', hoje: '#d97706', prox7: '#0b3895', prox30: '#94a3b8', depois: '#cbd5e1' };
+        const FAIXA_COR = { atrasadas: '#b91c1c', hoje: '#d97706', prox7: 'var(--azul-grafico)', prox30: '#94a3b8', depois: '#cbd5e1' };
         const IDADE_FINANCEIRO_MS = 5 * 60 * 1000;
         const fmtDataCurta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
         let finDados = null;
@@ -1412,7 +1471,7 @@
 
         // Vendas por tipo (NFC-e / pré-venda): rosca com o total, dois cartões e, ao tocar num cartão, as formas de pagamento.
         // Aparece sempre que houver venda no período, mesmo com um tipo só.
-        const CORES_TIPO = { fiscal: '#0b3895', naoFiscal: '#f59e0b' };
+        const CORES_TIPO = { fiscal: 'var(--azul-grafico)', naoFiscal: '#f59e0b' };
         let tiposDados = [];
         let tipoAberto = null;
 
@@ -1435,8 +1494,8 @@
                 return arco;
             }).join('');
             const rosca = `<div class="rosca"><svg viewBox="0 0 150 150" role="img" aria-label="Vendas por tipo">${arcos}
-                <text x="75" y="70" text-anchor="middle" font-size="10" fill="#64748b">Total</text>
-                <text x="75" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">${valorCurto(soma)}</text></svg></div>`;
+                <text x="75" y="70" text-anchor="middle" font-size="10" style="fill:var(--texto-2)">Total</text>
+                <text x="75" y="88" text-anchor="middle" font-size="14" font-weight="700" style="fill:var(--texto)">${valorCurto(soma)}</text></svg></div>`;
 
             const cartoes = tiposDados.map((t, i) => `
                 <button type="button" class="tipo-card${tipoAberto === i ? ' sel' : ''}" data-tipo="${i}" aria-expanded="${tipoAberto === i}">
