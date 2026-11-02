@@ -429,6 +429,7 @@
         .card .linha .rotulo { color: #64748b; }
         .card .rodape { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
         .card .preco { font-weight: 700; color: var(--azul); font-size: 16px; }
+        .card .preco .un { font-size: 11px; font-weight: 600; color: #64748b; margin-left: 2px; }
         .card .estoque { font-size: 12px; color: #64748b; }
 
         #detalhe { padding: 16px; }
@@ -879,7 +880,7 @@
 
         // Busca com proteção contra resposta atrasada: se a pessoa digita outro termo (ou o ERP demora),
         // a resposta de uma busca antiga nunca pode sobrescrever a lista do termo atual.
-        function criarBuscaProtegida(renderizar, elLista, mostrar) {
+        function criarBuscaProtegida(renderizar, elLista, mostrar, comPreco = false) {
             let temporizador = null;
             let numero = 0;
             let anterior = null;
@@ -892,7 +893,7 @@
                     elLista.innerHTML = esqueletoCartoes(3);
                     mostrar('lista');
                     anterior = new AbortController();
-                    fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${loja || 0}`, { signal: anterior.signal })
+                    fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&loja=${loja || 0}${comPreco ? '&com_preco=1' : ''}`, { signal: anterior.signal })
                         .then((r) => r.ok ? r.json() : Promise.reject(r))
                         .then((data) => { if (meu === numero) renderizar(data.produtos || []); })
                         .catch((err) => {
@@ -1026,7 +1027,8 @@
                     <div class="linha"><span class="rotulo">Código de barras:</span> ${esc(p.codigoBarras || '-')}</div>
                     <div class="linha"><span class="rotulo">Código interno:</span> ${esc(p.codigoInterno ?? '-')}</div>
                     <div class="rodape">
-                        <span class="estoque">Toque para ver preço e estoque</span>
+                        <span class="estoque">${p.preco != null ? 'Toque para ver estoque e detalhes' : 'Toque para ver preço e estoque'}</span>
+                        ${p.preco != null ? `<span class="preco">${fmtMoney(p.preco)}${p.unidade ? `<span class="un">/${esc(p.unidade)}</span>` : ''}</span>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1037,7 +1039,7 @@
             if (lido) abrirDetalhe(lido.idVariacao, lido.descricao);
         }
 
-        const buscarProdutos = criarBuscaProtegida(renderLista, elLista, mostrarView);
+        const buscarProdutos = criarBuscaProtegida(renderLista, elLista, mostrarView, true);
         elBusca.addEventListener('input', () => buscarProdutos(elBusca.value.trim(), elLoja.value));
 
         async function carregarLojas() {

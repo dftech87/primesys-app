@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import acessos, compras, versao
+from app import acessos, compras, precos, versao
 from app.cache import cached
 from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
@@ -21,6 +21,8 @@ MAX_RESULTADOS_LISTA = 20
 # não mudam; custo e preço mudam de vez em quando; o saldo muda a cada venda.
 TTL_LOJAS = 3600
 TTL_BUSCA = 120
+TTL_PRECOS_LISTA = 120
+ESPERA_PRECOS_LISTA = 3.0   # a lista não espera mais que isso pelo preço: sai sem ele e o preço fica guardado para a próxima
 TTL_PRODUTO = 600
 TTL_CUSTO_PRECO = 300
 TTL_SALDO = 60
@@ -109,7 +111,7 @@ async def api_lojas(request: Request):
 
 
 @router.get("/api/produtos/buscar")
-async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int = Query(...)):
+async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int = Query(...), com_preco: int = Query(0)):
     tenant = current_tenant(request)
     if tenant is None:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
@@ -129,10 +131,12 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
 
     itens = resultado.get("items") or []
 
-    # Preço e estoque não entram aqui de propósito: buscá-los por item deixaria a
-    # busca em uma única chamada por resultado (até MAX_RESULTADOS_LISTA x 2), o que
-    # estoura rápido o limite de 20 req/min da API e deixa a busca lenta. Eles só
-    # são consultados na tela de detalhe, ao tocar em um produto específico.
+    # O preço vem de UMA consulta para a lista inteira (só na aba Produtos). O estoque não entra aqui de propósito:
+    # buscá-lo por item deixaria a busca em uma chamada por resultado (até MAX_RESULTADOS_LISTA), o que estoura rápido
+    # o limite de 20 req/min da API. Ele só é consultado na tela de detalhe, ao tocar em um produto específico.
+    tabela = {}
+    if com_preco and itens and acessos.pode(request, "produtos"):
+        tabela = await _precos_da_lista(client, tenant["cnpj"], [int(item["codigoMercadoriaVariacao"]) for item in itens])
     produtos = [
         {
             "idVariacao": item["codigoMercadoriaVariacao"],
@@ -142,10 +146,22 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
             # (o `codigoMercadoria` é o do cadastro-pai e, em outra busca, aponta para OUTRO produto).
             "codigoInterno": item["codigoMercadoriaVariacao"],
             "unidade": item.get("embalagem"),
+            "preco": tabela.get(int(item["codigoMercadoriaVariacao"])),
         }
         for item in itens
     ]
     return {"total": resultado.get("total"), "produtos": produtos}
+
+
+async def _precos_da_lista(client: MeuERPClient, cnpj: str, ids: list[int]) -> dict[int, float]:
+    """Preços da lista, sem nunca travar nem derrubar a busca: ERP lento ou com erro = lista sem preço. Se passar do
+    tempo, a consulta continua em segundo plano e fica guardada (a próxima busca já sai com o preço)."""
+    tarefa = asyncio.ensure_future(cached((cnpj, "precos-lista", tuple(sorted(ids))), TTL_PRECOS_LISTA, lambda: precos.da_lista(client, ids)))
+    tarefa.add_done_callback(lambda t: t.cancelled() or t.exception())   # erro de tarefa que ninguém esperou: não vira aviso solto
+    try:
+        return await asyncio.wait_for(asyncio.shield(tarefa), ESPERA_PRECOS_LISTA)
+    except Exception:
+        return {}
 
 
 @router.get("/api/produtos/{id_variacao}/detalhe")
