@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrimeSys | Consumo do ERP</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; color: #0f172a; }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #0f172a; color: #fff; }
+        header h1 { margin: 0; font-size: 18px; }
+        header a { color: #cbd5e1; text-decoration: none; font-size: 13px; margin-left: 16px; }
+        main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+        .nota { font-size: 13px; color: #475569; line-height: 1.5; margin: 0 0 16px; }
+        .filtro a { display: inline-block; padding: 6px 12px; margin-right: 6px; border-radius: 16px; background: #fff; border: 1px solid #cbd5e1; color: #0f172a; text-decoration: none; font-size: 13px; }
+        .filtro a.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+        .cartao { background: #fff; border-radius: 14px; padding: 16px 18px; margin-top: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .cartao h2 { margin: 0 0 10px; font-size: 16px; }
+        .nums { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; color: #475569; margin-bottom: 8px; }
+        .nums b { color: #0f172a; font-size: 15px; }
+        .ruim { color: #b91c1c !important; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+        th:first-child, td:first-child { text-align: left; }
+        th { color: #64748b; font-weight: 600; font-size: 12px; }
+        details summary { cursor: pointer; font-size: 13px; color: #1d4fd8; margin-top: 6px; }
+        .vazio { color: #64748b; padding: 20px 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PrimeSys &middot; Consumo do ERP</h1>
+        <div><a href="/admin">Clientes</a><a href="/admin/logout">Sair</a></div>
+    </header>
+    <main>
+        <p class="nota">
+            O ERP deixa cada cliente fazer 20 chamadas por minuto (12 para o Prime Info). O que passa disso espera na fila.
+            <b>Esperas</b> = chamadas que fizeram alguém esperar mais de 2 segundos: é o que o usuário sente.
+            <b>Pico/min</b> = o maior número de chamadas em um único minuto. Só o Prime Info grava aqui; os números começam a
+            contar a partir da publicação deste medidor.
+        </p>
+        <div class="filtro">
+            {% for d, rotulo in [(1, 'Hoje e ontem (24 h)'), (7, '7 dias'), (30, '30 dias')] %}
+            <a href="/admin/consumo?dias={{ d }}" class="{{ 'on' if d == dias else '' }}">{{ rotulo }}</a>
+            {% endfor %}
+        </div>
+        {% if not linhas %}
+        <div class="cartao vazio">Ainda não há consumo registrado neste período.</div>
+        {% endif %}
+        {% for c in linhas %}
+        <div class="cartao">
+            <h2>{{ c.nome }}</h2>
+            <div class="nums">
+                <span>Chamadas <b>{{ c.chamadas }}</b></span>
+                <span>Esperas (&gt; 2 s) <b class="{{ 'ruim' if c.esperas else '' }}">{{ c.esperas }}</b></span>
+                <span>Espera máxima <b class="{{ 'ruim' if c.espera_max > 10 else '' }}">{{ '%.0f'|format(c.espera_max) }} s</b></span>
+                <span>Pico/min <b class="{{ 'ruim' if c.pico_minuto > 12 else '' }}">{{ c.pico_minuto }}</b></span>
+            </div>
+            <details>
+                <summary>Por tela ({{ c.telas|length }})</summary>
+                <table>
+                    <tr><th>Tela</th><th>Chamadas</th><th>Em segundo plano</th><th>Esperas</th><th>Espera máx.</th></tr>
+                    {% for t in c.telas %}
+                    <tr><td>{{ t.tela }}</td><td>{{ t.chamadas }}</td><td>{{ t.segundo_plano }}</td><td>{{ t.esperas }}</td><td>{{ '%.0f'|format(t.espera_max) }} s</td></tr>
+                    {% endfor %}
+                </table>
+            </details>
+        </div>
+        {% endfor %}
+    </main>
+</body>
+</html>

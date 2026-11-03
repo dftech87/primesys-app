@@ -61,6 +61,20 @@ CREATE TABLE IF NOT EXISTS alteracoes_preco (
     criado_em TEXT NOT NULL,
     desfeita_em TEXT
 )"""
+# Medidor de consumo da cota do ERP (app/consumo.py): só números, por empresa (código do balde), hora e tela.
+TABELA_CONSUMO_ERP = """
+CREATE TABLE IF NOT EXISTS consumo_erp (
+    cliente TEXT NOT NULL,
+    hora TEXT NOT NULL,
+    tela TEXT NOT NULL,
+    chamadas INTEGER NOT NULL DEFAULT 0,
+    esperas INTEGER NOT NULL DEFAULT 0,
+    espera_total DOUBLE PRECISION NOT NULL DEFAULT 0,
+    espera_max DOUBLE PRECISION NOT NULL DEFAULT 0,
+    segundo_plano INTEGER NOT NULL DEFAULT 0,
+    pico_minuto INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (cliente, hora, tela)
+)"""
 INDICE_ALTERACOES_PRECO = "CREATE INDEX IF NOT EXISTS ix_alteracoes_preco_produto ON alteracoes_preco (cnpj, id_variacao, criado_em)"
 
 _pool = None
@@ -120,6 +134,7 @@ def init_db() -> None:
             conn.execute(TABELA_ALTERACOES_PRECO)
             conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN IF NOT EXISTS nome TEXT")   # tabela criada antes do nome
             conn.execute(INDICE_ALTERACOES_PRECO)
+            conn.execute(TABELA_CONSUMO_ERP)
             _importar_do_sqlite_se_vazio(conn)
         return
     with get_connection() as conn:
@@ -135,6 +150,7 @@ def init_db() -> None:
         if "nome" not in {row["name"] for row in conn.execute("PRAGMA table_info(alteracoes_preco)")}:   # criada antes do nome
             conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN nome TEXT")
         conn.execute(INDICE_ALTERACOES_PRECO)
+        conn.execute(TABELA_CONSUMO_ERP)
 
 
 def _importar_do_sqlite_se_vazio(conn) -> None:

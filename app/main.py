@@ -8,7 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import versao
+from contextlib import asynccontextmanager
+
+from app import consumo, versao
 from app.config import COOKIE_SEGURO, SESSAO_MAX_IDADE, settings
 from app.database import db_session, init_db
 from app.routers import admin, auth, painel_mobile, preco, produtos
@@ -27,7 +29,16 @@ class _GZipSemServiceWorker(GZipMiddleware):
         await super().__call__(scope, receive, send)
 
 
-app = FastAPI(title="PrimeSys Dashboard", docs_url=None, redoc_url=None, openapi_url=None)   # sem páginas de documentação públicas
+@asynccontextmanager
+async def _ciclo_de_vida(_app):
+    consumo.iniciar()   # medidor de consumo da cota do ERP (grava a cada minuto; o Prime Vendas não liga)
+    try:
+        yield
+    finally:
+        await consumo.parar()
+
+
+app = FastAPI(title="PrimeSys Dashboard", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_ciclo_de_vida)   # sem páginas de documentação públicas
 app.add_middleware(
     SessionMiddleware, secret_key=settings.session_secret, https_only=COOKIE_SEGURO, same_site="lax", max_age=SESSAO_MAX_IDADE
 )
@@ -56,6 +67,16 @@ async def cabecalhos_de_seguranca(request, call_next):
     if COOKIE_SEGURO:   # só na hospedagem (HTTPS): o navegador passa a recusar HTTP para este endereço
         resposta.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     return resposta
+
+
+@app.middleware("http")
+async def marcar_tela(request, call_next):
+    """Cada chamada ao ERP feita por este pedido (e pelas renovações em segundo plano que ele disparar) é atribuída a esta tela."""
+    marca = consumo.tela.set(consumo.normalizar(request.url.path))
+    try:
+        return await call_next(request)
+    finally:
+        consumo.tela.reset(marca)
 
 
 @app.middleware("http")

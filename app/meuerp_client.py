@@ -18,6 +18,7 @@ import time
 
 import httpx
 
+from app import consumo
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -69,11 +70,14 @@ _buckets: dict[str, _TokenBucket] = {}
 _shared_clients: dict[str, httpx.AsyncClient] = {}
 
 
+def nome_do_balde(token: str) -> str:
+    """Código curto que identifica o cliente nos logs e no medidor de consumo (não revela o token)."""
+    return hashlib.sha1(token.encode()).hexdigest()[:6]
+
+
 def _bucket_for(token: str) -> _TokenBucket:
     if token not in _buckets:
-        _buckets[token] = _TokenBucket(
-            RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_SECONDS, hashlib.sha1(token.encode()).hexdigest()[:6]
-        )
+        _buckets[token] = _TokenBucket(RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_SECONDS, nome_do_balde(token))
     return _buckets[token]
 
 
@@ -106,7 +110,9 @@ class MeuERPClient:
         headers = {"Authorization": f"Authentication {self.api_token}"}
         client = _client_for(self.base_url)
         for attempt in range(MAX_RETRIES + 1):
+            inicio_espera = time.monotonic()
             await self.bucket.acquire(self.segundo_plano)
+            consumo.registrar(self.bucket.nome, time.monotonic() - inicio_espera, self.segundo_plano)
             response = await client.request(method, path, headers=headers, **kwargs)
             if response.status_code == 429 and attempt < MAX_RETRIES:
                 try:

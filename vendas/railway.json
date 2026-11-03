@@ -9,6 +9,8 @@
       "/app/cripto.py",
       "/app/tenants.py",
       "/app/cache.py",
+      "/app/consumo.py",
+      "/app/datas.py",
       "/app/meuerp_client.py",
       "/app/security.py",
       "/app/limite.py",

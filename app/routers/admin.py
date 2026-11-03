@@ -4,7 +4,8 @@ from fastapi.templating import Jinja2Templates
 
 import secrets
 
-from app import backup, limite
+from app import backup, consumo, limite
+from app.meuerp_client import nome_do_balde
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
 from app.tenants import (
@@ -219,6 +220,19 @@ def _arquivo_de_backup() -> Response:
     conteudo, nome = backup.gerar()
     return Response(conteudo, media_type="application/octet-stream",
                     headers={"Content-Disposition": f'attachment; filename="{nome}"', "Cache-Control": "no-store"})
+
+
+@router.get("/consumo", response_class=HTMLResponse)
+async def admin_consumo(request: Request, dias: int = 1):
+    """Quanto da cota do ERP cada empresa e cada tela gastou, e quanta espera as pessoas tiveram."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    nomes = {nome_do_balde(t["api_token"]): t["nome_fantasia"] for t in list_tenants()}
+    dias = max(1, min(dias, 30))
+    por_cliente = consumo.resumo(dias)
+    linhas = sorted(({"nome": nomes.get(cod, f"(código {cod})"), **dados} for cod, dados in por_cliente.items()),
+                    key=lambda c: (-c["esperas"], -c["chamadas"]))
+    return templates.TemplateResponse(request, "admin_consumo.html", {"linhas": linhas, "dias": dias})
 
 
 @router.get("/backup")
