@@ -187,6 +187,7 @@
         .hero-eixo { display: flex; gap: 3px; margin-top: 4px; font-size: 9px; color: #bfdbfe; }
         .hero-eixo span { flex: 1; min-width: 2px; text-align: center; white-space: nowrap; overflow: visible; }
         .hero-legenda { font-size: 12px; color: #e0f2fe; margin-top: 8px; min-height: 16px; }
+        .hero-atualizado { font-size: 11px; color: #bfdbfe; margin-top: 6px; min-height: 14px; }
         .dash-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .rosca-lado { display: flex; align-items: center; gap: 14px; }
         .rosca-lado svg { width: 112px; height: 112px; flex: 0 0 auto; }
@@ -607,6 +608,7 @@
                     <div class="hero-grafico" id="dashGrafico"></div>
                     <div class="hero-eixo" id="dashEixo"></div>
                     <div class="hero-legenda" id="dashGraficoLegenda"></div>
+                    <div class="hero-atualizado" id="dashAtualizado"></div>
                 </div>
                 <div class="dash-kpis">
                     <div class="dash-card"><div class="rotulo">Vendas</div><div class="valor" id="dashVendas">-</div><div class="delta" id="dashVendasDelta"></div></div>
@@ -1536,32 +1538,59 @@
         });
         elLoja.addEventListener('change', () => { if (abaAtual === 'alertas') carregarAlertas(); });
 
+        // "Atualizado há X min": o servidor entrega na hora o que já tem (mesmo vencido) e renova por trás; esta
+        // etiqueta mostra a idade do número na tela, e a tela pede de novo sozinha até chegar o número novo.
+        let dashGeradoEm = 0;
+        const IDADE_VELHO_S = 75;          // mais velho que isto: há renovação a caminho
+        const ESPERA_RECARGA_MS = 7000;
+        const MAX_RECARGAS = 4;
+        function atualizarRotuloIdade() {
+            const el = document.getElementById('dashAtualizado');
+            if (!dashGeradoEm || abaAtual !== 'dashboard') { el.textContent = ''; return; }
+            const s = Math.max(0, Date.now() / 1000 - dashGeradoEm);
+            el.textContent = s < 60 ? 'Atualizado agora'
+                : s < 3600 ? `Atualizado há ${Math.floor(s / 60)} min`
+                : `Atualizado há ${Math.floor(s / 3600)} h`;
+        }
+        setInterval(() => { if (document.visibilityState === 'visible') atualizarRotuloIdade(); }, 30 * 1000);
+
         async function carregarDashboardMobile(inicio, fim, forcar = false) {
             const seq = ++dashSeq;
             const elErro = document.getElementById('dashErro');
             elErro.style.display = 'none';
             const chave = `dash|${inicio}|${fim}`;
             const visto = lerVisto(chave);
+            let mostrou = !!visto;
             if (visto) {
                 renderDashboard(visto.dados, inicio, fim);              // mostra o que já havia, sem piscar
                 if (!forcar && estaFresco(visto)) return;                // dado recente: nem consulta de novo
             } else {
                 document.getElementById('dashTotal').innerHTML = '<span class="sk alto" style="width:150px;display:inline-block;margin:2px 0"></span>';
             }
-            try {
-                const res = await fetch(`/api/produtos/dashboard-mobile?${new URLSearchParams({ inicio, fim })}`);
-                if (!res.ok) {
-                    const corpo = await res.json().catch(() => ({}));
-                    throw new Error(corpo.detail || 'Não foi possível carregar o dashboard.');
+            for (let recarga = 0; ; recarga++) {
+                try {
+                    const res = await fetch(`/api/produtos/dashboard-mobile?${new URLSearchParams({ inicio, fim })}`);
+                    if (!res.ok) {
+                        const corpo = await res.json().catch(() => ({}));
+                        throw new Error(corpo.detail || 'Não foi possível carregar o dashboard.');
+                    }
+                    const data = await res.json();
+                    guardarVisto(chave, data);
+                    if (seq !== dashSeq) return;
+                    renderDashboard(data, inicio, fim);
+                    mostrou = true;
+                    // Número velho do dia de hoje: o servidor está renovando por trás; busca de novo até chegar o novo.
+                    const velho = data.geradoEm && fim >= hojeISO() && Date.now() / 1000 - data.geradoEm > IDADE_VELHO_S;
+                    if (!velho || recarga >= MAX_RECARGAS) return;
+                } catch (err) {
+                    if (seq !== dashSeq || mostrou) return;
+                    document.getElementById('dashTotal').textContent = '-';
+                    elErro.textContent = err.message;
+                    elErro.style.display = 'block';
+                    return;
                 }
-                const data = await res.json();
-                guardarVisto(chave, data);
-                if (seq === dashSeq) renderDashboard(data, inicio, fim);
-            } catch (err) {
-                if (seq !== dashSeq || visto) return;
-                document.getElementById('dashTotal').textContent = '-';
-                elErro.textContent = err.message;
-                elErro.style.display = 'block';
+                await new Promise((r) => setTimeout(r, ESPERA_RECARGA_MS));
+                if (seq !== dashSeq || abaAtual !== 'dashboard') return;
             }
         }
 
@@ -2085,6 +2114,8 @@
         }
 
         function renderDashboard(data, inicio, fim) {
+            dashGeradoEm = fim >= hojeISO() ? (data.geradoEm || 0) : 0;   // período já fechado não precisa da etiqueta
+            atualizarRotuloIdade();
             document.getElementById('dashHeroRotulo').textContent = rotuloDoPeriodo(inicio, fim);
             document.getElementById('dashTotal').textContent = fmtMoney(data.total);
             document.getElementById('dashVendas').textContent = Number(data.vendas).toLocaleString('pt-BR');

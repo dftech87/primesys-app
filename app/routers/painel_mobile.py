@@ -23,6 +23,10 @@ TTL_DASHBOARD = 60            # período que inclui hoje: ainda está vendendo
 TTL_CAIXA = 120               # período que inclui hoje (ainda há caixas fechando)
 TTL_CAIXA_ENCERRADO = 900
 TTL_DASHBOARD_ENCERRADO = 900  # período já fechado: praticamente não muda
+# Depois de vencido, o dashboard ainda é entregue na hora (com a hora em que foi calculado) enquanto a renovação roda
+# por trás: ninguém espera as 5 consultas ao ERP. Passou deste limite, a próxima abertura espera a renovação.
+OBSOLETO_DASHBOARD = 600
+OBSOLETO_DASHBOARD_ENCERRADO = 3600
 TTL_FINANCEIRO = 600             # contas em aberto mudam devagar; dobra de cache em 10 min
 TTL_ESTOQUE_POSICAO = 6 * 3600   # o estoque é acompanhado por dia: no máximo ~4 consultas ao ERP por dia
 INTERVALO_MIN_ATUALIZAR = 600    # "Atualizar" só refaz a consulta se a posição guardada tiver mais de 10 min
@@ -96,6 +100,7 @@ async def _montar_dashboard(client: MeuERPClient, inicio: date, fim: date) -> di
     soma_formas = sum(f["valor"] for f in formas)
     sem_pagamento = round(atual["total"] - soma_formas, 2)
     return {
+        "geradoEm": time.time(),   # a tela mostra "atualizado há X min" com isto
         "periodo": {"inicio": inicio.isoformat(), "fim": fim.isoformat()},
         "total": atual["total"],
         "vendas": atual["vendas"],
@@ -127,11 +132,13 @@ async def dashboard_mobile(request: Request, inicio: str | None = Query(None), f
         data_inicio = data_fim - timedelta(days=MAX_DIAS - 1)
 
     client = MeuERPClient(tenant["api_token"])
+    em_andamento = data_fim >= hoje
     try:
         resultado = await cached(
             (tenant["cnpj"], "dashboard", data_inicio, data_fim),
-            TTL_DASHBOARD if data_fim >= hoje else TTL_DASHBOARD_ENCERRADO,
+            TTL_DASHBOARD if em_andamento else TTL_DASHBOARD_ENCERRADO,
             lambda: _montar_dashboard(client, data_inicio, data_fim),
+            obsoleto_ate=OBSOLETO_DASHBOARD if em_andamento else OBSOLETO_DASHBOARD_ENCERRADO,
         )
         # Margem e lucro só para o perfil com o dashboard 'Resumo - Lucro' (cópia: o guardado serve a todos).
         return resultado if acessos.pode(request, "lucro") else {**resultado, "margem": None}
