@@ -492,6 +492,47 @@
 
         .loading, .erro { text-align: center; padding: 40px 20px; color: var(--texto-2); font-size: 13px; }
         .btn-tentar { display: block; margin: 14px auto 0; padding: 9px 18px; border: 1px solid var(--borda-forte); border-radius: 10px; background: var(--card); color: var(--azul-texto); font-weight: 700; font-size: 13px; cursor: pointer; }
+
+        /* Alterar preço de venda: lápis na ficha + folha que sobe de baixo (só para quem o ERP autorizou). */
+        .btn-lapis { margin-left: 8px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--azul-borda); background: var(--azul-fundo);
+            color: var(--azul-texto); font-size: 15px; line-height: 1; cursor: pointer; touch-action: manipulation; vertical-align: middle; }
+        .tag-novo { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 8px; background: var(--ok-fundo); color: var(--ok-texto); font-size: 11px; font-weight: 700; }
+        .fp-veu { position: fixed; inset: 0; z-index: 70; background: rgba(15, 23, 42, .55); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+        .fp-veu.aberta { opacity: 1; pointer-events: auto; }
+        .fp-folha { position: fixed; left: 0; right: 0; bottom: 0; z-index: 71; background: var(--card); color: var(--texto); border-radius: 22px 22px 0 0;
+            padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px)); max-height: 92vh; max-height: 92svh; overflow-y: auto;
+            transform: translateY(105%); transition: transform .22s ease; box-shadow: 0 -8px 30px rgba(0, 0, 0, .25); }
+        .fp-folha.aberta { transform: translateY(0); }
+        .fp-pega { width: 42px; height: 4px; border-radius: 2px; background: var(--borda-forte); margin: -6px auto 12px; }
+        .fp-folha h3 { margin: 0; font-size: 17px; }
+        .fp-prod { font-size: 12.5px; color: var(--texto-2); margin: 2px 0 12px; }
+        .fp-lin { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 14px; color: var(--texto-1); }
+        .fp-lin b { color: var(--texto); }
+        .fp-tab { display: block; font-size: 12px; color: var(--texto-2); margin-bottom: 6px; }
+        .fp-tab select { display: block; width: 100%; margin-top: 4px; padding: 10px; border: 1px solid var(--borda-forte); border-radius: 10px; background: var(--card); color: var(--texto); font: inherit; font-size: 14px; }
+        .fp-entrada { display: block; margin: 8px 0 12px; border: 2px solid var(--azul-texto); border-radius: 14px; padding: 8px 14px; }
+        .fp-entrada small { display: block; font-size: 11px; font-weight: 600; color: var(--texto-2); }
+        .fp-entrada .moeda { display: flex; align-items: baseline; gap: 6px; font-size: 28px; font-weight: 700; color: var(--azul-texto); }
+        .fp-entrada input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; padding: 2px 0; }
+        .fp-prev { background: var(--card-2); border-radius: 12px; padding: 6px 14px; margin-bottom: 12px; font-size: 13px; min-height: 36px; }
+        .fp-prev .fp-lin { padding: 4px 0; font-size: 13px; }
+        .fp-sobe { color: var(--ok); font-weight: 700; } .fp-desce { color: var(--erro); font-weight: 700; }
+        .fp-aviso { background: var(--aviso-fundo); border: 1px solid #fcd34d; color: var(--aviso-texto); border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.35; margin: 6px 0 10px; }
+        .fp-aviso.verm { background: var(--erro-fundo); border-color: var(--erro-borda); color: var(--erro-texto); }
+        .fp-erro { background: var(--erro-fundo); border: 1px solid var(--erro-borda); color: var(--erro-texto); border-radius: 12px; padding: 10px 12px; font-size: 13px; margin: 0 0 10px; }
+        .fp-depara { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 8px 0 6px; }
+        .fp-depara .a { font-size: 20px; color: var(--texto-2); text-decoration: line-through; }
+        .fp-depara .b { font-size: 32px; font-weight: 700; color: var(--azul-texto); }
+        .fp-chk { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--texto-1); margin: 10px 0 14px; cursor: pointer; }
+        .fp-chk input { width: 20px; height: 20px; flex: 0 0 20px; margin: 0; accent-color: var(--azul); }
+        .fp-btn { display: block; width: 100%; border: 0; border-radius: 12px; padding: 14px; font: inherit; font-size: 15px; font-weight: 700; color: #fff; background: var(--azul); cursor: pointer; touch-action: manipulation; }
+        .fp-btn:disabled { opacity: .45; cursor: default; }
+        .fp-btn2 { display: block; width: 100%; border: 0; background: none; padding: 12px; font: inherit; font-size: 14px; font-weight: 600; color: var(--texto-2); cursor: pointer; }
+        #toastPreco { position: fixed; left: 14px; right: 14px; bottom: 84px; z-index: 72; background: rgba(15, 23, 42, .95); color: #fff; border-radius: 14px; padding: 12px 14px;
+            font-size: 13.5px; display: none; justify-content: space-between; align-items: center; gap: 10px; }
+        #toastPreco.mostrar { display: flex; }
+        #toastPreco button { border: 0; background: none; color: #7fb0ff; font: inherit; font-weight: 700; cursor: pointer; padding: 4px 2px; }
+        @media (prefers-reduced-motion: reduce) { .fp-folha, .fp-veu { transition: none; } }
     </style>
 </head>
 <body>
@@ -657,6 +698,9 @@
         </div>
 
         <div id="temaAviso" role="status"></div>
+        <div class="fp-veu" id="fpVeu"></div>
+        <div class="fp-folha" id="fpFolha" role="dialog" aria-modal="true" aria-label="Alterar preço de venda"></div>
+        <div id="toastPreco" role="status"></div>
         <nav class="tabbar">
             <button id="tabDashboard"{% if not acessos.dashboard %} hidden{% endif %}>
                 <span class="tab-icone">&#128202;</span>
@@ -986,7 +1030,7 @@
                         <div class="campo"><span class="rotulo">Ativo</span><span class="valor ${p.ativo ? 'sim' : 'nao'}">${p.ativo ? 'Sim' : 'Não'}</span></div>
                         <div class="campo"><span class="rotulo">Unidade</span><span class="valor">${esc(p.unidade || '-')}</span></div>
                         ${ACESSOS.custo ? `<div class="campo"><span class="rotulo">Preço de custo</span><span class="valor">${fmtMoney(p.precoCusto)}</span></div>` : ''}
-                        <div class="campo"><span class="rotulo">Preço de venda</span><span class="valor">${fmtMoney(p.precoVenda)}</span></div>
+                        <div class="campo"><span class="rotulo">Preço de venda</span><span class="valor">${fmtMoney(p.precoVenda)}${p.alteradoAgora ? '<span class="tag-novo">alterado agora</span>' : ''}${ACESSOS.alterar_preco ? '<button type="button" class="btn-lapis" id="btnEditarPreco" aria-label="Alterar preço de venda">&#9998;</button>' : ''}</span></div>
                         ${p.precoCusto > 0 && p.precoVenda > 0 ? (() => {
                             const m = (p.precoVenda - p.precoCusto) / p.precoVenda * 100;
                             return `<div class="campo"><span class="rotulo">Margem</span><span class="valor ${m < 0 ? 'nao' : m > 0 ? 'sim' : ''}">${m.toFixed(1).replace('.', ',')}%${m < 0 ? ' (abaixo do custo)' : ''}</span></div>`;
@@ -999,15 +1043,241 @@
                                 <div id="destinoPrecoFicha"></div>
                             </details>
                         </div>` : ''}
+                        ${ACESSOS.alterar_preco ? `<div class="dash-panel gestao" style="margin-top:12px">
+                            <details id="blocoAlteracoes">
+                                <summary><div><div class="tit">Alterações feitas pelo app</div><div class="sub-resumo">quem mudou o preço por aqui, e quando</div></div></summary>
+                                <div id="destinoAlteracoes"></div>
+                            </details>
+                        </div>` : ''}
                         <button type="button" class="btn-entradas" id="btnEntradasFicha"${ACESSOS.compras ? '' : ' hidden'}>&#129534;<span>Ver notas de entrada<small>custo de cada compra, fornecedor e margem (aba Compras)</small></span><span class="seta-dir">&rsaquo;</span></button>
             `;
         }
 
         // Monta a ficha e liga o bloco recolhido do histórico de preço (só consulta o ERP quando a pessoa o abre).
         function desenharFicha(p, idVariacao) {
+            fichaAtual = { p, id: idVariacao };
             elDetalhe.innerHTML = montarFicha(p);
+            if (ACESSOS.alterar_preco) {
+                document.getElementById('btnEditarPreco').addEventListener('click', () => abrirEdicaoPreco(idVariacao, p));
+                prepararBloco('blocoAlteracoes', 'destinoAlteracoes', `/api/produtos/${idVariacao}/alteracoes-preco`, (d) => renderAlteracoesPreco(d.alteracoes));
+            }
             if (ACESSOS.historico_preco) prepararBloco('blocoPrecoFicha', 'destinoPrecoFicha', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
             document.getElementById('btnEntradasFicha').addEventListener('click', () => abrirComprasDoProduto(idVariacao, p.descricao));
+        }
+
+        // ---------- Alterar preço de venda (lápis da ficha; só aparece para quem o perfil no ERP autoriza) ----------
+        const fpVeu = document.getElementById('fpVeu');
+        const fpFolha = document.getElementById('fpFolha');
+        const elToastPreco = document.getElementById('toastPreco');
+        const nMoeda = (v) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        let fp = null;            // edição em andamento: { id, p, dados, tabela, atual, novo, motivos, salvando }
+        let fichaAtual = null;    // ficha desenhada agora: { p, id }
+        let temporizadorToast = 0;
+
+        // "54,90", "R$ 1.234,56", "54.9" -> número com 2 casas (NaN se não der para entender)
+        function lerValor(txt) {
+            let t = String(txt || '').replace(/[^\d.,]/g, '');
+            if (!t) return NaN;
+            if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+            else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');   // "1.234" = mil duzentos e trinta e quatro
+            const n = Number(t);
+            return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+        }
+
+        function fpAbrir() { fpVeu.classList.add('aberta'); fpFolha.classList.add('aberta'); }
+        function fpFechar() {
+            fpVeu.classList.remove('aberta'); fpFolha.classList.remove('aberta');
+            fp = null;
+        }
+        fpVeu.addEventListener('click', () => { if (fp && !fp.salvando) fpFechar(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && fp && !fp.salvando) fpFechar(); });
+
+        async function abrirEdicaoPreco(idVariacao, p) {
+            fp = { id: idVariacao, p, dados: null, tabela: null, atual: null, novo: null, motivos: [], salvando: false };
+            fpFolha.innerHTML = `<div class="fp-pega"></div><h3>Alterar preço de venda</h3><div class="fp-prod">${esc(p.descricao)}</div>${esqueleto(3)}`;
+            fpAbrir();
+            const meu = fp;
+            try {
+                await fpCarregar(meu);
+                if (fp === meu) fpPasso1();
+            } catch (err) {
+                if (fp === meu) fpFalhaAoAbrir(err);
+            }
+        }
+
+        // Lê do ERP, agora, o preço de cada tabela (o da ficha pode ter alguns minutos).
+        async function fpCarregar(estado) {
+            const res = await fetch(`/api/produtos/${estado.id}/edicao-preco`);
+            if (!res.ok) throw res;
+            estado.dados = await res.json();
+            const tabelas = estado.dados.tabelas || [];
+            const escolhida = tabelas.find((t) => t.codigo === estado.tabela) || tabelas[0];
+            estado.tabela = escolhida ? escolhida.codigo : null;
+            estado.atual = escolhida ? escolhida.preco : null;
+        }
+
+        async function fpFalhaAoAbrir(err) {
+            let texto = 'Não foi possível abrir a alteração de preço agora. Tente de novo em instantes.';
+            if (err instanceof Response) { try { texto = (await err.json()).detail || texto; } catch (e) { /* mantém o padrão */ } }
+            fpFolha.innerHTML = `<div class="fp-pega"></div><h3>Alterar preço de venda</h3><div class="fp-erro" style="margin-top:12px">${esc(texto)}</div>
+                <button type="button" class="fp-btn2" id="fpFechar">Fechar</button>`;
+            document.getElementById('fpFechar').addEventListener('click', fpFechar);
+        }
+
+        const fpTabelaEscolhida = () => (fp.dados.tabelas || []).find((t) => t.codigo === fp.tabela);
+
+        function fpPasso1(erro) {
+            const { p, dados } = fp;
+            const tabelas = dados.tabelas || [];
+            if (!tabelas.length) { fpFalhaAoAbrir({}); return; }
+            const seletor = tabelas.length > 1
+                ? `<label class="fp-tab">Tabela de preço<select id="fpTabela">${tabelas.map((t) => `<option value="${t.codigo}"${t.codigo === fp.tabela ? ' selected' : ''}>Tabela ${t.codigo} · ${esc(nMoeda(t.preco))}</option>`).join('')}</select></label>` : '';
+            const tabela = fpTabelaEscolhida();
+            const bloqueada = tabela.vigencia;
+            fpFolha.innerHTML = `<div class="fp-pega"></div><h3>Alterar preço de venda</h3>
+                <div class="fp-prod">${esc(p.descricao)}${tabelas.length > 1 ? '' : ` · Tabela ${tabela.codigo}`}</div>
+                ${seletor}
+                ${erro ? `<div class="fp-erro">${esc(erro)}</div>` : ''}
+                ${bloqueada ? '<div class="fp-erro">Esta tabela de preço tem vigência programada. Altere o preço direto no ERP.</div>' : ''}
+                <div class="fp-lin"><span>Preço atual</span><b>${fmtMoney(fp.atual)}</b></div>
+                <label class="fp-entrada"><small>NOVO PREÇO${p.unidade ? ` (por ${esc(p.unidade)})` : ''}</small>
+                    <span class="moeda">R$ <input id="fpNovo" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${esc(nMoeda(Number.isFinite(fp.novo) && fp.novo >= 0.01 ? fp.novo : fp.atual))}"${bloqueada ? ' disabled' : ''}></span></label>
+                <div class="fp-prev" id="fpPrev"></div>
+                <button type="button" class="fp-btn" id="fpRevisar" disabled>Revisar alteração</button>
+                <button type="button" class="fp-btn2" id="fpCancelar">Cancelar</button>`;
+            const campo = document.getElementById('fpNovo');
+            const botao = document.getElementById('fpRevisar');
+            const atualizar = () => {
+                const novo = lerValor(campo.value);
+                fp.novo = novo;
+                const valido = Number.isFinite(novo) && novo >= 0.01 && Math.abs(novo - fp.atual) >= 0.005;
+                botao.disabled = !valido || bloqueada;
+                document.getElementById('fpPrev').innerHTML = valido ? fpPrevia(novo) : '<div class="fp-lin"><span>Digite o novo preço</span></div>';
+            };
+            campo.addEventListener('input', atualizar);
+            campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !botao.disabled) botao.click(); });
+            const sel = document.getElementById('fpTabela');
+            if (sel) sel.addEventListener('change', () => { fp.tabela = Number(sel.value); fp.atual = fpTabelaEscolhida().preco; fp.novo = null; fpPasso1(); });
+            botao.addEventListener('click', () => fpPasso2());
+            document.getElementById('fpCancelar').addEventListener('click', fpFechar);
+            atualizar();
+            if (!bloqueada) setTimeout(() => { campo.focus(); campo.select(); }, 260);
+        }
+
+        function fpPrevia(novo) {
+            const dif = novo - fp.atual, pct = fp.atual > 0 ? dif / fp.atual * 100 : null, custo = fp.dados.custo;
+            const margem = (preco) => (preco > 0 && custo > 0 ? (preco - custo) / preco * 100 : null);
+            const mAtual = margem(fp.atual), mNova = margem(novo);
+            return `<div class="fp-lin"><span>Variação</span><span class="${dif > 0 ? 'fp-sobe' : 'fp-desce'}">${dif > 0 ? '▲' : '▼'} ${pct == null ? '' : `${fmtPct(Math.abs(pct))}% `}(${dif > 0 ? '+' : '-'} ${fmtMoney(Math.abs(dif))})</span></div>
+                ${mNova != null ? `<div class="fp-lin"><span>Margem</span><b class="${mNova < 0 ? 'fp-desce' : ''}">${mAtual != null ? `${fmtPct(mAtual)}% → ` : ''}${fmtPct(mNova)}%</b></div>` : ''}`;
+        }
+
+        // Motivos que exigem confirmar marcando a caixinha (o servidor confere de novo: esta conta é só para mostrar).
+        function fpMotivos(novo) {
+            const motivos = [], custo = fp.dados.custo;
+            if (fp.atual > 0 && Math.abs(novo - fp.atual) / fp.atual * 100 > (fp.dados.limiteVariacaoPct || 30)) motivos.push('variacao');
+            if (custo > 0 && novo < custo - 0.005) motivos.push('abaixo_custo');
+            return motivos;
+        }
+
+        function fpPasso2(motivosDoServidor, erro) {
+            const { p, novo, atual } = fp;
+            const motivos = Array.from(new Set([...fpMotivos(novo), ...(motivosDoServidor || [])]));
+            fp.motivos = motivos;
+            const pct = atual > 0 ? (novo - atual) / atual * 100 : 0;
+            const avisos = motivos.map((m) => m === 'variacao'
+                ? `<div class="fp-aviso">⚠ <b>${pct > 0 ? 'Aumento' : 'Redução'} de ${fmtPct(Math.abs(pct))}%.</b> É uma mudança grande: confira se o valor está certo (ex.: vírgula no lugar errado).</div>`
+                : `<div class="fp-aviso verm">⚠ <b>Abaixo do custo${fp.dados.custo > 0 ? ` (${fmtMoney(fp.dados.custo)})` : ''}.</b> Vender assim dá prejuízo em cada unidade.</div>`).join('');
+            fpFolha.innerHTML = `<div class="fp-pega"></div><h3>Confirmar alteração</h3>
+                <div class="fp-prod">${esc(p.descricao)} · Tabela ${fp.tabela}</div>
+                <div class="fp-depara"><span class="a">${fmtMoney(atual)}</span><span>→</span><span class="b">${fmtMoney(novo)}</span></div>
+                ${avisos}
+                ${erro ? `<div class="fp-erro">${esc(erro)}</div>` : ''}
+                ${motivos.length ? `<label class="fp-chk"><input type="checkbox" id="fpConfirmo"><span>Confirmo que o novo preço é ${fmtMoney(novo)}${p.unidade ? ` por ${esc(p.unidade)}` : ''}.</span></label>` : '<div style="height:10px"></div>'}
+                <button type="button" class="fp-btn" id="fpSalvar"${motivos.length ? ' disabled' : ''}>Salvar preço</button>
+                <button type="button" class="fp-btn2" id="fpVoltar">Voltar e corrigir</button>`;
+            const caixa = document.getElementById('fpConfirmo');
+            const salvar = document.getElementById('fpSalvar');
+            if (caixa) caixa.addEventListener('change', () => { salvar.disabled = !caixa.checked; });
+            salvar.addEventListener('click', () => fpSalvar(!!(caixa && caixa.checked)));
+            document.getElementById('fpVoltar').addEventListener('click', () => fpPasso1());
+        }
+
+        async function fpSalvar(confirmo) {
+            if (!fp || fp.salvando) return;
+            const estado = fp;
+            estado.salvando = true;
+            const botao = document.getElementById('fpSalvar');
+            botao.disabled = true; botao.textContent = 'Salvando…';
+            let res, corpo = {};
+            try {
+                res = await fetch(`/api/produtos/${estado.id}/preco`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ preco: estado.novo, preco_visto: estado.atual, tabela: estado.tabela, confirmo }),
+                });
+                try { corpo = await res.json(); } catch (e) { /* sem corpo */ }
+            } catch (e) {
+                estado.salvando = false;
+                // Sem resposta: pode ter gravado. Não deixa tentar de novo às cegas.
+                fpFolha.innerHTML = `<div class="fp-pega"></div><h3>Não foi possível confirmar</h3>
+                    <div class="fp-erro" style="margin-top:12px">Sem resposta do servidor. O preço pode ou não ter sido alterado: feche, abra a ficha de novo e confira antes de tentar outra vez.</div>
+                    <button type="button" class="fp-btn2" id="fpFechar">Fechar</button>`;
+                document.getElementById('fpFechar').addEventListener('click', fpFechar);
+                return;
+            }
+            estado.salvando = false;
+            if (fp !== estado) return;
+            if (res.ok) {
+                fpFechar();
+                aplicarPrecoNaFicha(estado.id, corpo.precoNovo, estado.p);
+                mostrarToastPreco(`Preço atualizado para <b>${fmtMoney(corpo.precoNovo)}</b>`, corpo.alteracao ? () => desfazerPreco(estado.id, corpo.alteracao, estado.p) : null);
+                return;
+            }
+            if (res.status === 409 && corpo.mudou) {
+                estado.novo = null;
+                try { await fpCarregar(estado); fpPasso1(corpo.detail); } catch (e) { fpFalhaAoAbrir(e); }
+                return;
+            }
+            if (res.status === 409 && corpo.confirmar) { fpPasso2(corpo.confirmar, 'Confirme marcando a caixinha para salvar.'); return; }
+            fpPasso2(undefined, corpo.detail || 'Não foi possível alterar o preço agora. Tente de novo.');
+        }
+
+        // Preço novo na ficha aberta, na memória das fichas já vistas e no cartão da lista (sem esperar nova busca).
+        function aplicarPrecoNaFicha(id, preco, p) {
+            for (const [chave, visto] of jaVisto) if (chave.startsWith(`ficha|${id}|`)) { visto.dados = { ...visto.dados, precoVenda: preco }; visto.em = Date.now(); }
+            document.querySelectorAll(`#lista .card[data-id="${id}"] .preco`).forEach((el) => { if (el.firstChild) el.firstChild.textContent = fmtMoney(preco); });
+            if (fichaAtual && String(fichaAtual.id) === String(id)) desenharFicha({ ...fichaAtual.p, precoVenda: preco, alteradoAgora: true }, id);
+        }
+
+        function mostrarToastPreco(html, aoDesfazer) {
+            clearTimeout(temporizadorToast);
+            elToastPreco.innerHTML = `<span>${html}</span>${aoDesfazer ? '<button type="button">DESFAZER</button>' : ''}`;
+            elToastPreco.classList.add('mostrar');
+            if (aoDesfazer) elToastPreco.querySelector('button').addEventListener('click', () => { clearTimeout(temporizadorToast); elToastPreco.classList.remove('mostrar'); aoDesfazer(); });
+            temporizadorToast = setTimeout(() => elToastPreco.classList.remove('mostrar'), aoDesfazer ? 12000 : 4000);
+        }
+
+        async function desfazerPreco(id, alteracao, p) {
+            try {
+                const res = await fetch(`/api/produtos/${id}/preco/desfazer`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alteracao }),
+                });
+                const corpo = await res.json().catch(() => ({}));
+                if (!res.ok) { mostrarToastPreco(esc(corpo.detail || 'Não foi possível desfazer agora.')); return; }
+                aplicarPrecoNaFicha(id, corpo.precoNovo, p);
+                mostrarToastPreco(`Preço voltou para <b>${fmtMoney(corpo.precoNovo)}</b>`);
+            } catch (e) {
+                mostrarToastPreco('Sem resposta do servidor. Abra a ficha de novo e confira o preço.');
+            }
+        }
+
+        function renderAlteracoesPreco(lista) {
+            if (!lista.length) return '<div class="indisponivel">Nenhuma alteração de preço feita pelo app neste produto.</div>';
+            return lista.map((a) => {
+                const quando = new Date(a.quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                return `<div class="campo"><span class="rotulo">${esc(quando)} · ${esc(a.quem)}${a.tipo === 'desfazer' ? ' (desfez)' : a.desfeita ? ' (desfeita)' : ''}</span>
+                    <span class="valor">${nMoeda(a.de)} → ${nMoeda(a.para)}</span></div>`;
+            }).join('');
         }
 
         // Da ficha do produto para as notas de entrada dele na aba Compras; o "voltar" de lá retorna para a ficha

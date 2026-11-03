@@ -45,6 +45,23 @@ CREATE TABLE IF NOT EXISTS empresas (
 );
 """
 
+# Registro das alterações de preço de venda feitas pelo Prime Info (o ERP grava tudo como "API-Publica", então
+# quem alterou, quando e de quanto para quanto só existe aqui). Igual no SQLite e no Postgres.
+TABELA_ALTERACOES_PRECO = """
+CREATE TABLE IF NOT EXISTS alteracoes_preco (
+    id TEXT PRIMARY KEY,
+    cnpj TEXT NOT NULL,
+    email TEXT NOT NULL,
+    id_variacao BIGINT NOT NULL,
+    tabela INTEGER NOT NULL,
+    tipo TEXT NOT NULL,
+    preco_anterior DOUBLE PRECISION NOT NULL,
+    preco_novo DOUBLE PRECISION NOT NULL,
+    criado_em TEXT NOT NULL,
+    desfeita_em TEXT
+)"""
+INDICE_ALTERACOES_PRECO = "CREATE INDEX IF NOT EXISTS ix_alteracoes_preco_produto ON alteracoes_preco (cnpj, id_variacao, criado_em)"
+
 _pool = None
 
 
@@ -99,6 +116,8 @@ def init_db() -> None:
             conn.execute(SCHEMA_POSTGRES)
             # Prime Vendas liberado para a empresa (botão no /admin). Bancos anteriores ganham a coluna desligada.
             conn.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS vendas_liberado INTEGER NOT NULL DEFAULT 0")
+            conn.execute(TABELA_ALTERACOES_PRECO)
+            conn.execute(INDICE_ALTERACOES_PRECO)
             _importar_do_sqlite_se_vazio(conn)
         return
     with get_connection() as conn:
@@ -110,6 +129,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE empresas DROP COLUMN senha_hash")
         if "vendas_liberado" not in columns:   # Prime Vendas liberado para a empresa (botão no /admin)
             conn.execute("ALTER TABLE empresas ADD COLUMN vendas_liberado INTEGER NOT NULL DEFAULT 0")
+        conn.execute(TABELA_ALTERACOES_PRECO)
+        conn.execute(INDICE_ALTERACOES_PRECO)
 
 
 def _importar_do_sqlite_se_vazio(conn) -> None:

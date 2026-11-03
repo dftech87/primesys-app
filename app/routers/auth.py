@@ -79,6 +79,7 @@ async def login_submit(
     if dados is None:
         return recusar(motivo, 403)
     request.session["cnpj"] = tenant["cnpj"]
+    request.session["email"] = email.strip().lower()   # quem alterar preço fica registrado com este e-mail
     acessos.gravar_na_sessao(request, dados)
     return RedirectResponse(destino, status_code=303)
 

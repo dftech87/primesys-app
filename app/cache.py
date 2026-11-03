@@ -79,3 +79,9 @@ def _ignorar_erro(tarefa: asyncio.Task) -> None:
 def descartar(chave: tuple) -> None:
     """Esquece um resultado guardado (ex.: o dono pediu para atualizar)."""
     _guardado.pop(chave, None)
+
+
+def descartar_prefixo(prefixo: tuple) -> None:
+    """Esquece tudo que começa com este prefixo (ex.: todas as listas de preço de uma empresa)."""
+    for chave in [c for c in _guardado if c[:len(prefixo)] == prefixo]:
+        _guardado.pop(chave, None)

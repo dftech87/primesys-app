@@ -20,6 +20,7 @@ Produto da DFTECH (CNPJ 29.970.763/0001-47) vendido a lojas que usam o ERP **Meu
 
 ## Dados de clientes e testes
 - Testes e escritas no Prime Vendas acontecem **só no DFTECH** (CNPJ 29970763000147).
+- Alterar preço de venda no Prime Info (`app/preco_venda.py`) é a única escrita do Info no ERP: mantém as travas (permissão do perfil, preço lido na hora, confirmação >30% ou abaixo do custo, registro em `alteracoes_preco`, desfazer). Teste de escrita só na DFTECH (produto 208), restaurando o preço.
 - Ler dados de outro cliente exige autorização do dono. Todo script de teste contra o ERP define `CNPJ_TESTE` **antes** de importar e confere que `/api/empresa/v1` devolve o CNPJ esperado antes de qualquer consulta.
 - Cliente fiscal de teste (NFC-e e pré-venda): 68022887000152, autorizado para leitura.
 

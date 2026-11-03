@@ -99,6 +99,9 @@ class MeuERPClient:
     async def post(self, path: str, json: dict | None = None) -> dict:
         return await self._request("POST", path, json=json)
 
+    async def put(self, path: str, json: dict | None = None) -> dict:
+        return await self._request("PUT", path, json=json)
+
     async def _request(self, method: str, path: str, **kwargs) -> dict:
         headers = {"Authorization": f"Authentication {self.api_token}"}
         client = _client_for(self.base_url)

@@ -49,6 +49,15 @@ Descrição, códigos, unidade e **preço de venda** aparecem para todos que tê
 | **Estoque** na loja | POS → Permissão para consultar estoque (**10041**) **ou** MOVIMENTO DE ESTOQUE → acessar o módulo (**1901**) |
 | **Histórico de preço** (quem alterou e quando) | FORMAÇÃO DE PREÇOS → acessar o módulo (**5201**) **ou** TABELAS DE PREÇO → acessar o módulo (**3501**) |
 | Botão **Ver notas de entrada** | o mesmo da aba Compras (**6401** ou **6501**) |
+| **Lápis para alterar o preço de venda** | CADASTRO DE MERCADORIA → Permissão para alterar preço de venda (**2**) **ou** FORMAÇÃO DE PREÇOS → Permissão para alterar preço da mercadoria (**5202**) |
+
+**Alterar preço de venda pelo app:** é a única escrita do Prime Info no ERP. Vale só para quem tem a aba Produtos e uma das
+duas permissões acima (quem não tem perfil na empresa também pode, como no resto). Regras: o preço é lido do ERP na hora e a
+alteração é recusada se mudou desde que a ficha foi aberta; mudança acima de **30%** ou preço **abaixo do custo** exige
+marcar uma confirmação (quem não tem a permissão de custo **9** não pode vender abaixo do custo); dá para **desfazer** por 30
+minutos; tudo fica registrado no app (quem, quando, de quanto para quanto), pois o ERP grava como "API-Publica". Altera a
+tabela de preço que a ficha mostra (menor código ativo); se houver várias tabelas ativas, a folha deixa escolher; tabela
+com vigência programada não é alterada pelo app. Quem já estava logado precisa **entrar de novo** para o lápis aparecer.
 
 ### Exemplo: usuário que só consulta produtos e preço
 

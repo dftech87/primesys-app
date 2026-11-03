@@ -26,6 +26,7 @@ PERMISSOES = {
     "custo": (9,),                  # visualizar custos no cadastro de mercadoria
     "estoque": (10041, 1901),       # POS: consultar estoque | movimento de estoque
     "historico_preco": (5201, 3501),  # formação de preços | tabelas de preço
+    "alterar_preco": (2, 5202),     # cadastro de mercadoria: alterar preço de venda | formação de preços: alterar preço
     "compras": (6401, 6501),        # central de compras | outras entradas (notas de entrada)
     "dashboard": (3301,),           # dashboard: acessar o módulo
     "lucro": (3304,),               # dashboard 'Resumo - Lucro' (margem e lucro bruto)
@@ -59,6 +60,7 @@ def calcular(liberadas: set[int]) -> dict:
     a["pagar"] = a["financeiro"] and a["pagar"]
     a["receber"] = a["financeiro"] and a["receber"]
     a["financeiro"] = a["pagar"] or a["receber"]
+    a["alterar_preco"] = a["produtos"] and a["alterar_preco"]
     a["lucro"] = a["dashboard"] and a["lucro"]
     a["estoque_painel"] = a["dashboard"] and a["estoque_painel"]
     return a
@@ -154,8 +156,9 @@ def gravar_na_sessao(request, dados: dict) -> None:
 async def atualizar(request, tenant: dict) -> dict:
     """Recalcula pelas permissões atuais do perfil (página principal). Se o ERP não responder, fica o da sessão."""
     atuais = na_sessao(request) or {}
-    if not request.session.get("perfil"):   # sem perfil: continua vendo tudo
-        return atuais
+    if not request.session.get("perfil"):   # sem perfil: continua vendo tudo (inclui áreas criadas depois do login)
+        request.session["acessos"] = dict(TUDO)
+        return dict(TUDO)
     try:
         novos = calcular(await _liberadas(tenant, int(request.session["perfil"])))
     except Exception:
@@ -168,4 +171,10 @@ async def atualizar(request, tenant: dict) -> dict:
 def pode(request, *areas: str) -> bool:
     acessos = na_sessao(request) or {}
     return any(acessos.get(a) for a in areas)
+
+
+def pode_alterar_preco(request) -> bool:
+    """Alterar preço escreve no ERP: além da permissão, a sessão precisa saber o e-mail (é quem fica no registro).
+    Sessões abertas antes disso não o têm e voltam a ter o lápis no próximo login."""
+    return bool(pode(request, "alterar_preco") and pode(request, "produtos") and request.session.get("email"))
 
