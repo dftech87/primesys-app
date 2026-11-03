@@ -76,6 +76,14 @@ def _ignorar_erro(tarefa: asyncio.Task) -> None:
         logger.warning("renovação em segundo plano falhou: %r", tarefa.exception())
 
 
+def guardar(chave: tuple, ttl_segundos: float, valor) -> None:
+    """Guarda um valor que já temos de graça (ex.: a ficha trouxe o preço, que outra tela também usa)."""
+    _guardado[chave] = (time.monotonic() + ttl_segundos, valor)
+    _guardado.move_to_end(chave)
+    while len(_guardado) > _MAX_ENTRADAS:
+        _guardado.popitem(last=False)
+
+
 def descartar(chave: tuple) -> None:
     """Esquece um resultado guardado (ex.: o dono pediu para atualizar)."""
     _guardado.pop(chave, None)

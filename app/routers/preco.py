@@ -9,15 +9,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app import acessos, preco_venda
-from app.cache import cached
 from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.tenants import ERRO_ERP_LENTO
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-TTL_CUSTO = 300
 
 
 class PedidoPreco(BaseModel):
@@ -70,11 +67,9 @@ async def dados_da_edicao(request: Request, id_variacao: int):
     client = MeuERPClient(tenant["api_token"])
     ver_custo = acessos.pode(request, "custo")
     try:
-        tabelas = await preco_venda.tabelas_ativas(client, id_variacao)
-        custo = None
-        if ver_custo:
-            custo = await cached((tenant["cnpj"], "custo", id_variacao), TTL_CUSTO, lambda: preco_venda.custo_atual(client, id_variacao),
-                                 guardar_se=lambda v: v is not None)
+        tabelas, custo = await preco_venda.estado(client, id_variacao)   # preço e custo lidos agora, numa chamada só
+        if not ver_custo:
+            custo = None   # o custo só vai para quem o perfil deixa ver
     except httpx.HTTPError as erro:
         return _erro_erp(erro)
     return {"tabelas": tabelas, "custo": custo, "limiteVariacaoPct": preco_venda.VARIACAO_GRANDE_PCT}

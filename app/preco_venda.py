@@ -15,11 +15,13 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import httpx
 
+from app import ficha
 from app.cache import descartar, descartar_prefixo
 from app.compras import nome_publico
 from app.datas import FUSO_LOJA
 from app.database import db_session
 from app.meuerp_client import MeuERPClient
+from app.sqlquery import ConsultaIndisponivel
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,14 @@ def _centavos(valor) -> float:
     if arredondado > PRECO_MAXIMO:
         raise PrecoRecusado("Esse preço é alto demais. Confira o valor digitado.")
     return arredondado
+
+
+async def estado(client: MeuERPClient, id_variacao: int) -> tuple[list[dict], float | None]:
+    """Tabelas de preço ativas e custo, lidos do ERP agora, numa chamada (SQL). Se a consulta falhar, vale o caminho antigo."""
+    try:
+        return await ficha.estado_do_preco(client, id_variacao)
+    except (ConsultaIndisponivel, ValueError):
+        return await tabelas_ativas(client, id_variacao), await custo_atual(client, id_variacao)
 
 
 async def tabelas_ativas(client: MeuERPClient, id_variacao: int) -> list[dict]:
@@ -119,7 +129,7 @@ async def _gravar(client: MeuERPClient, id_variacao: int, tabela: int, preco: fl
     except httpx.HTTPError:
         # Sem resposta: pode ter gravado mesmo assim. Confere no ERP antes de dizer que falhou.
         try:
-            depois = await tabelas_ativas(client, id_variacao)
+            depois, _ = await estado(client, id_variacao)
             if any(t["codigo"] == int(tabela) and abs(t["preco"] - preco) < TOLERANCIA for t in depois):
                 logger.warning("o ERP demorou, mas o preço do produto %s foi gravado", id_variacao)
                 return {}
@@ -157,13 +167,14 @@ def _esquecer(cnpj: str, id_variacao: int) -> None:
 async def alterar(client: MeuERPClient, cnpj: str, email: str, nome: str, id_variacao: int, preco, preco_visto, tabela: int | None,
                   confirmo: bool, pode_ver_custo: bool) -> dict:
     novo = _centavos(preco)
-    escolhida = _escolher(await tabelas_ativas(client, id_variacao), tabela)
+    tabelas, custo = await estado(client, id_variacao)
+    escolhida = _escolher(tabelas, tabela)
     atual = escolhida["preco"]
     if preco_visto is not None and abs(float(preco_visto) - atual) > TOLERANCIA:
         raise PrecoRecusado("O preço mudou no ERP depois que você abriu esta ficha. Confira o valor atual e tente de novo.", 409, mudou=True, atual=atual)
     if abs(novo - atual) < TOLERANCIA:
         raise PrecoRecusado("O novo preço é igual ao preço atual.")
-    avaliar(atual, novo, await custo_atual(client, id_variacao), pode_ver_custo, confirmo)
+    avaliar(atual, novo, custo, pode_ver_custo, confirmo)
 
     resposta = await _gravar(client, id_variacao, escolhida["codigo"], novo)
     try:
@@ -189,7 +200,7 @@ async def desfazer(client: MeuERPClient, cnpj: str, email: str, nome: str, id_va
     criada = datetime.strptime(linha["criado_em"], FORMATO_HORA).replace(tzinfo=timezone.utc)
     if _agora() - criada > JANELA_DESFAZER:
         raise PrecoRecusado("O prazo para desfazer (30 minutos) passou. Faça uma nova alteração de preço.", 409)
-    tabelas = await tabelas_ativas(client, id_variacao)
+    tabelas, _ = await estado(client, id_variacao)
     escolhida = next((t for t in tabelas if t["codigo"] == int(linha["tabela"])), None)
     if escolhida is None or abs(escolhida["preco"] - float(linha["preco_novo"])) > TOLERANCIA:
         raise PrecoRecusado("O preço mudou depois desta alteração, então não dá para desfazer automaticamente. Faça uma nova alteração.", 409)

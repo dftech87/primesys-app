@@ -5,8 +5,8 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import acessos, compras, preco_venda, precos, versao
-from app.cache import cached
+from app import acessos, compras, ficha, preco_venda, precos, versao
+from app.cache import cached, guardar
 from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
@@ -24,6 +24,7 @@ TTL_BUSCA = 120
 TTL_PRECOS_LISTA = 120
 ESPERA_PRECOS_LISTA = 3.0   # a lista não espera mais que isso pelo preço: sai sem ele e o preço fica guardado para a próxima
 TTL_PRODUTO = 600
+TTL_FICHA = 60   # a ficha traz o saldo, que muda a cada venda
 TTL_CUSTO_PRECO = 300
 TTL_SALDO = 60
 TTL_ENTRADAS = 600
@@ -156,7 +157,13 @@ async def api_buscar(request: Request, q: str = Query(min_length=2), loja: int =
 async def _precos_da_lista(client: MeuERPClient, cnpj: str, ids: list[int]) -> dict[int, float]:
     """Preços da lista, sem nunca travar nem derrubar a busca: ERP lento ou com erro = lista sem preço. Se passar do
     tempo, a consulta continua em segundo plano e fica guardada (a próxima busca já sai com o preço)."""
-    tarefa = asyncio.ensure_future(cached((cnpj, "precos-lista", tuple(sorted(ids))), TTL_PRECOS_LISTA, lambda: precos.da_lista(client, ids)))
+    async def buscar() -> dict[int, float]:
+        tabela = await precos.da_lista(client, ids)
+        for id_variacao, valor in tabela.items():   # o mesmo preço que a ficha mostraria (tabela ativa de menor código)
+            guardar((cnpj, "preco", id_variacao), TTL_CUSTO_PRECO, valor)
+        return tabela
+
+    tarefa = asyncio.ensure_future(cached((cnpj, "precos-lista", tuple(sorted(ids))), TTL_PRECOS_LISTA, buscar))
     tarefa.add_done_callback(lambda t: t.cancelled() or t.exception())   # erro de tarefa que ninguém esperou: não vira aviso solto
     try:
         return await asyncio.wait_for(asyncio.shield(tarefa), ESPERA_PRECOS_LISTA)
@@ -173,8 +180,35 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
         return sem_permissao()
     ver_custo, ver_estoque = acessos.pode(request, "custo"), acessos.pode(request, "estoque")
 
+    # Caminho normal: UMA consulta traz a ficha toda (guardada por 60 s, para todos da empresa). Custo e estoque só saem
+    # para quem o perfil deixa ver. Se a consulta falhar ou não achar o produto, vale o caminho antigo (REST) abaixo.
     client = MeuERPClient(tenant["api_token"])
     cnpj = tenant["cnpj"]
+    try:
+        dados = await cached((cnpj, "ficha", id_variacao, loja), TTL_FICHA, lambda: ficha.ler(client, id_variacao, loja), guardar_se=_nao_nulo)
+    except (ConsultaIndisponivel, ValueError):
+        dados = None
+    if dados is not None:
+        # O preço e o custo que a ficha trouxe também servem às notas de entrada e à folha de alterar preço.
+        if dados["precoVenda"] is not None:
+            guardar((cnpj, "preco", id_variacao), TTL_CUSTO_PRECO, dados["precoVenda"])
+        if dados["precoCusto"] is not None:
+            guardar((cnpj, "custo", id_variacao), TTL_CUSTO_PRECO, dados["precoCusto"])
+        return {
+            "descricao": dados["descricao"],
+            "codigoBarras": dados["codigoBarras"],
+            "codigoInterno": id_variacao,  # mesmo código da busca (variação do produto), não o do cadastro-pai
+            "unidade": dados["unidade"],
+            "ativo": dados["ativo"],
+            "precoCusto": dados["precoCusto"] if ver_custo else None,
+            "precoVenda": dados["precoVenda"],
+            "estoque": dados["estoque"] if ver_estoque else None,
+        }
+    return await _detalhe_por_rest(client, cnpj, id_variacao, loja, ver_custo, ver_estoque)
+
+
+async def _detalhe_por_rest(client: MeuERPClient, cnpj: str, id_variacao: int, loja: int, ver_custo: bool, ver_estoque: bool):
+    """Caminho antigo da ficha (4 chamadas REST): só entra se a consulta SQL falhar."""
     try:
         mercadoria = await cached(
             (cnpj, "produto", id_variacao), TTL_PRODUTO, lambda: client.get(f"/api/mercadoria/v1/{id_variacao}")
