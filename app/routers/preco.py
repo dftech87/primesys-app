@@ -40,6 +40,12 @@ def _entrar(request: Request) -> tuple[dict | None, JSONResponse | None]:
     return tenant, None
 
 
+def _quem(request: Request, tenant: dict) -> tuple[str, str]:
+    email = request.session["email"]
+    nome = (request.session.get("nome") or acessos.nome_do_email(tenant["cnpj"], email) or "").strip()
+    return email, nome or email.split("@")[0]
+
+
 def _mesma_origem(request: Request) -> bool:
     """Escrita só do próprio site (o cookie já é SameSite=lax; isto é uma segunda trava). Sem cabeçalho Origin, vale."""
     origem = request.headers.get("origin")
@@ -84,7 +90,7 @@ async def alterar_preco(request: Request, id_variacao: int, pedido: PedidoPreco)
     client = MeuERPClient(tenant["api_token"])
     try:
         return await preco_venda.alterar(
-            client, tenant["cnpj"], request.session["email"], id_variacao, pedido.preco, pedido.preco_visto, pedido.tabela,
+            client, tenant["cnpj"], *_quem(request, tenant), id_variacao, pedido.preco, pedido.preco_visto, pedido.tabela,
             pedido.confirmo, acessos.pode(request, "custo"),
         )
     except preco_venda.PrecoRecusado as erro:
@@ -102,7 +108,7 @@ async def desfazer_preco(request: Request, id_variacao: int, pedido: PedidoDesfa
         return JSONResponse({"detail": "Pedido de outro site recusado."}, status_code=403)
     client = MeuERPClient(tenant["api_token"])
     try:
-        return await preco_venda.desfazer(client, tenant["cnpj"], request.session["email"], id_variacao, pedido.alteracao)
+        return await preco_venda.desfazer(client, tenant["cnpj"], *_quem(request, tenant), id_variacao, pedido.alteracao)
     except preco_venda.PrecoRecusado as erro:
         return JSONResponse({"detail": erro.detalhe, **erro.extra}, status_code=erro.status)
     except httpx.HTTPError as erro:

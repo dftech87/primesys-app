@@ -293,11 +293,11 @@
         .tab-ent .desce { color: var(--erro); font-size: 10px; }  /* custo caiu: vermelho */
         .tab-ent .mg-ruim { color: var(--erro); }
         .tab-ent .mg-ok { color: var(--ok); }
-        .linha-preco { display: grid; grid-template-columns: 56px 1fr 1fr 82px; gap: 4px; align-items: center; padding: 8px 6px;
+        .linha-preco { display: grid; grid-template-columns: 56px 1fr 1fr 100px; gap: 4px; align-items: center; padding: 8px 6px;
             border-bottom: 1px solid var(--linha); font-size: 12px; }
         .linha-preco.cab { font-size: 10px; color: var(--texto-2); padding: 4px 6px; border: 0; }
         .linha-preco .n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-        .linha-preco .lp-quem { padding-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .linha-preco .lp-quem { padding-left: 8px; overflow: hidden; line-height: 1.2; overflow-wrap: anywhere; }
         .linha-preco.atual { background: var(--azul-fundo); border: 1px solid var(--azul-borda); border-radius: 8px; font-weight: 800; color: var(--azul-texto); }
         .linha-preco .seta { display: inline-block; width: 12px; text-align: center; font-size: 10px; }
         .linha-preco .sobe { color: var(--erro); } .linha-preco .desce { color: var(--ok); } .linha-preco .sem { color: var(--texto-3); }

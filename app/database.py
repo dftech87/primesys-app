@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS alteracoes_preco (
     id TEXT PRIMARY KEY,
     cnpj TEXT NOT NULL,
     email TEXT NOT NULL,
+    nome TEXT,
     id_variacao BIGINT NOT NULL,
     tabela INTEGER NOT NULL,
     tipo TEXT NOT NULL,
@@ -117,6 +118,7 @@ def init_db() -> None:
             # Prime Vendas liberado para a empresa (botão no /admin). Bancos anteriores ganham a coluna desligada.
             conn.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS vendas_liberado INTEGER NOT NULL DEFAULT 0")
             conn.execute(TABELA_ALTERACOES_PRECO)
+            conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN IF NOT EXISTS nome TEXT")   # tabela criada antes do nome
             conn.execute(INDICE_ALTERACOES_PRECO)
             _importar_do_sqlite_se_vazio(conn)
         return
@@ -130,6 +132,8 @@ def init_db() -> None:
         if "vendas_liberado" not in columns:   # Prime Vendas liberado para a empresa (botão no /admin)
             conn.execute("ALTER TABLE empresas ADD COLUMN vendas_liberado INTEGER NOT NULL DEFAULT 0")
         conn.execute(TABELA_ALTERACOES_PRECO)
+        if "nome" not in {row["name"] for row in conn.execute("PRAGMA table_info(alteracoes_preco)")}:   # criada antes do nome
+            conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN nome TEXT")
         conn.execute(INDICE_ALTERACOES_PRECO)
 
 

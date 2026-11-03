@@ -96,7 +96,8 @@ async def _perfil_do_email(tenant: dict, email: str) -> int | None:
             u = await client.get(f"/api/usuario/v1/{uid}")
             # A API às vezes não traz o perfil: vale o do banco do ERP (mesma empresa).
             perfil = int(u.get("idPerfil") or dados["perfil_banco"].get(uid) or 0)
-            dados["por_id"][uid] = {"email": (u.get("email") or "").strip().lower(), "perfil": perfil, "em": agora}
+            dados["por_id"][uid] = {"email": (u.get("email") or "").strip().lower(), "perfil": perfil, "em": agora,
+                                    "nome": (u.get("nome") or "").strip()}
         except httpx.HTTPStatusError as erro:
             if erro.response.status_code == 429 or erro.response.status_code >= 500:
                 # ERP sobrecarregado ou fora: não dá para afirmar que o usuário não tem perfil. Recusa o login
@@ -127,6 +128,15 @@ async def _perfil_do_email(tenant: dict, email: str) -> int | None:
             break
     achado = next((u for u in dados["por_id"].values() if u["email"] == email and u["perfil"] > 0), None)
     return achado["perfil"] if achado else None
+
+
+def nome_do_email(cnpj: str, email: str) -> str:
+    """Nome do usuário no ERP, se já foi lido (não chama o ERP). Quem não tem perfil na empresa não é encontrado: ''."""
+    email = (email or "").strip().lower()
+    for u in _usuarios.get(cnpj, {}).get("por_id", {}).values():
+        if u.get("email") == email and u.get("nome"):
+            return u["nome"]
+    return ""
 
 
 async def no_login(tenant: dict, email: str) -> tuple[dict | None, str | None]:

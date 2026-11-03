@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import acessos, compras, precos, versao
+from app import acessos, compras, preco_venda, precos, versao
 from app.cache import cached
 from app.deps import current_tenant, sem_permissao
 from app.meuerp_client import MeuERPClient
@@ -261,4 +261,4 @@ async def api_historico_preco(request: Request, id_variacao: int):
         )
     except ConsultaIndisponivel:
         return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
-    return {"mudancas": mudancas}
+    return {"mudancas": preco_venda.rotular_historico(tenant["cnpj"], id_variacao, mudancas)}

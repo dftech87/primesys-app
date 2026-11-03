@@ -16,6 +16,8 @@ from decimal import ROUND_HALF_UP, Decimal
 import httpx
 
 from app.cache import descartar, descartar_prefixo
+from app.compras import nome_publico
+from app.datas import FUSO_LOJA
 from app.database import db_session
 from app.meuerp_client import MeuERPClient
 
@@ -129,14 +131,14 @@ async def _gravar(client: MeuERPClient, id_variacao: int, tabela: int, preco: fl
     return resposta if isinstance(resposta, dict) else {}
 
 
-def _registrar(cnpj: str, email: str, id_variacao: int, tabela: int, tipo: str, anterior: float, novo: float) -> str | None:
+def _registrar(cnpj: str, email: str, nome: str, id_variacao: int, tabela: int, tipo: str, anterior: float, novo: float) -> str | None:
     chave = uuid.uuid4().hex
     try:
         with db_session() as conn:
             conn.execute(
-                "INSERT INTO alteracoes_preco (id, cnpj, email, id_variacao, tabela, tipo, preco_anterior, preco_novo, criado_em)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (chave, cnpj, email, int(id_variacao), int(tabela), tipo, anterior, novo, _agora().strftime(FORMATO_HORA)),
+                "INSERT INTO alteracoes_preco (id, cnpj, email, nome, id_variacao, tabela, tipo, preco_anterior, preco_novo, criado_em)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (chave, cnpj, email, nome, int(id_variacao), int(tabela), tipo, anterior, novo, _agora().strftime(FORMATO_HORA)),
             )
     except Exception:
         # O preço já foi gravado no ERP: não dá para desfazer isso aqui. Fica o alerta nos logs.
@@ -152,7 +154,7 @@ def _esquecer(cnpj: str, id_variacao: int) -> None:
     descartar_prefixo((cnpj, "precos-lista"))
 
 
-async def alterar(client: MeuERPClient, cnpj: str, email: str, id_variacao: int, preco, preco_visto, tabela: int | None,
+async def alterar(client: MeuERPClient, cnpj: str, email: str, nome: str, id_variacao: int, preco, preco_visto, tabela: int | None,
                   confirmo: bool, pode_ver_custo: bool) -> dict:
     novo = _centavos(preco)
     escolhida = _escolher(await tabelas_ativas(client, id_variacao), tabela)
@@ -168,13 +170,13 @@ async def alterar(client: MeuERPClient, cnpj: str, email: str, id_variacao: int,
         anterior = float(resposta.get("precoAnterior", atual))
     except (TypeError, ValueError):
         anterior = atual
-    alteracao = _registrar(cnpj, email, id_variacao, escolhida["codigo"], "alteracao", anterior, novo)
+    alteracao = _registrar(cnpj, email, nome, id_variacao, escolhida["codigo"], "alteracao", anterior, novo)
     _esquecer(cnpj, id_variacao)
     logger.info("preço alterado: empresa %s por %s, produto %s tabela %s: %s -> %s", cnpj, email, id_variacao, escolhida["codigo"], anterior, novo)
     return {"alteracao": alteracao, "precoAnterior": anterior, "precoNovo": novo, "tabela": escolhida["codigo"]}
 
 
-async def desfazer(client: MeuERPClient, cnpj: str, email: str, id_variacao: int, id_alteracao: str) -> dict:
+async def desfazer(client: MeuERPClient, cnpj: str, email: str, nome: str, id_variacao: int, id_alteracao: str) -> dict:
     with db_session() as conn:
         linha = conn.execute(
             "SELECT tipo, tabela, preco_anterior, preco_novo, criado_em, desfeita_em, id_variacao FROM alteracoes_preco WHERE id = ? AND cnpj = ?",
@@ -206,18 +208,51 @@ async def desfazer(client: MeuERPClient, cnpj: str, email: str, id_variacao: int
         with db_session() as conn:
             conn.execute("UPDATE alteracoes_preco SET desfeita_em = NULL WHERE id = ? AND cnpj = ?", (id_alteracao, cnpj))
         raise
-    _registrar(cnpj, email, id_variacao, int(linha["tabela"]), "desfazer", float(linha["preco_novo"]), float(linha["preco_anterior"]))
+    _registrar(cnpj, email, nome, id_variacao, int(linha["tabela"]), "desfazer", float(linha["preco_novo"]), float(linha["preco_anterior"]))
     _esquecer(cnpj, id_variacao)
     logger.info("alteração de preço desfeita: empresa %s por %s, produto %s: %s -> %s", cnpj, email, id_variacao, linha["preco_novo"], linha["preco_anterior"])
     return {"precoNovo": float(linha["preco_anterior"]), "tabela": int(linha["tabela"])}
 
 
+def _quem(linha) -> str:
+    """Nome de quem alterou (o do ERP); sem nome, a parte do e-mail antes do @. O e-mail inteiro nunca sai do servidor."""
+    return (linha["nome"] or "").strip() or str(linha["email"]).split("@")[0]
+
+
+def rotular_historico(cnpj: str, id_variacao: int, mudancas: list[dict]) -> list[dict]:
+    """O ERP grava as alterações feitas pela API como "API-Publica" (aparece "Api"). As que foram feitas por aqui
+    saem como "APP - Nome": confere preço de e para e o dia com o registro do app (cada registro vale uma vez)."""
+    if not any(m.get("quem") == "Api" for m in mudancas):
+        return mudancas
+    with db_session() as conn:
+        linhas = conn.execute(
+            "SELECT email, nome, preco_anterior, preco_novo, criado_em FROM alteracoes_preco"
+            " WHERE cnpj = ? AND id_variacao = ? ORDER BY criado_em DESC, id DESC LIMIT 100",
+            (cnpj, int(id_variacao)),
+        ).fetchall()
+    livres = [{"de": float(l["preco_anterior"]), "para": float(l["preco_novo"]), "quem": _quem(l),
+               "dia": datetime.strptime(l["criado_em"], FORMATO_HORA).replace(tzinfo=timezone.utc).astimezone(FUSO_LOJA).date()} for l in linhas]
+    saida = []
+    for m in mudancas:
+        if m.get("quem") == "Api":
+            try:
+                dia = datetime.strptime(m["data"], "%d/%m/%Y").date()
+            except (KeyError, ValueError):
+                dia = None
+            achada = next((k for k, l in enumerate(livres)
+                           if dia and abs((l["dia"] - dia).days) <= 1 and abs(l["de"] - m["de"]) < TOLERANCIA and abs(l["para"] - m["para"]) < TOLERANCIA), None)
+            if achada is not None:
+                m = {**m, "quem": f"APP - {nome_publico(livres.pop(achada)['quem'])}"}
+        saida.append(m)
+    return saida
+
+
 def recentes(cnpj: str, id_variacao: int, limite: int = 8) -> list[dict]:
     with db_session() as conn:
         linhas = conn.execute(
-            "SELECT email, tipo, preco_anterior, preco_novo, criado_em, desfeita_em FROM alteracoes_preco"
+            "SELECT email, nome, tipo, preco_anterior, preco_novo, criado_em, desfeita_em FROM alteracoes_preco"
             " WHERE cnpj = ? AND id_variacao = ? ORDER BY criado_em DESC, id DESC LIMIT ?",
             (cnpj, int(id_variacao), int(limite)),
         ).fetchall()
-    return [{"quando": f"{l['criado_em'].replace(' ', 'T')}Z", "quem": str(l["email"]).split("@")[0], "tipo": l["tipo"],
+    return [{"quando": f"{l['criado_em'].replace(' ', 'T')}Z", "quem": _quem(l), "tipo": l["tipo"],
              "de": float(l["preco_anterior"]), "para": float(l["preco_novo"]), "desfeita": bool(l["desfeita_em"])} for l in linhas]
