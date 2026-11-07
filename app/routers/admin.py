@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 
 import secrets
 
-from app import backup, consumo, limite
+from app import backup, consumo, desempenho, limite
 from app.meuerp_client import nome_do_balde
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
@@ -233,6 +233,18 @@ async def admin_consumo(request: Request, dias: int = 1):
     linhas = sorted(({"nome": nomes.get(cod, f"(código {cod})"), **dados} for cod, dados in por_cliente.items()),
                     key=lambda c: (-c["esperas"], -c["chamadas"]))
     return templates.TemplateResponse(request, "admin_consumo.html", {"linhas": linhas, "dias": dias})
+
+
+@router.get("/desempenho", response_class=HTMLResponse)
+async def admin_desempenho(request: Request, dias: int = 7, lentos: int = 0):
+    """Logins e pedidos lentos, um a um, com onde o tempo foi (fila da cota, ERP, passo)."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    nomes = {t["cnpj"]: t["nome_fantasia"] for t in list_tenants()}
+    linhas = desempenho.listar(dias, bool(lentos))
+    for l in linhas:
+        l["empresa"] = nomes.get(l["cnpj"], l["cnpj"] or "-")
+    return templates.TemplateResponse(request, "admin_desempenho.html", {"linhas": linhas, "dias": max(1, min(dias, 90)), "lentos": 1 if lentos else 0})
 
 
 @router.get("/backup")

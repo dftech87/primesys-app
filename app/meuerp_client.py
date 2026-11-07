@@ -18,7 +18,7 @@ import time
 
 import httpx
 
-from app import consumo
+from app import consumo, desempenho
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -112,8 +112,13 @@ class MeuERPClient:
         for attempt in range(MAX_RETRIES + 1):
             inicio_espera = time.monotonic()
             await self.bucket.acquire(self.segundo_plano)
-            consumo.registrar(self.bucket.nome, time.monotonic() - inicio_espera, self.segundo_plano)
-            response = await client.request(method, path, headers=headers, **kwargs)
+            espera = time.monotonic() - inicio_espera
+            consumo.registrar(self.bucket.nome, espera, self.segundo_plano)
+            inicio_erp = time.monotonic()
+            try:
+                response = await client.request(method, path, headers=headers, **kwargs)
+            finally:
+                desempenho.somar_chamada(espera, time.monotonic() - inicio_erp)
             if response.status_code == 429 and attempt < MAX_RETRIES:
                 try:
                     retry_after = float(response.headers.get("Retry-After", 5))

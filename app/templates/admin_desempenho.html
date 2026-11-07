@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrimeSys | Tempos e lentidão</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; color: #0f172a; }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #0f172a; color: #fff; }
+        header h1 { margin: 0; font-size: 18px; }
+        header a { color: #cbd5e1; text-decoration: none; font-size: 13px; margin-left: 16px; }
+        main { padding: 24px; max-width: 1300px; margin: 0 auto; }
+        .nota { font-size: 13px; color: #475569; line-height: 1.5; margin: 0 0 16px; }
+        .filtro a { display: inline-block; padding: 6px 12px; margin: 0 6px 6px 0; border-radius: 16px; background: #fff; border: 1px solid #cbd5e1; color: #0f172a; text-decoration: none; font-size: 13px; }
+        .filtro a.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+        .cartao { background: #fff; border-radius: 14px; padding: 8px 14px 14px; margin-top: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+        th.l, td.l { text-align: left; }
+        th { color: #64748b; font-weight: 600; font-size: 12px; }
+        td.passos { white-space: normal; text-align: left; color: #475569; font-size: 12px; min-width: 220px; }
+        .ruim { color: #b91c1c; font-weight: 700; }
+        .vazio { color: #64748b; padding: 20px 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PrimeSys &middot; Tempos e lentidão</h1>
+        <div><a href="/admin">Clientes</a><a href="/admin/consumo">Consumo do ERP</a><a href="/admin/logout">Sair</a></div>
+    </header>
+    <main>
+        <p class="nota">
+            Cada linha é um pedido ao Prime Info que foi <b>login</b>, demorou <b>3 s ou mais</b>, fez <b>8 ou mais chamadas ao ERP</b>
+            ou deu erro. <b>Fila da cota</b> = quanto esperou por causa do limite de chamadas por minuto (nosso lado);
+            <b>ERP</b> = quanto o ERP levou para responder. <b>Passos</b> mostra onde o tempo foi: nome=segundos/chamadas
+            (ex.: perfil=98,0s/14 &rarr; 14 chamadas ao ERP para achar o perfil). Só números: nenhum e-mail, senha ou dado de cliente.
+            Guardado por 90 dias.
+        </p>
+        <div class="filtro">
+            {% for d, rotulo in [(1, 'Hoje e ontem'), (7, '7 dias'), (30, '30 dias'), (90, '90 dias')] %}
+            <a href="/admin/desempenho?dias={{ d }}&lentos={{ lentos }}" class="{{ 'on' if d == dias else '' }}">{{ rotulo }}</a>
+            {% endfor %}
+            <a href="/admin/desempenho?dias={{ dias }}&lentos={{ 0 if lentos else 1 }}" class="{{ 'on' if lentos else '' }}">Só os lentos (3 s ou mais)</a>
+        </div>
+        <div class="cartao">
+            {% if not linhas %}
+            <div class="vazio">Nenhum registro neste período.</div>
+            {% else %}
+            <table>
+                <tr><th class="l">Quando</th><th class="l">Empresa</th><th class="l">Pedido</th><th>Status</th><th>Tempo</th><th>Fila da cota</th><th>ERP</th><th>Chamadas</th><th class="l">Passos</th></tr>
+                {% for l in linhas %}
+                <tr>
+                    <td class="l">{{ l.em }}</td>
+                    <td class="l">{{ l.empresa }}</td>
+                    <td class="l">{{ l.metodo }} {{ l.rota }}</td>
+                    <td class="{{ 'ruim' if l.status >= 400 else '' }}">{{ l.status }}</td>
+                    <td class="{{ 'ruim' if l.ms >= 10000 else '' }}">{{ '%.1f'|format(l.ms / 1000) }} s</td>
+                    <td class="{{ 'ruim' if l.espera_ms >= 5000 else '' }}">{{ '%.1f'|format(l.espera_ms / 1000) }} s</td>
+                    <td>{{ '%.1f'|format(l.erp_ms / 1000) }} s</td>
+                    <td class="{{ 'ruim' if l.chamadas >= 8 else '' }}">{{ l.chamadas }}</td>
+                    <td class="passos">{{ l.passos or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
+        </div>
+    </main>
+</body>
+</html>

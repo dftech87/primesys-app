@@ -75,6 +75,21 @@ CREATE TABLE IF NOT EXISTS consumo_erp (
     pico_minuto INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (cliente, hora, tela)
 )"""
+# Registro de tempos das requisições lentas e dos logins (app/desempenho.py): só números e nomes de passo, nunca dado pessoal.
+TABELA_DESEMPENHO = """
+CREATE TABLE IF NOT EXISTS desempenho (
+    em TEXT NOT NULL,
+    cnpj TEXT NOT NULL DEFAULT '',
+    metodo TEXT NOT NULL,
+    rota TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    ms INTEGER NOT NULL,
+    chamadas INTEGER NOT NULL DEFAULT 0,
+    espera_ms INTEGER NOT NULL DEFAULT 0,
+    erp_ms INTEGER NOT NULL DEFAULT 0,
+    passos TEXT NOT NULL DEFAULT ''
+)"""
+INDICE_DESEMPENHO = "CREATE INDEX IF NOT EXISTS ix_desempenho_em ON desempenho (em)"
 INDICE_ALTERACOES_PRECO = "CREATE INDEX IF NOT EXISTS ix_alteracoes_preco_produto ON alteracoes_preco (cnpj, id_variacao, criado_em)"
 
 _pool = None
@@ -135,6 +150,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN IF NOT EXISTS nome TEXT")   # tabela criada antes do nome
             conn.execute(INDICE_ALTERACOES_PRECO)
             conn.execute(TABELA_CONSUMO_ERP)
+            conn.execute(TABELA_DESEMPENHO)
+            conn.execute(INDICE_DESEMPENHO)
             _importar_do_sqlite_se_vazio(conn)
         return
     with get_connection() as conn:
@@ -151,6 +168,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN nome TEXT")
         conn.execute(INDICE_ALTERACOES_PRECO)
         conn.execute(TABELA_CONSUMO_ERP)
+        conn.execute(TABELA_DESEMPENHO)
+        conn.execute(INDICE_DESEMPENHO)
 
 
 def _importar_do_sqlite_se_vazio(conn) -> None:

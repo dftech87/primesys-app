@@ -13,6 +13,7 @@ import time
 
 import httpx
 
+from app import desempenho
 from app.cache import cached
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import executar
@@ -84,6 +85,30 @@ async def _liberadas(tenant: dict, id_perfil: int) -> set[int]:
                             obsoleto_ate=24 * 3600))
 
 
+TTL_EMAILS_DA_EMPRESA = 10 * 60
+
+
+async def _emails_da_empresa(tenant: dict) -> set[str] | None:
+    """E-mails de todos os usuários da empresa (1 chamada a cada 100 usuários; guardado 10 min). A listagem do ERP traz só e-mail
+    (sem código nem perfil), mas já basta para saber se um e-mail PERTENCE à empresa. None se não deu para ler (quem chama
+    faz a varredura de antes)."""
+    async def ler() -> list[str]:
+        client = MeuERPClient(tenant["api_token"])
+        emails, pagina = [], 1
+        while pagina <= 10:
+            r = await client.get("/api/usuario/v1", params={"page": pagina, "limit": 100})
+            emails += [str(u.get("email") or "").strip().lower() for u in (r.get("items") or [])]
+            if not r.get("hasNext"):
+                break
+            pagina += 1
+        return emails
+    try:
+        return set(await cached((tenant["cnpj"], "info-emails-empresa"), TTL_EMAILS_DA_EMPRESA, ler))
+    except Exception:
+        logger.warning("lista de usuários da empresa %s indisponível; o login vai procurar o usuário um por um", tenant["cnpj"])
+        return None
+
+
 async def _perfil_do_email(tenant: dict, email: str) -> int | None:
     """Perfil do usuário deste e-mail na empresa (None se ele não tem perfil nela)."""
     cnpj = tenant["cnpj"]
@@ -120,6 +145,14 @@ async def _perfil_do_email(tenant: dict, email: str) -> int | None:
         dados["ids"] = [int(r["id"]) for r in linhas]
         dados["perfil_banco"] = {int(r["id"]): int(r["perfil"] or 0) for r in linhas}
         dados["ids_em"] = agora
+    # Quem não é usuário da empresa (suporte, revenda) não tem perfil nela: não adianta ler os usuários um por um (numa empresa
+    # com 14 perfis eram 14 chamadas à toa e o login chegava a minutos). A listagem só vale se tiver pelo menos tantos
+    # usuários quanto os que têm perfil no banco; senão não é confiável e vale a varredura completa (nunca dar "vê tudo" por engano).
+    if not any(u["email"] == email for u in dados["por_id"].values()):
+        emails = await _emails_da_empresa(tenant)
+        if emails is not None and email not in emails and len(emails) >= len(dados["ids"]):
+            logger.info("e-mail fora da lista de usuários da empresa %s: sem perfil, sem varredura", cnpj)
+            return None
     for uid in dados["ids"]:
         if uid in dados["por_id"] and agora - dados["por_id"][uid]["em"] <= TTL_USUARIO:
             continue
@@ -142,11 +175,14 @@ def nome_do_email(cnpj: str, email: str) -> str:
 async def no_login(tenant: dict, email: str) -> tuple[dict | None, str | None]:
     """Depois da senha conferida: (dados para a sessão, None) ou (None, motivo da recusa)."""
     email = email.strip().lower()
-    perfil = await _perfil_do_email(tenant, email)
+    with desempenho.passo("perfil"):
+        perfil = await _perfil_do_email(tenant, email)
     if perfil is None:   # sem perfil na empresa: vê tudo (decisão de 30/10/2026)
         logger.info("usuário sem perfil na empresa %s: acesso completo ao Prime Info", tenant["cnpj"])
         return {"acessos": dict(TUDO), "v": VERSAO}, None
-    acessos = calcular(await _liberadas(tenant, perfil))
+    with desempenho.passo("permissoes"):
+        liberadas = await _liberadas(tenant, perfil)
+    acessos = calcular(liberadas)
     if not any(acessos[a] for a in ABAS):
         return None, ERRO_SEM_AREA
     return {"perfil": perfil, "acessos": acessos, "v": VERSAO}, None

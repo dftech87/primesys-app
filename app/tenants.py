@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 import httpx
 
-from app import cripto
+from app import cripto, desempenho
 from app.cache import cached
 from app.database import USANDO_POSTGRES, db_session, get_connection
 from app.meuerp_client import MeuERPClient
@@ -215,13 +215,17 @@ async def authenticate(cnpj: str, email: str, senha: str) -> tuple[dict | None, 
         return None, "Empresa não encontrada. Verifique o CNPJ ou fale com o suporte."
 
     # Garante que o token cadastrado é mesmo desta empresa: um token trocado entregaria os dados de outra empresa.
-    if not await token_confere_com_cnpj(tenant):
+    desempenho.empresa(tenant["cnpj"])
+    with desempenho.passo("token"):
+        token_ok = await token_confere_com_cnpj(tenant)
+    if not token_ok:
         logger.error("TOKEN DE OUTRA EMPRESA no cadastro do CNPJ %s: acesso bloqueado até corrigir no /admin", tenant["cnpj"])
         return None, ERRO_TOKEN_DE_OUTRA_EMPRESA
 
     client = MeuERPClient(tenant["api_token"])
     try:
-        resultado = await client.post("/api/usuario/validar/v1", json={"email": email, "senha": senha})
+        with desempenho.passo("senha"):
+            resultado = await client.post("/api/usuario/validar/v1", json={"email": email, "senha": senha})
     except httpx.TimeoutException:
         # ERP lento demais (já aconteceu de levar mais de 50 s): mensagem clara em vez de "Internal Server Error".
         logger.warning("ERP não respondeu a tempo ao validar o login (empresa %s)", tenant["cnpj"])

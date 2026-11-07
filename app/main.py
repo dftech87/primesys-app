@@ -8,9 +8,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+import asyncio
 from contextlib import asynccontextmanager
 
-from app import consumo, versao
+from app import consumo, desempenho, versao
 from app.config import COOKIE_SEGURO, SESSAO_MAX_IDADE, settings
 from app.database import db_session, init_db
 from app.routers import admin, auth, painel_mobile, preco, produtos
@@ -32,6 +33,7 @@ class _GZipSemServiceWorker(GZipMiddleware):
 @asynccontextmanager
 async def _ciclo_de_vida(_app):
     consumo.iniciar()   # medidor de consumo da cota do ERP (grava a cada minuto; o Prime Vendas não liga)
+    await asyncio.to_thread(desempenho.iniciar)   # registro de tempos dos logins e das requisições lentas
     try:
         yield
     finally:
@@ -67,6 +69,20 @@ async def cabecalhos_de_seguranca(request, call_next):
     if COOKIE_SEGURO:   # só na hospedagem (HTTPS): o navegador passa a recusar HTTP para este endereço
         resposta.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     return resposta
+
+
+@app.middleware("http")
+async def medir_tempo(request, call_next):
+    """Ficha de tempo do pedido (fila da cota, ERP, passos). Só grava login, pedido lento, muitas chamadas ou erro 5xx."""
+    marca = desempenho.abrir()
+    status = 500
+    try:
+        resposta = await call_next(request)
+        status = resposta.status_code
+        return resposta
+    finally:
+        desempenho.concluir(request.method, request.url.path, status)
+        desempenho.fechar(marca)
 
 
 @app.middleware("http")
