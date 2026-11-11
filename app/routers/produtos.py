@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import acessos, compras, ficha, preco_venda, precos, versao
+from app import acessos, compras, ficha, liberacoes, preco_venda, precos, versao
 from app.cache import cached, guardar
 from app.deps import current_tenant, revalidar_acessos, sem_permissao
 from app.meuerp_client import MeuERPClient
@@ -79,7 +79,8 @@ async def produtos_page(request: Request):
         request.session.clear()
         return RedirectResponse("/login?next=/produtos", status_code=303)
     # Abas e informações da ficha conforme o perfil do usuário no ERP (recalculado a cada abertura).
-    liberado = {**await acessos.atualizar(request, tenant), "alterar_preco": acessos.pode_alterar_preco(request)}
+    liberado = {**await acessos.atualizar(request, tenant), "alterar_preco": acessos.pode_alterar_preco(request),
+                "liberacoes": liberacoes.pode(request)}   # aprova pedidos de liberação do caixa (perfis escolhidos no /admin)
     return templates.TemplateResponse(
         request,
         "produtos.html",

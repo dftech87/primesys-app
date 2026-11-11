@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>PrimeSys | Liberações do caixa</title>
+    <meta name="theme-color" content="#0b3895" />
+    <script>
+        try { const t = localStorage.getItem('prime-tema'); if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; } catch (e) {}
+    </script>
+    <link rel="manifest" href="/static/manifest.json" />
+    <link rel="icon" href="/static/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/static/icons/icon-180.png" />
+    <style>
+        :root {
+            --azul: #0b3895; --azul-escuro: #082a6e; color-scheme: light;
+            --bg: #f1f5f9; --card: #fff; --card-2: #f8fafc; --borda: #e2e8f0; --borda-forte: #cbd5e1;
+            --texto: #0f172a; --texto-1: #334155; --texto-2: #64748b; --texto-3: #94a3b8;
+            --azul-texto: #0b3895; --azul-fundo: #eff6ff;
+            --ok: #15803d; --ok-texto: #166534; --ok-fundo: #dcfce7;
+            --erro: #b91c1c; --erro-texto: #991b1b; --erro-fundo: #fee2e2; --erro-borda: #fecaca;
+            --aviso-texto: #92400e; --aviso-fundo: #fef3c7;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-tema="claro"]) {
+                color-scheme: dark;
+                --bg: #0b1220; --card: #131f33; --card-2: #182741; --borda: #243654; --borda-forte: #36496b;
+                --texto: #e6ebf3; --texto-1: #cbd5e1; --texto-2: #9aa9c0; --texto-3: #7585a0;
+                --azul-texto: #7fb0ff; --azul-fundo: #14284d;
+                --ok: #4ade80; --ok-texto: #86efac; --ok-fundo: #11301f;
+                --erro: #f87171; --erro-texto: #fca5a5; --erro-fundo: #3b161a; --erro-borda: #7f2a30;
+                --aviso-texto: #fcd34d; --aviso-fundo: #3a2b0c;
+            }
+        }
+        :root[data-tema="escuro"] {
+            color-scheme: dark;
+            --bg: #0b1220; --card: #131f33; --card-2: #182741; --borda: #243654; --borda-forte: #36496b;
+            --texto: #e6ebf3; --texto-1: #cbd5e1; --texto-2: #9aa9c0; --texto-3: #7585a0;
+            --azul-texto: #7fb0ff; --azul-fundo: #14284d;
+            --ok: #4ade80; --ok-texto: #86efac; --ok-fundo: #11301f;
+            --erro: #f87171; --erro-texto: #fca5a5; --erro-fundo: #3b161a; --erro-borda: #7f2a30;
+            --aviso-texto: #fcd34d; --aviso-fundo: #3a2b0c;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; min-height: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--texto); }
+        header { background: linear-gradient(135deg, var(--azul), var(--azul-escuro)); color: #fff; padding: 14px 16px 16px; }
+        .topo { display: flex; align-items: center; gap: 10px; }
+        .voltar { background: rgba(255,255,255,0.15); border: 0; border-radius: 10px; width: 36px; height: 36px; color: #fff; font-size: 18px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; text-decoration: none; flex: 0 0 auto; }
+        .textos { flex: 1; min-width: 0; }
+        .textos h1 { margin: 0; font-size: 17px; font-weight: 700; }
+        .textos p { margin: 2px 0 0; font-size: 12px; color: #cfe0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .logo { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 8px; background: #fff; padding: 3px; }
+        main { padding: 14px 16px 90px; max-width: 560px; margin: 0 auto; }
+        .estado { font-size: 12px; color: var(--texto-2); margin: 2px 2px 10px; display: flex; align-items: center; gap: 6px; }
+        .estado .ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: 0 0 auto; }
+        .estado.ruim .ponto { background: var(--erro); }
+        .vazio { text-align: center; color: var(--texto-2); padding: 48px 12px; font-size: 14px; line-height: 1.5; }
+        .vazio b { display: block; font-size: 16px; color: var(--texto-1); margin-bottom: 4px; }
+        .pedido { background: var(--card); border: 1px solid var(--borda); border-left: 5px solid var(--aviso-texto); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+        .pedido .linha1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+        .pedido .caixa { font-size: 13px; font-weight: 700; color: var(--azul-texto); }
+        .pedido .idade { font-size: 12px; color: var(--texto-2); white-space: nowrap; }
+        .pedido .idade.velho { color: var(--erro); font-weight: 700; }
+        .pedido .permissao { font-size: 16px; font-weight: 700; margin: 6px 0 2px; line-height: 1.3; }
+        .pedido .meta { font-size: 13px; color: var(--texto-1); }
+        .pedido .info { font-size: 13px; color: var(--texto-2); margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
+        .botoes { display: flex; gap: 10px; margin-top: 12px; }
+        .botoes button { flex: 1; border: 0; border-radius: 12px; padding: 13px 8px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; touch-action: manipulation; color: #fff; }
+        .botoes .liberar { background: var(--ok); }
+        .botoes .bloquear { background: var(--erro); }
+        .botoes button.confirmar { outline: 3px solid var(--aviso-texto); }
+        .botoes button:disabled { opacity: .55; cursor: default; }
+        .motivo { margin-top: 10px; display: none; }
+        .motivo.aberto { display: block; }
+        .motivo textarea { width: 100%; border: 1px solid var(--borda-forte); border-radius: 10px; padding: 10px; font: inherit; font-size: 14px; background: var(--card-2); color: var(--texto); resize: vertical; min-height: 64px; }
+        .motivo .acoes { display: flex; gap: 8px; margin-top: 8px; }
+        .motivo .acoes button { flex: 1; border: 0; border-radius: 10px; padding: 11px 8px; font: inherit; font-weight: 700; cursor: pointer; }
+        .motivo .acoes .enviar { background: var(--erro); color: #fff; }
+        .motivo .acoes .voltar-m { background: var(--card-2); color: var(--texto-1); border: 1px solid var(--borda-forte); }
+        .erro { background: var(--erro-fundo); border: 1px solid var(--erro-borda); color: var(--erro-texto); border-radius: 10px; padding: 8px 10px; font-size: 13px; margin-top: 10px; }
+        .avisos { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 14px; margin-top: 18px; }
+        .avisos h2 { margin: 0 0 4px; font-size: 14px; }
+        .avisos p { margin: 0 0 10px; font-size: 13px; color: var(--texto-2); line-height: 1.45; }
+        .avisos button { border: 0; border-radius: 10px; padding: 11px 14px; font: inherit; font-weight: 700; background: var(--azul); color: #fff; cursor: pointer; }
+        .avisos button.sec { background: var(--card-2); color: var(--texto-1); border: 1px solid var(--borda-forte); }
+        .avisos .ok { color: var(--ok-texto); font-weight: 700; }
+        #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: rgba(15,23,42,.94); color: #fff; font-size: 14px;
+            padding: 10px 16px; border-radius: 18px; z-index: 60; opacity: 0; pointer-events: none; transition: opacity .2s ease; max-width: 90%; text-align: center; }
+        #toast.mostrar { opacity: 1; }
+        @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="topo">
+            <a class="voltar" href="/produtos" aria-label="Voltar">&#8592;</a>
+            <div class="textos">
+                <h1>Liberações do caixa</h1>
+                <p>{{ empresa_nome }}</p>
+            </div>
+            <img class="logo" src="/static/icons/icon-192.png" alt="" />
+        </div>
+    </header>
+    <main>
+        <div class="estado" id="estado"><span class="ponto"></span><span id="estadoTexto">Carregando&hellip;</span></div>
+        <div id="lista"></div>
+        <section class="avisos" id="blocoAvisos" hidden>
+            <h2>Avisos no celular</h2>
+            <p id="avisosTexto"></p>
+            <button type="button" id="btnAvisos"></button>
+        </section>
+    </main>
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        (function () {
+            const elLista = document.getElementById('lista');
+            const elEstado = document.getElementById('estado');
+            const elEstadoTexto = document.getElementById('estadoTexto');
+            const elToast = document.getElementById('toast');
+            const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            let vistos = null;          // ids já mostrados: um id novo faz o som tocar
+            let ocupado = new Set();    // pedidos com decisão em andamento
+            let armado = null;          // { id, tipo } esperando a segunda toque (confirmação)
+            let motivoAberto = null;    // id do pedido com a caixa de motivo aberta
+            let erros = {};             // id -> mensagem de erro daquele pedido
+            let ultimo = null;
+            let pushInfo = { disponivel: false, chave: null };
+
+            function toast(texto) {
+                elToast.textContent = texto; elToast.classList.add('mostrar');
+                clearTimeout(toast.t); toast.t = setTimeout(() => elToast.classList.remove('mostrar'), 3200);
+            }
+
+            // Bip de aviso (mesmo recurso do leitor de código de barras). O áudio só toca depois de um toque na tela.
+            let ctxSom = null;
+            function prepararSom() {
+                try {
+                    if (!ctxSom) { const C = window.AudioContext || window.webkitAudioContext; if (C) ctxSom = new C(); }
+                    if (ctxSom && ctxSom.state === 'suspended') ctxSom.resume();
+                } catch (e) { /* sem som */ }
+            }
+            function bipar() {
+                try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+                try {
+                    prepararSom(); if (!ctxSom) return;
+                    for (let k = 0; k < 2; k++) {
+                        const t = ctxSom.currentTime + k * 0.22, osc = ctxSom.createOscillator(), g = ctxSom.createGain();
+                        osc.type = 'square'; osc.frequency.value = 1500;
+                        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+                        osc.connect(g); g.connect(ctxSom.destination); osc.start(t); osc.stop(t + 0.18);
+                    }
+                } catch (e) { /* sem som */ }
+            }
+            document.addEventListener('pointerdown', prepararSom, { passive: true });
+
+            function idadeTexto(s) {
+                if (s == null) return '';
+                if (s < 60) return 'há ' + s + ' s';
+                const m = Math.floor(s / 60); return 'há ' + m + ' min';
+            }
+
+            function desenhar(dados) {
+                ultimo = dados;
+                const itens = dados.itens || [];
+                const ruim = dados.erro;
+                elEstado.classList.toggle('ruim', !!ruim);
+                elEstadoTexto.textContent = ruim ? 'Sem resposta do ERP agora. Tentando de novo…'
+                    : (dados.atualizado_ha == null ? 'Carregando…' : 'Ao vivo · atualizado há ' + dados.atualizado_ha + ' s');
+                const emTeste = !!dados.teste;
+                const notaTeste = emTeste ? '<div class="erro" style="background:var(--aviso-fundo,#fef3c7);border-color:var(--aviso-borda,#fcd34d);color:var(--aviso-texto,#92400e)">Modo teste: este cliente só recebe o aviso. Decida o pedido direto no ERP.</div>' : '';
+                if (!itens.length) {
+                    elLista.innerHTML = notaTeste + '<div class="vazio"><b>Nenhum pedido pendente</b>Quando um caixa pedir uma liberação, ela aparece aqui' + (emTeste ? ' e chega o aviso no celular.' : ' na hora.') + '</div>';
+                    return;
+                }
+                elLista.innerHTML = itens.map((p) => {
+                    const arm = armado && armado.id === p.id ? armado.tipo : null;
+                    const bloq = motivoAberto === p.id;
+                    const trab = ocupado.has(p.id);
+                    return `<div class="pedido" data-id="${p.id}">
+                        <div class="linha1"><span class="caixa">${p.caixa != null ? 'Caixa ' + esc(p.caixa) : 'Pedido de liberação'}</span><span class="idade${p.idade_s != null && p.idade_s > 120 ? ' velho' : ''}">${esc(idadeTexto(p.idade_s))}</span></div>
+                        <div class="permissao">${esc(p.permissao)}</div>
+                        ${p.operador ? `<div class="meta">Operador: ${esc(p.operador)}</div>` : ''}
+                        ${p.info ? `<div class="info">${esc(p.info)}</div>` : ''}
+                        ${emTeste ? '' : `<div class="botoes">
+                            <button type="button" class="liberar${arm === 'L' ? ' confirmar' : ''}" data-acao="liberar"${trab ? ' disabled' : ''}>${trab ? 'Enviando…' : (arm === 'L' ? 'Toque de novo para confirmar' : 'Liberar')}</button>
+                            <button type="button" class="bloquear" data-acao="bloquear"${trab || bloq ? ' disabled' : ''}>Bloquear</button>
+                        </div>
+                        <div class="motivo${bloq ? ' aberto' : ''}">
+                            <textarea maxlength="200" placeholder="Motivo do bloqueio (obrigatório)" data-campo="motivo"></textarea>
+                            <div class="acoes"><button type="button" class="voltar-m" data-acao="cancelar-bloqueio">Voltar</button><button type="button" class="enviar" data-acao="enviar-bloqueio"${trab ? ' disabled' : ''}>Confirmar bloqueio</button></div>
+                        </div>`}
+                        ${erros[p.id] ? `<div class="erro">${esc(erros[p.id])}</div>` : ''}
+                    </div>`;
+                }).join('');
+                if (emTeste) elLista.insertAdjacentHTML('afterbegin', notaTeste);
+                if (motivoAberto != null) { const ta = elLista.querySelector(`.pedido[data-id="${motivoAberto}"] textarea`); if (ta && motivoDigitado) ta.value = motivoDigitado; }
+            }
+            let motivoDigitado = '';
+            elLista.addEventListener('input', (e) => { if (e.target.dataset.campo === 'motivo') motivoDigitado = e.target.value; });
+
+            async function decidir(id, tipo, motivo) {
+                ocupado.add(id); delete erros[id]; desenhar(ultimo || { itens: [] });
+                try {
+                    const r = await fetch('/api/liberacoes/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo, motivo: motivo || '' }) });
+                    const d = await r.json().catch(() => ({}));
+                    if (!r.ok) { erros[id] = d.detail || 'Não foi possível concluir. Tente de novo.'; if (r.status === 409) { await carregar(); } }
+                    else { toast(tipo === 'L' ? 'Liberado' : 'Bloqueado'); motivoAberto = null; motivoDigitado = ''; if (d.itens) ultimo = { ...(ultimo || {}), itens: d.itens }; }
+                } catch (e) { erros[id] = 'Sem conexão. Confira o pedido antes de tentar de novo.'; }
+                ocupado.delete(id); armado = null; desenhar(ultimo || { itens: [] });
+            }
+
+            elLista.addEventListener('click', (e) => {
+                const b = e.target.closest('button[data-acao]'); if (!b) return;
+                const card = b.closest('.pedido'); const id = Number(card.dataset.id);
+                prepararSom();
+                const acao = b.dataset.acao;
+                if (acao === 'liberar') {
+                    if (armado && armado.id === id && armado.tipo === 'L') { clearTimeout(armado.t); decidir(id, 'L', ''); return; }
+                    if (armado) clearTimeout(armado.t);
+                    armado = { id, tipo: 'L', t: setTimeout(() => { armado = null; desenhar(ultimo || { itens: [] }); }, 5000) };
+                    motivoAberto = null; desenhar(ultimo || { itens: [] });
+                } else if (acao === 'bloquear') {
+                    if (armado) clearTimeout(armado.t); armado = null; motivoAberto = id; motivoDigitado = ''; desenhar(ultimo || { itens: [] });
+                    const ta = elLista.querySelector(`.pedido[data-id="${id}"] textarea`); if (ta) ta.focus();
+                } else if (acao === 'cancelar-bloqueio') {
+                    motivoAberto = null; motivoDigitado = ''; desenhar(ultimo || { itens: [] });
+                } else if (acao === 'enviar-bloqueio') {
+                    const ta = card.querySelector('textarea'); const motivo = (ta.value || '').trim();
+                    if (!motivo) { erros[id] = 'Informe o motivo do bloqueio.'; desenhar(ultimo || { itens: [] }); return; }
+                    decidir(id, 'B', motivo);
+                }
+            });
+
+            async function carregar() {
+                if (document.hidden) return;
+                try {
+                    const r = await fetch('/api/liberacoes', { cache: 'no-store' });
+                    if (r.status === 401 || r.status === 403) { location.href = '/produtos'; return; }
+                    if (!r.ok) throw new Error();
+                    const d = await r.json();
+                    pushInfo = d.push || pushInfo;
+                    const ids = (d.itens || []).map((p) => p.id);
+                    if (vistos !== null && ids.some((i) => !vistos.has(i))) bipar();
+                    vistos = new Set(ids);
+                    if (motivoAberto != null && !(d.itens || []).some((p) => p.id === motivoAberto)) motivoAberto = null;   // pedido sumiu (tratado em outro lugar)
+                    // não redesenha no meio de uma digitação de motivo (mais abaixo)
+                    ultimo = d;
+                    if (!document.activeElement || document.activeElement.tagName !== 'TEXTAREA') desenhar(d);
+                    atualizarBlocoAvisos();
+                } catch (e) {
+                    elEstado.classList.add('ruim'); elEstadoTexto.textContent = 'Sem conexão com o servidor. Tentando de novo…';
+                }
+            }
+
+            // ---------------- avisos no celular (Web Push)
+            const blocoAvisos = document.getElementById('blocoAvisos');
+            const avisosTexto = document.getElementById('avisosTexto');
+            const btnAvisos = document.getElementById('btnAvisos');
+            const suporta = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+            let registro = null;
+
+            function b64ParaBytes(b64) {
+                const pad = '='.repeat((4 - b64.length % 4) % 4);
+                const bin = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+                return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+            }
+            async function obterRegistro() {
+                if (registro) return registro;
+                registro = await navigator.serviceWorker.register('/static/sw.js');
+                if (!registro.active) {
+                    await new Promise((ok) => {
+                        const sw = registro.installing || registro.waiting;
+                        if (!sw) return ok();
+                        sw.addEventListener('statechange', () => { if (sw.state === 'activated') ok(); });
+                        setTimeout(ok, 8000);
+                    });
+                }
+                return registro;
+            }
+            async function atualizarBlocoAvisos() {
+                if (!pushInfo.disponivel) { blocoAvisos.hidden = true; return; }
+                blocoAvisos.hidden = false;
+                if (!suporta) {
+                    avisosTexto.textContent = 'Este aparelho não recebe avisos com o app fechado. Mantenha esta tela aberta para ouvir o som quando chegar um pedido.';
+                    btnAvisos.hidden = true; return;
+                }
+                if (Notification.permission === 'denied') {
+                    avisosTexto.textContent = 'Os avisos estão bloqueados neste aparelho. Libere as notificações do app nas configurações do celular.';
+                    btnAvisos.hidden = true; return;
+                }
+                let inscrito = false;
+                try { const reg = await obterRegistro(); inscrito = !!(await reg.pushManager.getSubscription()); } catch (e) {}
+                btnAvisos.hidden = false;
+                if (inscrito && Notification.permission === 'granted') {
+                    avisosTexto.innerHTML = '<span class="ok">Avisos ligados neste celular.</span> Quando um caixa pedir liberação, chega uma notificação mesmo com o app fechado.';
+                    btnAvisos.textContent = 'Desligar avisos'; btnAvisos.className = 'sec'; btnAvisos.dataset.modo = 'desligar';
+                } else {
+                    avisosTexto.textContent = 'Receba uma notificação no celular assim que um caixa pedir liberação, mesmo com o app fechado.';
+                    btnAvisos.textContent = 'Ativar avisos neste celular'; btnAvisos.className = ''; btnAvisos.dataset.modo = 'ligar';
+                }
+            }
+            btnAvisos.addEventListener('click', async () => {
+                btnAvisos.disabled = true;
+                try {
+                    const reg = await obterRegistro();
+                    if (btnAvisos.dataset.modo === 'desligar') {
+                        const sub = await reg.pushManager.getSubscription();
+                        if (sub) { await fetch('/api/push/cancelar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }); await sub.unsubscribe(); }
+                        toast('Avisos desligados');
+                    } else {
+                        const permissao = await Notification.requestPermission();
+                        if (permissao !== 'granted') { toast('Sem permissão para notificar'); }
+                        else {
+                            let sub = await reg.pushManager.getSubscription();
+                            if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ParaBytes(pushInfo.chave) });
+                            const j = sub.toJSON();
+                            const r = await fetch('/api/push/inscrever', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: j.endpoint, keys: j.keys }) });
+                            if (!r.ok) { const d = await r.json().catch(() => ({})); toast(d.detail || 'Não foi possível ligar os avisos'); await sub.unsubscribe(); }
+                            else toast('Avisos ligados');
+                        }
+                    }
+                } catch (e) { toast('Não foi possível mudar os avisos neste aparelho'); }
+                btnAvisos.disabled = false; atualizarBlocoAvisos();
+            });
+
+            carregar();
+            setInterval(carregar, 3000);
+            setInterval(() => { if (ultimo && !document.hidden && !(document.activeElement && document.activeElement.tagName === 'TEXTAREA')) desenhar(ultimo); }, 10000);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) carregar(); });
+        })();
+    </script>
+</body>
+</html>
