@@ -417,12 +417,6 @@
             .tabbar button::before, .tabbar button .tab-icone { transition: none; }
             .tabbar button:active, .card:active, #dashFiltrar:active, #confFiltrar:active, .mais:active { transform: none; }
         }
-        /* Aviso de pedido de liberação do caixa (só para quem aprova): faixa no topo de qualquer aba, toque abre a tela de liberações. */
-        .aviso-liberacao { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 70; padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
-            background: #b45309; color: #fff; font-size: 14px; align-items: center; gap: 10px; text-decoration: none; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
-        .aviso-liberacao.mostrar { display: flex; }
-        .aviso-liberacao .texto { flex: 1; line-height: 1.3; }
-        .aviso-liberacao .ver { background: #fff; color: #b45309; font-weight: 700; border-radius: 10px; padding: 7px 12px; flex: 0 0 auto; }
         .aviso-versao { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: #0b3895; color: #fff;
             font-size: 13px; animation: entrada .25s ease-out; flex: 0 0 auto; }
         .aviso-versao.mostrar { display: flex; }
@@ -713,7 +707,6 @@
             <button type="button" class="dispensar" id="btnDispensarAviso" aria-label="Agora não">&#10005;</button>
         </div>
 
-        <a class="aviso-liberacao" id="avisoLiberacao" href="/liberacoes" role="alert"><span class="texto" id="avisoLiberacaoTexto"></span><span class="ver">Ver</span></a>
         <div id="temaAviso" role="status"></div>
         <div class="fp-veu" id="fpVeu"></div>
         <div class="fp-folha" id="fpFolha" role="dialog" aria-modal="true" aria-label="Alterar preço de venda"></div>
@@ -2693,47 +2686,6 @@
             const inicial = aba && aba !== 'alertas' && tabs[aba] && ACESSOS[aba] ? aba : (ABAS_EM_ORDEM.find((a) => ACESSOS[a]) || 'produtos');
             if (inicial !== 'produtos') mostrarTab(inicial);
         } catch (err) {}
-
-        // Pedidos de liberação do caixa: para quem aprova, consulta o servidor (que já guarda a fila; não gasta cota do ERP) a cada 4 s
-        // com o app aberto, mostra a faixa e toca o aviso quando chega um pedido novo.
-        if (ACESSOS.liberacoes) {
-            const faixa = document.getElementById('avisoLiberacao'), faixaTexto = document.getElementById('avisoLiberacaoTexto');
-            let idsVistos = null;
-            function bipLiberacao() {
-                try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (err) {}
-                try {
-                    prepararBip(); if (!contextoBip) return;
-                    for (let k = 0; k < 2; k++) {
-                        const t = contextoBip.currentTime + k * 0.22, osc = contextoBip.createOscillator(), g = contextoBip.createGain();
-                        osc.type = 'square'; osc.frequency.value = 1500;
-                        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-                        osc.connect(g); g.connect(contextoBip.destination); osc.start(t); osc.stop(t + 0.18);
-                    }
-                } catch (err) {}
-            }
-            async function conferirLiberacoes() {
-                if (document.hidden) return;
-                try {
-                    const r = await fetch('/api/liberacoes', { cache: 'no-store' });
-                    if (!r.ok) return;
-                    const d = await r.json(), itens = d.itens || [], ids = itens.map((p) => p.id);
-                    if (idsVistos !== null && ids.some((i) => !idsVistos.has(i))) bipLiberacao();
-                    idsVistos = new Set(ids);
-                    if (!itens.length) {
-                        // Teste de aviso em andamento: lembra de ativar os avisos neste celular (a tela de liberações tem o botão).
-                        if (d.teste && d.teste.rodando) { faixaTexto.textContent = 'Teste dos avisos de liberação: toque para ativar neste celular'; faixa.classList.add('mostrar'); }
-                        else faixa.classList.remove('mostrar');
-                        return;
-                    }
-                    const p = itens[0];
-                    faixaTexto.textContent = itens.length > 1 ? itens.length + ' pedidos de liberação no caixa' : (p.caixa != null ? 'Caixa ' + p.caixa + ' pede liberação: ' : 'Pedido de liberação: ') + p.permissao;
-                    faixa.classList.add('mostrar');
-                } catch (err) { /* sem rede: tenta de novo no próximo ciclo */ }
-            }
-            conferirLiberacoes();
-            setInterval(conferirLiberacoes, 4000);
-            document.addEventListener('visibilitychange', () => { if (!document.hidden) conferirLiberacoes(); });
-        }
 
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/static/sw.js').catch(() => {});
