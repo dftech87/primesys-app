@@ -1515,6 +1515,32 @@ document.getElementById('btnRepetir').addEventListener('click', () => {   // ped
     comecarPedido('PA', { cliente: p.cliente, cliente_nome: p.cliente_nome, itens: p.itens.map((i) => ({ ...i })), observacao: p.observacao });
 });
 
+// Bip de leitura (curto e agudo, como o leitor do caixa), gerado no aparelho: sem arquivo de som e sem biblioteca.
+// O navegador só libera som depois de um toque na tela; o toque no botão da câmera já conta (prepararBip).
+let contextoBip = null;
+function prepararBip() {
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        contextoBip = contextoBip || new AC();
+        if (contextoBip.state === 'suspended') contextoBip.resume();
+    } catch (e) { /* sem som: segue sem */ }
+}
+function bipLeitura() {
+    try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* idem */ }
+    try {
+        prepararBip();
+        if (!contextoBip) return;
+        const t = contextoBip.currentTime, osc = contextoBip.createOscillator(), ganho = contextoBip.createGain();
+        osc.type = 'square'; osc.frequency.value = 1800;
+        ganho.gain.setValueAtTime(0.0001, t);
+        ganho.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+        ganho.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+        osc.connect(ganho); ganho.connect(contextoBip.destination);
+        osc.start(t); osc.stop(t + 0.16);
+    } catch (e) { /* sem som: segue sem */ }
+}
+
 // ---- Leitor de código de barras pela câmera ----
 // Usa o leitor do próprio Chrome do Android. A busca é no catálogo guardado no aparelho: funciona sem internet.
 const FORMATOS_LEITOR = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'codabar'];
@@ -1531,6 +1557,7 @@ function produtoDoCodigo(codigo) {
         || (d && d.length <= 7 ? produtos.find((p) => String(p.id) === d) : null);   // etiqueta interna com o código do produto
 }
 async function abrirLeitor(aoLer) {
+    prepararBip();   // ainda dentro do toque no botão da câmera: é o que libera o som
     const formatos = await formatosDoLeitor();
     if (!formatos.length) return avisar('Este aparelho não lê código de barras pela câmera. Digite o código na busca.');
     let fluxo;
@@ -1557,7 +1584,7 @@ async function abrirLeitor(aoLer) {
                 if (valor && valor === anterior) vezes++; else { anterior = valor; vezes = valor ? 1 : 0; }
                 if (vezes >= 2) {   // o mesmo código em duas leituras seguidas: evita leitura errada
                     fecharLeitor();
-                    if (navigator.vibrate) navigator.vibrate(60);
+                    bipLeitura();   // bip + vibração
                     return aoLer(valor);
                 }
             }

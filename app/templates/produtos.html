@@ -2522,6 +2522,32 @@
                   + n.itens.map((i) => `<div class="linha-info"><span class="desc">${i.modelo === '65' ? 'NFC-e' : 'NF-e'} nº ${esc(i.numero)} · ${esc(i.quando)}</span><span class="val">${fmtMoney(i.valor)}</span></div>`).join('');
         }
 
+        // Bip de leitura (curto e agudo, como o leitor do caixa), gerado no aparelho: sem arquivo de som e sem biblioteca.
+        // O navegador só libera som depois de um toque na tela; o toque no botão da câmera já conta (prepararBip).
+        let contextoBip = null;
+        function prepararBip() {
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return;
+                contextoBip = contextoBip || new AC();
+                if (contextoBip.state === 'suspended') contextoBip.resume();
+            } catch (err) { /* sem som: segue sem */ }
+        }
+        function bipLeitura() {
+            try { if (navigator.vibrate) navigator.vibrate(60); } catch (err) { /* idem */ }
+            try {
+                prepararBip();
+                if (!contextoBip) return;
+                const t = contextoBip.currentTime, osc = contextoBip.createOscillator(), ganho = contextoBip.createGain();
+                osc.type = 'square'; osc.frequency.value = 1800;
+                ganho.gain.setValueAtTime(0.0001, t);
+                ganho.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+                ganho.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+                osc.connect(ganho); ganho.connect(contextoBip.destination);
+                osc.start(t); osc.stop(t + 0.16);
+            } catch (err) { /* sem som: segue sem */ }
+        }
+
         // Leitura de código de barras pela câmera, usando a API nativa do Chrome/Android
         // (BarcodeDetector) — sem biblioteca externa, já que o app roda dentro do Chrome.
         const elScanner = document.getElementById('scanner');
@@ -2561,6 +2587,7 @@
                     const codigos = await detector.detect(elScanVideo);
                     if (codigos.length > 0) {
                         const valor = codigos[0].rawValue;
+                        bipLeitura();
                         fecharScanner();
                         codigoLido = valor;
                         alvoScanner.value = valor;
@@ -2594,8 +2621,8 @@
             }
         }
 
-        btnScan.addEventListener('click', () => { alvoScanner = elBusca; abrirScanner(); });
-        document.getElementById('btnScanCompras').addEventListener('click', () => { alvoScanner = elBuscaCompras; abrirScanner(); });
+        btnScan.addEventListener('click', () => { alvoScanner = elBusca; prepararBip(); abrirScanner(); });
+        document.getElementById('btnScanCompras').addEventListener('click', () => { alvoScanner = elBuscaCompras; prepararBip(); abrirScanner(); });
         btnFecharScanner.addEventListener('click', fecharScanner);
 
         // Caso mais comum no Android: o app não é realmente fechado, só fica em
