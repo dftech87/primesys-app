@@ -28,6 +28,11 @@ def _contato() -> str | None:
     return (os.getenv("VAPID_SUBJECT") or "").strip() or None
 
 
+def faltando() -> list[str]:
+    """Nomes (nunca valores) das variáveis VAPID que o servidor não está enxergando: serve para o /admin dizer o que falta."""
+    return [n for n in ("VAPID_PRIVATE_KEY", "VAPID_PUBLIC_KEY", "VAPID_SUBJECT") if not (os.getenv(n) or "").strip()]
+
+
 def ligado() -> bool:
     return bool(_chave_privada() and chave_publica() and _contato())
 

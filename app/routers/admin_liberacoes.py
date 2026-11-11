@@ -44,7 +44,7 @@ def _ultimas_decisoes(cnpj: str) -> list[dict]:
 async def _tela(request: Request, cnpj: str = "", erro: str = ""):
     empresas = sorted(({"cnpj": t["cnpj"], "nome": t["nome_fantasia"]} for t in list_tenants()), key=lambda e: e["nome"].lower())
     contexto = {"empresas": empresas, "cnpj": normalize_cnpj(cnpj), "erro": erro, "aviso": request.session.pop("aviso", None),
-                "push_ligado": push.ligado(), "cfg": None, "perfis": [], "estado": None, "decisoes": []}
+                "push_ligado": push.ligado(), "push_faltando": push.faltando(), "cfg": None, "perfis": [], "estado": None, "decisoes": []}
     tenant = get_tenant_by_cnpj(contexto["cnpj"]) if contexto["cnpj"] else None
     if tenant is not None and tenant.get("api_token"):
         cfg = liberacoes.config(tenant["cnpj"])
