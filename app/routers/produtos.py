@@ -80,6 +80,7 @@ async def produtos_page(request: Request):
         return RedirectResponse("/login?next=/produtos", status_code=303)
     # Abas e informações da ficha conforme o perfil do usuário no ERP (recalculado a cada abertura).
     liberado = {**await acessos.atualizar(request, tenant), "alterar_preco": acessos.pode_alterar_preco(request)}
+    liberado["balanca"] = bool(liberado.get("balanca") and tenant.get("balanca_liberada"))   # balança: só em empresa liberada no /admin
     return templates.TemplateResponse(
         request,
         "produtos.html",

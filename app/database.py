@@ -61,6 +61,23 @@ CREATE TABLE IF NOT EXISTS alteracoes_preco (
     criado_em TEXT NOT NULL,
     desfeita_em TEXT
 )"""
+# Registro das alterações de balança (Exportar/Solicitar) feitas pelo Prime Info (app/balanca.py): quem mudou, quando, de quê para quê.
+TABELA_ALTERACOES_BALANCA = """
+CREATE TABLE IF NOT EXISTS alteracoes_balanca (
+    id TEXT PRIMARY KEY,
+    cnpj TEXT NOT NULL,
+    email TEXT NOT NULL,
+    nome TEXT,
+    id_variacao BIGINT NOT NULL,
+    tipo TEXT NOT NULL,
+    exportar_antes INTEGER NOT NULL,
+    solicitar_antes INTEGER NOT NULL,
+    exportar_novo INTEGER NOT NULL,
+    solicitar_novo INTEGER NOT NULL,
+    criado_em TEXT NOT NULL,
+    desfeita_em TEXT
+)"""
+INDICE_ALTERACOES_BALANCA = "CREATE INDEX IF NOT EXISTS ix_alteracoes_balanca_produto ON alteracoes_balanca (cnpj, id_variacao, criado_em)"
 # Medidor de consumo da cota do ERP (app/consumo.py): só números, por empresa (código do balde), hora e tela.
 TABELA_CONSUMO_ERP = """
 CREATE TABLE IF NOT EXISTS consumo_erp (
@@ -146,9 +163,13 @@ def init_db() -> None:
             conn.execute(SCHEMA_POSTGRES)
             # Prime Vendas liberado para a empresa (botão no /admin). Bancos anteriores ganham a coluna desligada.
             conn.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS vendas_liberado INTEGER NOT NULL DEFAULT 0")
+            # Balança na ficha liberada para a empresa (botão no /admin), desligada nos bancos anteriores.
+            conn.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS balanca_liberada INTEGER NOT NULL DEFAULT 0")
             conn.execute(TABELA_ALTERACOES_PRECO)
             conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN IF NOT EXISTS nome TEXT")   # tabela criada antes do nome
             conn.execute(INDICE_ALTERACOES_PRECO)
+            conn.execute(TABELA_ALTERACOES_BALANCA)
+            conn.execute(INDICE_ALTERACOES_BALANCA)
             conn.execute(TABELA_CONSUMO_ERP)
             conn.execute(TABELA_DESEMPENHO)
             conn.execute(INDICE_DESEMPENHO)
@@ -163,10 +184,14 @@ def init_db() -> None:
             conn.execute("ALTER TABLE empresas DROP COLUMN senha_hash")
         if "vendas_liberado" not in columns:   # Prime Vendas liberado para a empresa (botão no /admin)
             conn.execute("ALTER TABLE empresas ADD COLUMN vendas_liberado INTEGER NOT NULL DEFAULT 0")
+        if "balanca_liberada" not in columns:   # balança na ficha liberada para a empresa (botão no /admin)
+            conn.execute("ALTER TABLE empresas ADD COLUMN balanca_liberada INTEGER NOT NULL DEFAULT 0")
         conn.execute(TABELA_ALTERACOES_PRECO)
         if "nome" not in {row["name"] for row in conn.execute("PRAGMA table_info(alteracoes_preco)")}:   # criada antes do nome
             conn.execute("ALTER TABLE alteracoes_preco ADD COLUMN nome TEXT")
         conn.execute(INDICE_ALTERACOES_PRECO)
+        conn.execute(TABELA_ALTERACOES_BALANCA)
+        conn.execute(INDICE_ALTERACOES_BALANCA)
         conn.execute(TABELA_CONSUMO_ERP)
         conn.execute(TABELA_DESEMPENHO)
         conn.execute(INDICE_DESEMPENHO)

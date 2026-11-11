@@ -534,6 +534,14 @@
         #toastPreco.mostrar { display: flex; }
         #toastPreco button { border: 0; background: none; color: #7fb0ff; font: inherit; font-weight: 700; cursor: pointer; padding: 4px 2px; }
         @media (prefers-reduced-motion: reduce) { .fp-folha, .fp-veu { transition: none; } }
+        /* Balança na ficha: o cliente escolhe Sim ou Não (nada para digitar). */
+        .bal-lin { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--borda-forte); }
+        .bal-txt b { display: block; font-size: 14px; }
+        .bal-txt small { display: block; font-size: 12px; color: var(--texto-2); margin-top: 2px; line-height: 1.3; }
+        .bal-sel { display: flex; flex: 0 0 auto; border: 1px solid var(--azul-borda); border-radius: 12px; overflow: hidden; }
+        .bal-sel button { min-width: 60px; padding: 11px 12px; border: 0; background: var(--azul-fundo); color: var(--azul-texto); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+        .bal-sel button.on { background: var(--azul); color: #fff; }
+        #destinoBalanca .fp-btn { margin-top: 12px; }
     </style>
 </head>
 <body>
@@ -1051,6 +1059,12 @@
                                 <div id="destinoAlteracoes"></div>
                             </details>
                         </div>` : ''}
+                        ${ACESSOS.balanca ? `<div class="dash-panel gestao" style="margin-top:12px">
+                            <details id="blocoBalanca">
+                                <summary><div><div class="tit">Balança</div><div class="sub-resumo">exportar para a balança e pedir peso no caixa</div></div></summary>
+                                <div id="destinoBalanca"></div>
+                            </details>
+                        </div>` : ''}
                         <button type="button" class="btn-entradas" id="btnEntradasFicha"${ACESSOS.compras ? '' : ' hidden'}>&#129534;<span>Ver notas de entrada<small>custo de cada compra, fornecedor e margem (aba Compras)</small></span><span class="seta-dir">&rsaquo;</span></button>
             `;
         }
@@ -1065,6 +1079,7 @@
             }
             if (ACESSOS.historico_preco) prepararBloco('blocoPrecoFicha', 'destinoPrecoFicha', `/api/produtos/${idVariacao}/historico-preco`, (d) => renderHistoricoPreco(d.mudancas));
             document.getElementById('btnEntradasFicha').addEventListener('click', () => abrirComprasDoProduto(idVariacao, p.descricao));
+            if (ACESSOS.balanca) prepararBalanca(idVariacao, p);
         }
 
         // ---------- Alterar preço de venda (lápis da ficha; só aparece para quem o perfil no ERP autoriza) ----------
@@ -1270,6 +1285,112 @@
                 mostrarToastPreco(`Preço voltou para <b>${fmtMoney(corpo.precoNovo)}</b>`);
             } catch (e) {
                 mostrarToastPreco('Sem resposta do servidor. Abra a ficha de novo e confira o preço.');
+            }
+        }
+
+        // ---------- Balança (Exportar p/ Balança e Solicitar Balança): o cliente seleciona Sim ou Não e salva ----------
+        let bal = null;   // { id, p, atual, novo, confirmo, salvando, erro, destino }
+
+        function prepararBalanca(idVariacao, p) {
+            const caixa = document.getElementById('blocoBalanca');
+            const destino = document.getElementById('destinoBalanca');
+            let carregou = false;
+            caixa.addEventListener('toggle', async () => {
+                if (!caixa.open || carregou) return;
+                carregou = true;
+                destino.innerHTML = esqueleto(3);
+                try {
+                    const res = await fetch(`/api/produtos/${idVariacao}/balanca`);
+                    if (!res.ok) throw res;
+                    const d = await res.json();
+                    bal = { id: idVariacao, p, atual: d, novo: { exportar: d.exportar, solicitar: d.solicitar }, confirmo: false, salvando: false, erro: '', destino };
+                    balDesenhar();
+                } catch (err) {
+                    carregou = false;
+                    let texto = 'Não foi possível carregar agora. Feche e abra de novo para tentar outra vez.';
+                    if (err instanceof Response) { try { texto = (await err.json()).detail || texto; } catch (e) { /* mantém o padrão */ } }
+                    destino.innerHTML = `<div class="indisponivel">${esc(texto)}</div>`;
+                }
+            });
+        }
+
+        function balDesenhar() {
+            const b = bal;
+            if (!b) return;
+            const mudou = b.novo.exportar !== b.atual.exportar || b.novo.solicitar !== b.atual.solicitar;
+            const semPeso = b.novo.solicitar && !b.atual.solicitar && !['KG', 'KGS'].includes(b.atual.unidade);   // só ao LIGAR o Solicitar
+            const linha = (chave, rotulo, ajuda) => `<div class="bal-lin"><div class="bal-txt"><b>${rotulo}</b><small>${ajuda}</small></div>
+                <div class="bal-sel" role="radiogroup" aria-label="${rotulo}">
+                    <button type="button" role="radio" aria-checked="${b.novo[chave]}" data-bal="${chave}" data-v="1" class="${b.novo[chave] ? 'on' : ''}">Sim</button>
+                    <button type="button" role="radio" aria-checked="${!b.novo[chave]}" data-bal="${chave}" data-v="0" class="${!b.novo[chave] ? 'on' : ''}">Não</button>
+                </div></div>`;
+            b.destino.innerHTML = `${linha('exportar', 'Exportar p/ Balança', 'o produto vai no arquivo enviado às balanças')}
+                ${linha('solicitar', 'Solicitar Balança', 'o caixa pede o peso na hora da venda')}
+                <div class="fp-lin"><span>Unidade do produto</span><b>${esc(b.atual.unidade || '-')}</b></div>
+                ${semPeso ? `<div class="fp-aviso verm">⚠ <b>Solicitar balança em produto vendido por ${esc(b.atual.unidade || 'unidade')}.</b> O caixa vai pedir o peso e pode travar a venda. Só use se este produto é pesado.</div>
+                    <label class="fp-chk"><input type="checkbox" id="balConfirmo"${b.confirmo ? ' checked' : ''}><span>Confirmo que este produto é pesado no caixa.</span></label>` : ''}
+                ${b.erro ? `<div class="fp-erro">${esc(b.erro)}</div>` : ''}
+                <button type="button" class="fp-btn" id="balSalvar"${!mudou || b.salvando || (semPeso && !b.confirmo) ? ' disabled' : ''}>${b.salvando ? 'Salvando…' : 'Salvar balança'}</button>`;
+            b.destino.querySelectorAll('[data-bal]').forEach((botao) => botao.addEventListener('click', () => {
+                if (b.salvando) return;
+                b.novo[botao.dataset.bal] = botao.dataset.v === '1';
+                b.erro = ''; b.confirmo = false;
+                balDesenhar();
+            }));
+            const caixa = document.getElementById('balConfirmo');
+            if (caixa) caixa.addEventListener('change', () => { b.confirmo = caixa.checked; balDesenhar(); });
+            document.getElementById('balSalvar').addEventListener('click', () => balSalvar());
+        }
+
+        async function balSalvar() {
+            const b = bal;
+            if (!b || b.salvando) return;
+            b.salvando = true; b.erro = '';
+            balDesenhar();
+            let res, corpo = {};
+            try {
+                res = await fetch(`/api/produtos/${b.id}/balanca`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ exportar: b.novo.exportar, solicitar: b.novo.solicitar, confirmo: b.confirmo }),
+                });
+                try { corpo = await res.json(); } catch (e) { /* sem corpo */ }
+            } catch (e) {
+                b.salvando = false;
+                // Sem resposta: pode ter gravado. Não deixa tentar de novo às cegas.
+                b.erro = 'Sem resposta do servidor. A balança pode ou não ter sido alterada: feche a ficha, abra de novo e confira antes de tentar outra vez.';
+                balDesenhar();
+                return;
+            }
+            b.salvando = false;
+            if (bal !== b) return;
+            if (res.ok) {
+                b.atual = { exportar: corpo.exportar, solicitar: corpo.solicitar, unidade: corpo.unidade };
+                b.novo = { exportar: corpo.exportar, solicitar: corpo.solicitar };
+                b.confirmo = false;
+                balDesenhar();
+                mostrarToastPreco('Balança atualizada', corpo.alteracao ? () => balDesfazer(b, corpo.alteracao) : null);
+                return;
+            }
+            b.erro = res.status === 409 && corpo.confirmar ? 'Confirme marcando a caixinha para salvar.' : (corpo.detail || 'Não foi possível salvar a balança agora. Tente de novo.');
+            balDesenhar();
+        }
+
+        async function balDesfazer(b, alteracao) {
+            try {
+                const res = await fetch(`/api/produtos/${b.id}/balanca/desfazer`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alteracao }),
+                });
+                const corpo = await res.json().catch(() => ({}));
+                if (!res.ok) { mostrarToastPreco(esc(corpo.detail || 'Não foi possível desfazer agora.')); return; }
+                if (bal === b) {
+                    b.atual = { exportar: corpo.exportar, solicitar: corpo.solicitar, unidade: corpo.unidade };
+                    b.novo = { exportar: corpo.exportar, solicitar: corpo.solicitar };
+                    b.confirmo = false; b.erro = '';
+                    balDesenhar();
+                }
+                mostrarToastPreco('Balança voltou como estava');
+            } catch (e) {
+                mostrarToastPreco('Sem resposta do servidor. Abra a ficha de novo e confira a balança.');
             }
         }
 

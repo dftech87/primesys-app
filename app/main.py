@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from app import consumo, desempenho, versao
 from app.config import COOKIE_SEGURO, SESSAO_MAX_IDADE, settings
 from app.database import db_session, init_db
-from app.routers import admin, auth, painel_mobile, preco, produtos
+from app.routers import admin, auth, balanca, painel_mobile, preco, produtos
 from app.tenants import create_tenant_if_missing, criptografar_tokens_existentes
 
 
@@ -158,3 +158,4 @@ app.include_router(admin.router)
 app.include_router(produtos.router)
 app.include_router(painel_mobile.router)
 app.include_router(preco.router)
+app.include_router(balanca.router)

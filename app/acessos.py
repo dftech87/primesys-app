@@ -28,6 +28,7 @@ PERMISSOES = {
     "estoque": (10041, 1901),       # POS: consultar estoque | movimento de estoque
     "historico_preco": (5201, 3501),  # formação de preços | tabelas de preço
     "alterar_preco": (2, 5202),     # cadastro de mercadoria: alterar preço de venda | formação de preços: alterar preço
+    "balanca": (3901,),             # exportação para balança: acessar o módulo (Exportar/Solicitar balança na ficha)
     "compras": (6401, 6501),        # central de compras | outras entradas (notas de entrada)
     "dashboard": (3301,),           # dashboard: acessar o módulo
     "lucro": (3304,),               # dashboard 'Resumo - Lucro' (margem e lucro bruto)
@@ -62,6 +63,7 @@ def calcular(liberadas: set[int]) -> dict:
     a["receber"] = a["financeiro"] and a["receber"]
     a["financeiro"] = a["pagar"] or a["receber"]
     a["alterar_preco"] = a["produtos"] and a["alterar_preco"]
+    a["balanca"] = a["produtos"] and a["balanca"]
     a["lucro"] = a["dashboard"] and a["lucro"]
     a["estoque_painel"] = a["dashboard"] and a["estoque_painel"]
     return a

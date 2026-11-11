@@ -140,6 +140,17 @@
                 </div>
             </div>
 
+            <div class="app">
+                <div><div class="t">Balança na ficha</div><div class="d">Exportar e Solicitar balança no Prime Info (quem tem a permissão 3901 no ERP)</div></div>
+                <div class="lado">
+                    {% if aberto.balanca_liberada %}<span class="st on">Liberado</span>{% else %}<span class="st off">Bloqueado</span>{% endif %}
+                    <form method="post" action="/admin/tenants/{{ aberto.cnpj }}/balanca/{{ 'bloquear' if aberto.balanca_liberada else 'liberar' }}"
+                          {% if aberto.balanca_liberada %}data-confirmar="Desligar a balança na ficha de {{ aberto.nome_fantasia }}?"{% endif %}>
+                        {% if aberto.balanca_liberada %}<button type="submit" class="perigo">Bloquear</button>{% else %}<button type="submit" class="verde">Liberar</button>{% endif %}
+                    </form>
+                </div>
+            </div>
+
             <div class="secao">Conexão com o ERP</div>
             <div class="app">
                 {% if aberto.conf_classe == 'bom' %}
