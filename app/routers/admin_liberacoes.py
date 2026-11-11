@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from app import liberacoes, push
 from app.cache import cached
 from app.database import db_session
-from app.meuerp_client import MeuERPClient
+from app.meuerp_client import MeuERPClient, nome_do_balde
 from app.routers.admin import _avisar, _is_admin
 from app.security import normalize_cnpj
 from app.tenants import get_tenant_by_cnpj, list_tenants
@@ -66,7 +66,7 @@ async def _tela(request: Request, cnpj: str = "", erro: str = ""):
             contexto["erro"] = contexto["erro"] or "Não foi possível ler os perfis do ERP agora. Tente de novo em instantes."
         resumo = liberacoes.resumo(tenant["cnpj"])
         contexto["estado"] = {"pendentes": len(resumo["itens"]), "atualizado_ha": resumo["atualizado_ha"], "erro": resumo["erro"], "motivo": resumo["motivo"],
-                              "celulares": liberacoes.quantos_inscritos(tenant["cnpj"]), "chamadas_por_min": round(60 / cfg["intervalo"], 1)}
+                              "celulares": liberacoes.quantos_inscritos(tenant["cnpj"]), "codigo_token": nome_do_balde(tenant["api_token"]), "chamadas_por_min": round(60 / cfg["intervalo"], 1)}
         contexto["decisoes"] = _ultimas_decisoes(tenant["cnpj"])
     return templates.TemplateResponse(request, "admin_liberacoes.html", contexto)
 

@@ -79,6 +79,7 @@
             <div class="lin"><span>Celulares com avisos ligados</span><b>{{ estado.celulares }}</b></div>
             <div class="lin"><span>Pedidos pendentes agora</span><b>{{ estado.pendentes }}</b></div>
             <div class="lin"><span>Última leitura do ERP</span><b class="{{ 'ruim' if estado.erro else '' }}">{{ ('há ' ~ estado.atualizado_ha ~ ' s') if estado.atualizado_ha is not none else 'ainda não leu' }}{{ (' (ERP sem resposta: ' ~ (estado.motivo or 'motivo desconhecido') ~ ')') if estado.erro else '' }}</b></div>
+            <div class="lin"><span>Código da chave (token) desta empresa</span><b>{{ estado.codigo_token }}</b></div>
             <div class="lin"><span>Custo na cota do ERP</span><b>{{ estado.chamadas_por_min }} chamadas/min enquanto ativo</b></div>
         </div>
         {% if decisoes %}
