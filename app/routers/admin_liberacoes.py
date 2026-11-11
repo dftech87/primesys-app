@@ -137,9 +137,18 @@ async def testar_leitura(request: Request, cnpj: str = Form("")):
         resposta = await asyncio.wait_for(MeuERPClient(tenant["api_token"]).get(liberacoes.CAMINHO_ERP, params={"page": 1, "limit": 1}), 12)
     except httpx.HTTPStatusError as erro:
         codigo = erro.response.status_code
-        dica = (" O usuário do ERP dono desta chave não tem acesso a Liberação de permissão: é preciso cadastrar neste cliente uma chave de um usuário que analisa liberações."
+        # texto que o próprio ERP devolveu junto com a recusa (só no /admin; limitado e sem quebras de linha)
+        texto_erp = ""
+        try:
+            corpo = erro.response.json()
+            texto_erp = str((corpo.get("mensagem") or corpo.get("message") or corpo.get("detail") or "") if isinstance(corpo, dict) else "")
+        except Exception:
+            texto_erp = (erro.response.text or "")[:200]
+        texto_erp = " ".join(texto_erp.split())[:200]
+        detalhe = f" Mensagem do ERP: “{texto_erp}”." if texto_erp else " O ERP não mandou mensagem junto com a recusa."
+        dica = (" Em geral o usuário do ERP dono desta chave não tem acesso a Liberação de permissão."
                 if codigo in (401, 403) else "")
-        return await _tela(request, cnpj, f"O ERP recusou a leitura da fila (HTTP {codigo}).{dica}")
+        return await _tela(request, cnpj, f"O ERP recusou a leitura da fila (HTTP {codigo}).{detalhe}{dica}")
     except Exception as erro:   # só o tipo do erro: o texto pode trazer endereço
         return await _tela(request, cnpj, f"O ERP não respondeu à leitura da fila ({type(erro).__name__}). Tente de novo em instantes.")
     total = resposta.get("total") if isinstance(resposta, dict) else None
