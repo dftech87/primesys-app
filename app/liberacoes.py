@@ -39,6 +39,7 @@ PRESENCA_VALE = 30                 # s: tela aberta que perguntou há menos que 
 NAO_AVISAR_SE_MAIS_VELHO_QUE = 600  # s: pedido velho (o operador já desistiu) entra na lista, mas não vira notificação
 GUARDAR_AVISOS_POR = 7 * 24 * 3600
 MAX_PAGINAS = 3
+ESPERA_MAXIMA_DA_TELA = 3.0   # s: a tela nunca fica esperando o ERP mais que isso (devolve o que já tem)
 TABELAS = (
     """CREATE TABLE IF NOT EXISTS liberacoes_empresas (
         cnpj TEXT PRIMARY KEY,
@@ -293,6 +294,7 @@ def resumo(cnpj: str) -> dict:
         "itens": [{**i, "idade_s": _idade_s(i["quando"])} for i in est["itens"]],
         "atualizado_ha": int(time.time() - est["em"]) if est["em"] else None,
         "erro": est["erro"],
+        "motivo": est.get("motivo", ""),
         "intervalo": config(cnpj)["intervalo"],
     }
 
@@ -325,15 +327,19 @@ async def atualizar(cnpj: str, tenant: dict) -> dict:
     if trava.locked():
         return est
     async with trava:
+        # reserva a próxima consulta ANTES de chamar o ERP: quem chegar durante a leitura (ou logo depois de uma falha) não repete
+        est["proxima"] = time.time() + config(cnpj)["intervalo"]
         try:
             itens = await listar_pendentes(MeuERPClient(tenant["api_token"]))
         except Exception as erro:
+            # só o tipo/código do erro (nunca o texto, que pode trazer endereço): a tela do /admin mostra para achar a causa
+            est["motivo"] = f"HTTP {erro.response.status_code}" if isinstance(erro, httpx.HTTPStatusError) else type(erro).__name__
             est["falhas"] += 1
             est["erro"] = True
             est["proxima"] = time.time() + min(INTERVALO_MAXIMO, config(cnpj)["intervalo"] * (2 ** min(est["falhas"], 3)))
-            logger.warning("fila de liberações: ERP não respondeu (%s)", type(erro).__name__)
+            logger.warning("fila de liberações: ERP não respondeu (%s)", est["motivo"])
             return est
-        est.update(itens=itens, em=time.time(), erro=False, falhas=0, proxima=time.time() + config(cnpj)["intervalo"])
+        est.update(itens=itens, em=time.time(), erro=False, motivo="", falhas=0, proxima=time.time() + config(cnpj)["intervalo"])
         try:
             await _avisar_novos(cnpj, itens)
         except Exception:
@@ -342,10 +348,17 @@ async def atualizar(cnpj: str, tenant: dict) -> dict:
 
 
 async def garantir_fresco(cnpj: str, tenant: dict) -> None:
-    """Para a primeira abertura da tela: se ainda não há leitura recente, faz uma agora (as seguintes vêm do ciclo)."""
+    """Para a primeira abertura da tela: se ainda não há leitura recente, faz uma agora (as seguintes vêm do ciclo).
+    Respeita a espera depois de uma falha (senão cada abertura da tela martelaria o ERP e gastaria a cota da empresa) e nunca
+    prende a tela por mais de ESPERA_MAXIMA_DA_TELA: a leitura continua por trás."""
     est = _estado_de(cnpj)
-    if not est["em"] or time.time() - est["em"] > 2 * config(cnpj)["intervalo"] + 5:
-        await atualizar(cnpj, tenant)
+    velha = not est["em"] or time.time() - est["em"] > 2 * config(cnpj)["intervalo"] + 5
+    if not velha or time.time() < est["proxima"]:
+        return
+    try:
+        await asyncio.wait_for(asyncio.shield(atualizar(cnpj, tenant)), ESPERA_MAXIMA_DA_TELA)
+    except asyncio.TimeoutError:
+        pass
 
 
 # ----------------------------------------------------------------------------- avisos

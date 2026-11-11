@@ -1,5 +1,6 @@
 """/admin/liberacoes: liga a liberação de permissão do caixa por empresa e escolhe quais perfis do ERP podem aprovar."""
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Form, Request
@@ -7,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import liberacoes, push
+from app.cache import cached
 from app.database import db_session
 from app.meuerp_client import MeuERPClient
 from app.routers.admin import _avisar, _is_admin
@@ -16,6 +18,9 @@ from app.tenants import get_tenant_by_cnpj, list_tenants
 router = APIRouter(prefix="/admin/liberacoes")
 templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
+
+PERFIS_VALEM = 600          # s: a lista de perfis quase não muda; guardada, a página não chama o ERP a cada abertura
+ESPERA_MAXIMA_PERFIS = 4.0  # s: a página nunca espera mais que isso pelo ERP (a fila de cota pode atrasar)
 
 
 async def _perfis_do_erp(tenant: dict) -> list[dict]:
@@ -50,12 +55,17 @@ async def _tela(request: Request, cnpj: str = "", erro: str = ""):
         cfg = liberacoes.config(tenant["cnpj"])
         contexto["cfg"] = cfg
         try:
-            contexto["perfis"] = await _perfis_do_erp(tenant)
+            contexto["perfis"] = await asyncio.wait_for(
+                cached((tenant["cnpj"], "liberacoes-perfis"), PERFIS_VALEM, lambda: _perfis_do_erp(tenant), obsoleto_ate=24 * 3600),
+                ESPERA_MAXIMA_PERFIS)
+        except asyncio.TimeoutError:   # a busca continua por trás e a próxima abertura já encontra a lista pronta
+            contexto["perfis"] = [{"codigo": c, "nome": f"Perfil {c}"} for c in cfg["perfis"]]
+            contexto["erro"] = contexto["erro"] or "O ERP está demorando para listar os perfis; mostrando os já escolhidos. Recarregue em alguns segundos."
         except Exception:
             logger.exception("lista de perfis indisponível (empresa %s)", tenant["cnpj"])
             contexto["erro"] = contexto["erro"] or "Não foi possível ler os perfis do ERP agora. Tente de novo em instantes."
         resumo = liberacoes.resumo(tenant["cnpj"])
-        contexto["estado"] = {"pendentes": len(resumo["itens"]), "atualizado_ha": resumo["atualizado_ha"], "erro": resumo["erro"],
+        contexto["estado"] = {"pendentes": len(resumo["itens"]), "atualizado_ha": resumo["atualizado_ha"], "erro": resumo["erro"], "motivo": resumo["motivo"],
                               "celulares": liberacoes.quantos_inscritos(tenant["cnpj"]), "chamadas_por_min": round(60 / cfg["intervalo"], 1)}
         contexto["decisoes"] = _ultimas_decisoes(tenant["cnpj"])
     return templates.TemplateResponse(request, "admin_liberacoes.html", contexto)
