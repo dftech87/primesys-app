@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrimeSys | Liberações do caixa</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; color: #0f172a; }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #0f172a; color: #fff; }
+        header h1 { margin: 0; font-size: 18px; }
+        header a { color: #cbd5e1; text-decoration: none; font-size: 13px; margin-left: 16px; }
+        main { padding: 24px; max-width: 760px; margin: 0 auto; }
+        .nota { font-size: 13px; color: #475569; line-height: 1.5; margin: 0 0 16px; }
+        .cartao { background: #fff; border-radius: 14px; padding: 16px; margin-top: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        label { display: block; font-size: 12px; color: #64748b; font-weight: 600; margin: 10px 0 4px; }
+        select, input[type=number] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; font-size: 14px; background: #fff; }
+        label.marca { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; color: #0f172a; margin: 6px 0; }
+        label.marca input { width: 18px; height: 18px; }
+        .tres { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        button { margin-top: 14px; padding: 11px 16px; border: 0; border-radius: 10px; background: #0f172a; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+        .lin { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+        .lin span:first-child { color: #475569; }
+        .ok { color: #15803d; font-weight: 700; } .ruim { color: #b91c1c; font-weight: 700; }
+        .aviso { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.4; margin-top: 10px; }
+        .aviso.verm { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+        .aviso.verde { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+        th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #f1f5f9; }
+        th { color: #64748b; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PrimeSys &middot; Liberações do caixa</h1>
+        <div><a href="/admin">Clientes</a><a href="/admin/acessos">Acessos do usuário</a><a href="/admin/logout">Sair</a></div>
+    </header>
+    <main>
+        <p class="nota">
+            Pedidos de <b>Liberação de permissão</b> do ERP (o caixa pede um cancelamento e precisa de aprovação) chegam no Prime Info de quem
+            tem um dos perfis marcados aqui, com aviso no celular, e podem ser liberados ou bloqueados pelo app. Desligado por padrão em cada empresa.
+            O ERP registra a decisão no nome do usuário do token da empresa; o app guarda também quem aprovou.
+        </p>
+        {% if aviso %}<div class="aviso verde">{{ aviso.texto }}</div>{% endif %}
+        {% if erro %}<div class="aviso verm">{{ erro }}</div>{% endif %}
+        <div class="cartao">
+            <form method="get" action="/admin/liberacoes">
+                <label for="c">Empresa</label>
+                <select id="c" name="c" onchange="this.form.submit()">
+                    <option value="">Escolha…</option>
+                    {% for e in empresas %}<option value="{{ e.cnpj }}"{{ ' selected' if e.cnpj == cnpj else '' }}>{{ e.nome }}</option>{% endfor %}
+                </select>
+            </form>
+        </div>
+        {% if cfg is not none %}
+        <div class="cartao">
+            <form method="post" action="/admin/liberacoes">
+                <input type="hidden" name="cnpj" value="{{ cnpj }}" />
+                <label class="marca"><input type="checkbox" name="ativo" value="1"{{ ' checked' if cfg.ativo else '' }} /> Liberações do caixa ligadas nesta empresa</label>
+                <label>Perfis do ERP que podem aprovar</label>
+                {% for p in perfis %}
+                <label class="marca"><input type="checkbox" name="perfil" value="{{ p.codigo }}"{{ ' checked' if p.codigo in cfg.perfis else '' }} /> {{ p.nome }} <span style="color:#94a3b8">(código {{ p.codigo }})</span></label>
+                {% else %}
+                <div class="aviso">Nenhum perfil lido do ERP agora.</div>
+                {% endfor %}
+                <div class="tres">
+                    <div><label for="intervalo">Consultar o ERP a cada (s)</label><input id="intervalo" name="intervalo" type="number" min="5" max="60" value="{{ cfg.intervalo }}" /></div>
+                    <div><label for="hi">Das (hora)</label><input id="hi" name="hora_inicial" type="number" min="0" max="23" value="{{ cfg.hora_inicial }}" /></div>
+                    <div><label for="hf">Até (hora)</label><input id="hf" name="hora_final" type="number" min="0" max="24" value="{{ cfg.hora_final }}" /></div>
+                </div>
+                <p class="nota" style="margin-top:10px">Cada consulta usa 1 das 20 chamadas por minuto da empresa; 10 s = 6 por minuto. A consulta só roda dentro do horário, e só enquanto houver um celular com avisos ligados ou o app aberto na tela de liberações.</p>
+                <button type="submit">Salvar</button>
+            </form>
+        </div>
+        {% if estado %}
+        <div class="cartao">
+            <div class="lin"><span>Avisos no celular (servidor)</span><b class="{{ 'ok' if push_ligado else 'ruim' }}">{{ 'ligado' if push_ligado else 'desligado: faltam as chaves VAPID no servidor' }}</b></div>
+            <div class="lin"><span>Celulares com avisos ligados</span><b>{{ estado.celulares }}</b></div>
+            <div class="lin"><span>Pedidos pendentes agora</span><b>{{ estado.pendentes }}</b></div>
+            <div class="lin"><span>Última leitura do ERP</span><b class="{{ 'ruim' if estado.erro else '' }}">{{ ('há ' ~ estado.atualizado_ha ~ ' s') if estado.atualizado_ha is not none else 'ainda não leu' }}{{ ' (ERP sem resposta)' if estado.erro else '' }}</b></div>
+            <div class="lin"><span>Custo na cota do ERP</span><b>{{ estado.chamadas_por_min }} chamadas/min enquanto ativo</b></div>
+        </div>
+        {% if decisoes %}
+        <div class="cartao">
+            <b style="font-size:14px">Últimas decisões</b>
+            <table>
+                <tr><th>Quando</th><th>Quem</th><th>Decisão</th><th>Pedido</th><th>Resultado</th></tr>
+                {% for d in decisoes %}
+                <tr><td>{{ d.criado_em }}</td><td>{{ d.nome }}</td><td>{{ 'Liberou' if d.decisao == 'L' else 'Bloqueou' }}</td><td>{{ d.permissao }}{{ (' · caixa ' ~ d.caixa) if d.caixa else '' }}</td><td class="{{ 'ok' if d.resultado == 'ok' else 'ruim' }}">{{ d.resultado }}</td></tr>
+                {% endfor %}
+            </table>
+        </div>
+        {% endif %}
+        {% endif %}
+        {% endif %}
+    </main>
+</body>
+</html>

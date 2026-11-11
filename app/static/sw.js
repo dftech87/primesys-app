@@ -25,3 +25,27 @@ self.addEventListener("fetch", (event) => {
   }
   event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
 });
+
+// Avisos de pedido de liberação do caixa (Web Push). Só mostram a notificação e abrem a tela de liberações ao tocar:
+// nada aqui mexe no cache nem nas telas já existentes.
+self.addEventListener("push", (event) => {
+  let dados = {};
+  try { dados = event.data ? event.data.json() : {}; } catch (e) { dados = {}; }
+  const opcoes = {
+    body: dados.texto || "",
+    tag: dados.tag || "liberacao",
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [200, 100, 200, 100, 200],
+    icon: "/static/icons/app-192.png",
+    badge: "/static/icons/app-192.png",
+    data: { url: dados.url || "/liberacoes" },
+  };
+  event.waitUntil(self.registration.showNotification(dados.titulo || "Pedido de liberação", opcoes));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/liberacoes";
+  event.waitUntil(self.clients.openWindow(url));
+});
