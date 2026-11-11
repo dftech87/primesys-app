@@ -11,10 +11,10 @@ from starlette.middleware.sessions import SessionMiddleware
 import asyncio
 from contextlib import asynccontextmanager
 
-from app import consumo, desempenho, liberacoes as fila_liberacoes, versao
+from app import consumo, desempenho, versao
 from app.config import COOKIE_SEGURO, SESSAO_MAX_IDADE, settings
 from app.database import db_session, init_db
-from app.routers import admin, admin_liberacoes, auth, balanca, liberacoes, painel_mobile, preco, produtos
+from app.routers import admin, auth, balanca, painel_mobile, preco, produtos
 from app.tenants import create_tenant_if_missing, criptografar_tokens_existentes
 
 
@@ -34,11 +34,9 @@ class _GZipSemServiceWorker(GZipMiddleware):
 async def _ciclo_de_vida(_app):
     consumo.iniciar()   # medidor de consumo da cota do ERP (grava a cada minuto; o Prime Vendas não liga)
     await asyncio.to_thread(desempenho.iniciar)   # registro de tempos dos logins e das requisições lentas
-    fila_liberacoes.iniciar()   # pedidos de liberação do caixa: só consulta o ERP das empresas que ligaram a função e têm alguém por perto
     try:
         yield
     finally:
-        await fila_liberacoes.parar()
         await consumo.parar()
 
 
@@ -145,11 +143,6 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/.well-known", StaticFiles(directory="app/static/well-known"), name="well-known")
 
 init_db()
-try:
-    fila_liberacoes.iniciar_tabelas()   # tabelas das liberações do caixa (só acrescenta; nada existente é alterado)
-except Exception:   # o restante do app não pode deixar de subir por causa disto
-    import logging as _logging
-    _logging.getLogger(__name__).exception("tabelas das liberações do caixa não puderam ser criadas")
 
 # Bootstrap do primeiro cliente (DFTECH) a partir das variáveis de ambiente, para
 # que um deploy novo (banco vazio) já tenha um tenant utilizável sem precisar de
@@ -166,5 +159,3 @@ app.include_router(produtos.router)
 app.include_router(painel_mobile.router)
 app.include_router(preco.router)
 app.include_router(balanca.router)
-app.include_router(liberacoes.router)
-app.include_router(admin_liberacoes.router)
