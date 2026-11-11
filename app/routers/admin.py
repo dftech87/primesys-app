@@ -10,7 +10,7 @@ from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
 from app.tenants import (
     create_tenant, dados_da_empresa_do_token, empresa_do_token, list_tenants, set_tenant_ativo, set_tenant_nome,
-    get_tenant_by_cnpj, set_balanca_liberada, set_tenant_token, set_vendas_liberado,
+    get_tenant_by_cnpj, set_tenant_token, set_vendas_liberado,
 )
 
 import logging
@@ -213,17 +213,6 @@ async def admin_prime_vendas(request: Request, cnpj: str, acao: str):
     if acao in ("liberar", "bloquear"):
         set_vendas_liberado(cnpj, liberado=acao == "liberar")
         _avisar(request, "Prime Vendas ligado." if acao == "liberar" else "Prime Vendas desligado: os celulares da empresa foram desconectados.")
-    return _voltar(cnpj)
-
-
-@router.post("/tenants/{cnpj}/balanca/{acao}")
-async def admin_balanca(request: Request, cnpj: str, acao: str):
-    """Liga/desliga o bloco Balança na ficha do Prime Info da empresa (escreve no cadastro do ERP, por isso empresa a empresa)."""
-    if not _is_admin(request):
-        return RedirectResponse("/admin/login", status_code=303)
-    if acao in ("liberar", "bloquear"):
-        set_balanca_liberada(cnpj, liberado=acao == "liberar")
-        _avisar(request, "Balança na ficha ligada." if acao == "liberar" else "Balança na ficha desligada.")
     return _voltar(cnpj)
 
 

@@ -27,13 +27,11 @@ class PedidoDesfazerBalanca(BaseModel):
 
 
 def _entrar(request: Request) -> tuple[dict | None, JSONResponse | None]:
-    """Quem o perfil libera (permissão 3901 + aba Produtos) numa empresa com a balança liberada no /admin. A sessão precisa saber o e-mail: é quem fica no registro."""
+    """Quem vê a aba Produtos (decisão do dono: sem permissão nem liberação à parte). A sessão precisa saber o e-mail: é quem fica no registro."""
     tenant = current_tenant(request)
     if tenant is None:
         return None, JSONResponse({"detail": "not authenticated"}, status_code=401)
     if not (acessos.pode(request, "balanca") and acessos.pode(request, "produtos") and request.session.get("email")):
-        return None, sem_permissao()
-    if not tenant.get("balanca_liberada"):   # liberação por empresa (botão no /admin): desligada até o dono ligar
         return None, sem_permissao()
     return tenant, None
 

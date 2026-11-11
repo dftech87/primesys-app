@@ -49,7 +49,7 @@ Descrição, códigos, unidade e **preço de venda** aparecem para todos que tê
 | **Estoque** na loja | POS → Permissão para consultar estoque (**10041**) **ou** MOVIMENTO DE ESTOQUE → acessar o módulo (**1901**) |
 | **Histórico de preço** (quem alterou e quando) | FORMAÇÃO DE PREÇOS → acessar o módulo (**5201**) **ou** TABELAS DE PREÇO → acessar o módulo (**3501**) |
 | Botão **Ver notas de entrada** | o mesmo da aba Compras (**6401** ou **6501**) |
-| Bloco **Balança** na ficha (escolher Sim/Não em *Exportar p/ Balança* e *Solicitar Balança*) | EXPORTAÇÃO PARA BALANÇA → Permissão para acessar o módulo (**3901**), além da aba Produtos (**1**). Ligar *Solicitar* em produto que não é KG pede confirmação (o caixa passa a pedir o peso) |
+| Bloco **Balança** na ficha (escolher Sim/Não em *Exportar p/ Balança* e *Solicitar Balança*) | o mesmo da aba Produtos (**1**): quem vê Produtos pode alterar (a mudança fica registrada e dá para desfazer). Ligar *Solicitar* em produto que não é KG pede confirmação (o caixa passa a pedir o peso) |
 | **Lápis para alterar o preço de venda** | CADASTRO DE MERCADORIA → Permissão para alterar preço de venda (**2**) **ou** FORMAÇÃO DE PREÇOS → Permissão para alterar preço da mercadoria (**5202**) |
 
 **Alterar preço de venda pelo app:** é a única escrita do Prime Info no ERP. Vale só para quem tem a aba Produtos e uma das

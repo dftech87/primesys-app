@@ -97,7 +97,7 @@ def _com_token_aberto(linha: Mapping) -> dict:
 def list_tenants() -> list[dict]:
     with db_session() as conn:
         linhas = conn.execute(
-            "SELECT id, cnpj, nome_fantasia, ativo, criado_em, api_token, vendas_liberado, balanca_liberada FROM empresas ORDER BY criado_em DESC"
+            "SELECT id, cnpj, nome_fantasia, ativo, criado_em, api_token, vendas_liberado FROM empresas ORDER BY criado_em DESC"
         ).fetchall()
     resultado = []
     for linha in linhas:
@@ -122,15 +122,6 @@ def set_vendas_liberado(cnpj: str, liberado: bool) -> None:
     with db_session() as conn:
         conn.execute(
             "UPDATE empresas SET vendas_liberado = ? WHERE cnpj = ?",
-            (1 if liberado else 0, normalize_cnpj(cnpj)),
-        )
-
-
-def set_balanca_liberada(cnpj: str, liberado: bool) -> None:
-    """Liga/desliga o bloco Balança (Exportar/Solicitar) na ficha do Prime Info desta empresa. Desligado até o dono ligar."""
-    with db_session() as conn:
-        conn.execute(
-            "UPDATE empresas SET balanca_liberada = ? WHERE cnpj = ?",
             (1 if liberado else 0, normalize_cnpj(cnpj)),
         )
 

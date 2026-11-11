@@ -1,7 +1,7 @@
 """Exportar para balança / Solicitar balança, na ficha do produto (o cliente escolhe Sim ou Não; nada é digitado).
 
 Escreve no cadastro do ERP, por isso com várias travas:
-  - quem pode: permissão 3901 (Exportação para balança) do perfil, conferida nas rotas (app/routers/balanca.py);
+  - quem pode: quem vê a aba Produtos no perfil do ERP (decisão do dono), conferido nas rotas (app/routers/balanca.py);
   - só os campos que mudaram vão ao ERP (PUT /api/mercadoria/v1/{variação}); provado na DFTECH que o resto do cadastro fica igual;
   - o estado é lido do ERP na hora (nunca do cache) e conferido de novo depois de gravar;
   - "Solicitar balança" faz o caixa pedir o peso: em produto que não é vendido por KG só passa com confirmação explícita;

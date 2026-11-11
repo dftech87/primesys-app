@@ -30,7 +30,7 @@ PERMISSOES = {
     "estoque": (10041, 1901),       # POS: consultar estoque | movimento de estoque
     "historico_preco": (5201, 3501),  # formação de preços | tabelas de preço
     "alterar_preco": (2, 5202),     # cadastro de mercadoria: alterar preço de venda | formação de preços: alterar preço
-    "balanca": (3901,),             # exportação para balança: acessar o módulo (Exportar/Solicitar balança na ficha)
+    "balanca": (1,),                # bloco Balança da ficha: quem vê a aba Produtos (decisão do dono, 11/11/2026)
     "compras": (6401, 6501),        # central de compras | outras entradas (notas de entrada)
     "dashboard": (3301,),           # dashboard: acessar o módulo
     "lucro": (3304,),               # dashboard 'Resumo - Lucro' (margem e lucro bruto)
