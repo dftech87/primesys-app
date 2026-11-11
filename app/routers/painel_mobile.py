@@ -5,17 +5,17 @@ import logging
 import time
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from app import acessos, alertas, caixa, estoque, financeiro, vendas
 from app.cache import cached, descartar
 from app.datas import hoje_loja
-from app.deps import current_tenant, sem_permissao
+from app.deps import current_tenant, revalidar_acessos, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(revalidar_acessos)])   # acessos reconferidos a cada 5 min com o app aberto
 logger = logging.getLogger(__name__)
 
 MAX_DIAS = 366

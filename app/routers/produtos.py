@@ -1,18 +1,18 @@
 import asyncio
 
 import httpx
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import acessos, compras, ficha, preco_venda, precos, versao
 from app.cache import cached, guardar
-from app.deps import current_tenant, sem_permissao
+from app.deps import current_tenant, revalidar_acessos, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
 from app.tenants import ERRO_ERP_LENTO, token_confere_sem_travar
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(revalidar_acessos)])   # acessos reconferidos a cada 5 min com o app aberto
 templates = Jinja2Templates(directory="app/templates")
 
 MAX_RESULTADOS_LISTA = 20

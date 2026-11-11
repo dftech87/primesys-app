@@ -3,17 +3,17 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app import acessos, balanca
-from app.deps import current_tenant, sem_permissao
+from app.deps import current_tenant, revalidar_acessos, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.routers.preco import _erro_erp, _mesma_origem, _quem
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(revalidar_acessos)])   # acessos reconferidos a cada 5 min com o app aberto
 
 
 class PedidoBalanca(BaseModel):

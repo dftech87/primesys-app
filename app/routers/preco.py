@@ -4,17 +4,17 @@ import logging
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app import acessos, preco_venda
-from app.deps import current_tenant, sem_permissao
+from app.deps import current_tenant, revalidar_acessos, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.tenants import ERRO_ERP_LENTO
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(revalidar_acessos)])   # acessos reconferidos a cada 5 min com o app aberto
 
 
 class PedidoPreco(BaseModel):

@@ -4,8 +4,10 @@ O ERP não diz qual usuário acabou de validar o login, então o e-mail é procu
 empresa (banco do ERP: usuario_perfil_empresa, a mesma regra de empresa do Prime Vendas), lendo o detalhe de cada um
 só até achar. Quem não tem perfil na empresa (ex.: usuário de suporte/revenda) vê tudo, como antes dos perfis.
 
-Os acessos calculados ficam na sessão (assinada); a página principal os recalcula a cada abertura, então uma mudança
-de perfil no ERP vale em até 1 hora (validade das permissões guardadas). As rotas da API só leem a sessão.
+Os acessos calculados ficam na sessão (assinada); a página principal os recalcula a cada abertura e, durante o uso, as
+rotas protegidas os reconferem a cada 5 minutos (`revalidar`), então um bloqueio no ERP alcança também quem está com o app
+aberto. As permissões de cada perfil ficam guardadas por 1 hora: o botão "Atualizar agora" do /admin (`esquecer_empresa`)
+zera isso e faz todas as sessões da empresa se reconferirem na próxima chamada.
 """
 
 import logging
@@ -14,9 +16,9 @@ import time
 import httpx
 
 from app import desempenho
-from app.cache import cached
+from app.cache import cached, descartar, descartar_prefixo
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar
+from app.sqlquery import executar, i
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,8 @@ ERRO_SEM_PERMISSAO = "Seu perfil no Meu ERP não tem acesso a esta área."
 TTL_PERMISSOES = 3600
 TTL_USUARIO = 6 * 3600            # perfil de um usuário já encontrado: confere de novo depois disso
 REVER_IDS_A_CADA = 10 * 60        # usuário novo no ERP: a lista de quem tem perfil é relida no máximo a cada 10 min
+REVALIDAR_A_CADA = 5 * 60         # sessão aberta: as rotas protegidas reconferem as permissões do perfil neste intervalo
+_geracao: dict[str, int] = {}     # por empresa: sobe quando o /admin manda atualizar; sessões de outra geração se reconferem já
 
 _SQL_USUARIOS_COM_PERFIL = """
     select _idusuario as id, max(idperfil) as perfil from usuario_perfil_empresa
@@ -165,6 +169,19 @@ async def _perfil_do_email(tenant: dict, email: str) -> int | None:
     return achado["perfil"] if achado else None
 
 
+async def usuario_do_email(tenant: dict, email: str) -> dict | None:
+    """Usuário do ERP deste e-mail (código, perfil e nome), para quem grava no ERP em nome dele (Prime Estoque: o documento
+    de ajuste mostra quem coletou). None se ele não tem perfil na empresa (ex.: suporte): quem chama decide o que fazer."""
+    email = (email or "").strip().lower()
+    perfil = await _perfil_do_email(tenant, email)
+    if perfil is None:
+        return None
+    for uid, u in _usuarios.get(tenant["cnpj"], {}).get("por_id", {}).items():
+        if u.get("email") == email and u.get("perfil", 0) > 0:
+            return {"id": int(uid), "perfil": int(perfil), "nome": u.get("nome") or ""}
+    return None
+
+
 def nome_do_email(cnpj: str, email: str) -> str:
     """Nome do usuário no ERP, se já foi lido (não chama o ERP). Quem não tem perfil na empresa não é encontrado: ''."""
     email = (email or "").strip().lower()
@@ -195,10 +212,17 @@ def na_sessao(request) -> dict | None:
     return s.get("acessos") if s.get("acesso_v") == VERSAO else None
 
 
+def _marcar(request) -> None:
+    """Registra na sessão quando e em que geração (do /admin) os acessos foram conferidos."""
+    request.session["acessos_em"] = time.time()
+    request.session["acessos_gen"] = _geracao.get(str(request.session.get("cnpj") or ""), 0)
+
+
 def gravar_na_sessao(request, dados: dict) -> None:
     request.session["acessos"] = dados["acessos"]
     request.session["acesso_v"] = dados["v"]
     request.session["perfil"] = dados.get("perfil")
+    _marcar(request)
 
 
 async def atualizar(request, tenant: dict) -> dict:
@@ -206,14 +230,79 @@ async def atualizar(request, tenant: dict) -> dict:
     atuais = na_sessao(request) or {}
     if not request.session.get("perfil"):   # sem perfil: continua vendo tudo (inclui áreas criadas depois do login)
         request.session["acessos"] = dict(TUDO)
+        _marcar(request)
         return dict(TUDO)
     try:
         novos = calcular(await _liberadas(tenant, int(request.session["perfil"])))
     except Exception:
         logger.warning("permissões do perfil indisponíveis agora (empresa %s); valem as do login", tenant["cnpj"])
+        request.session["acessos_em"] = time.time() - REVALIDAR_A_CADA + 60   # ERP fora: tenta de novo em 1 minuto, não a cada chamada
         return atuais
     request.session["acessos"] = novos
+    _marcar(request)
     return novos
+
+
+def precisa_revalidar(request) -> bool:
+    """Barato (só lê a sessão): a sessão tem perfil e os acessos dela estão velhos ou são de outra geração do /admin?"""
+    s = request.session
+    if not s.get("perfil") or na_sessao(request) is None:
+        return False   # sem perfil vê tudo (nada a reconferir); sessão antiga sem acessos já conta como não logada
+    if s.get("acessos_gen") != _geracao.get(str(s.get("cnpj") or ""), 0):
+        return True
+    return time.time() - float(s.get("acessos_em") or 0) >= REVALIDAR_A_CADA
+
+
+async def revalidar(request, tenant: dict) -> None:
+    """Durante o uso (app aberto): reconfere as permissões do perfil a cada 5 min, para um bloqueio no ERP valer também para
+    quem não reabriu o app. Usa as permissões guardadas do perfil (1 h), então quase nunca gasta chamada ao ERP."""
+    if precisa_revalidar(request):
+        await atualizar(request, tenant)
+
+
+def esquecer_empresa(cnpj: str) -> None:
+    """/admin "Atualizar agora": esquece o que o app guardou dos usuários e das permissões desta empresa e manda as sessões
+    abertas dela se reconferirem na próxima chamada."""
+    cnpj = str(cnpj)
+    _usuarios.pop(cnpj, None)
+    descartar_prefixo((cnpj, "info-permissoes-perfil"))
+    descartar((cnpj, "info-emails-empresa"))
+    _geracao[cnpj] = _geracao.get(cnpj, 0) + 1
+
+
+async def diagnosticar(tenant: dict, email: str) -> dict:
+    """/admin: o que o app enxerga deste usuário (só leitura): perfil, perfis por loja no ERP, a permissão 3301 no ERP agora
+    contra o que o app calcula, e as abas que ele mostra."""
+    email = (email or "").strip().lower()
+    cnpj = tenant["cnpj"]
+    r: dict = {"perfil": None, "perfis_por_loja": [], "abas": [], "dashboard_app": None, "dashboard_erp": None, "avisos": []}
+    emails = await _emails_da_empresa(tenant)
+    r["email_na_lista_da_empresa"] = None if emails is None else (email in emails)
+    usuario = await usuario_do_email(tenant, email)
+    if usuario is None:
+        r["avisos"].append("O app não achou perfil para este e-mail na empresa: ele é tratado como SEM PERFIL e vê TUDO "
+                           "(regra de 30/10/2026, feita para suporte e revenda).")
+        return r
+    r["perfil"], r["codigo_usuario"] = usuario["perfil"], usuario["id"]
+    try:
+        linhas = await executar(MeuERPClient(tenant["api_token"]),
+                                f"select _idempresa as loja, idperfil as perfil from usuario_perfil_empresa where _idusuario = {i(usuario['id'])} order by 1", max_paginas=1)
+        r["perfis_por_loja"] = [(x["loja"], int(x["perfil"] or 0)) for x in linhas]
+    except Exception:
+        r["avisos"].append("Não foi possível ler os perfis por loja agora.")
+    if len({p for _, p in r["perfis_por_loja"] if p > 0}) > 1:
+        r["avisos"].append("Este usuário tem perfis DIFERENTES em lojas diferentes. O app usa um só (o da primeira loja): confira qual vale.")
+    calc = calcular(await _liberadas(tenant, usuario["perfil"]))
+    r["abas"] = [a for a in ABAS if calc[a]]
+    r["dashboard_app"] = calc["dashboard"]
+    try:   # a permissão 3301 no ERP agora (1 chamada), para comparar com o que o app guardou
+        r["dashboard_erp"] = (await MeuERPClient(tenant["api_token"]).get(f"/api/usuario-perfil/{int(usuario['perfil'])}/permissoes/v1/3301")).get("tipoLiberacao")
+    except Exception:
+        r["dashboard_erp"] = None
+    if r["dashboard_erp"] == "B" and r["dashboard_app"]:
+        r["avisos"].append("DIVERGENTE: o ERP diz que o Dashboard está BLOQUEADO neste perfil, mas o app ainda o libera (dado guardado). "
+                           "Use \"Atualizar agora\".")
+    return r
 
 
 def pode(request, *areas: str) -> bool:

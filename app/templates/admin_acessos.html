@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrimeSys | Acessos do usuário</title>
+    <style>
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f1f5f9; color: #0f172a; }
+        header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: #0f172a; color: #fff; }
+        header h1 { margin: 0; font-size: 18px; }
+        header a { color: #cbd5e1; text-decoration: none; font-size: 13px; margin-left: 16px; }
+        main { padding: 24px; max-width: 760px; margin: 0 auto; }
+        .nota { font-size: 13px; color: #475569; line-height: 1.5; margin: 0 0 16px; }
+        .cartao { background: #fff; border-radius: 14px; padding: 16px; margin-top: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        label { display: block; font-size: 12px; color: #64748b; font-weight: 600; margin: 10px 0 4px; }
+        select, input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; font-size: 14px; background: #fff; }
+        button { margin-top: 14px; padding: 11px 16px; border: 0; border-radius: 10px; background: #0f172a; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+        button.sec { background: #1d4ed8; }
+        .lin { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+        .lin span:first-child { color: #475569; }
+        .ok { color: #15803d; font-weight: 700; } .ruim { color: #b91c1c; font-weight: 700; }
+        .aviso { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.4; margin-top: 10px; }
+        .aviso.verm { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+        .aviso.verde { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>PrimeSys &middot; Acessos do usuário</h1>
+        <div><a href="/admin">Clientes</a><a href="/admin/desempenho">Tempos e lentidão</a><a href="/admin/logout">Sair</a></div>
+    </header>
+    <main>
+        <p class="nota">
+            Mostra o que o Prime Info enxerga de um usuário: qual perfil achou, o que o ERP diz da permissão do <b>Dashboard (3301)</b> agora
+            e o que o app guardou, e as abas que ele mostra. Só leitura. Com o app aberto, o app reconfere as permissões do perfil a cada
+            {{ revalidar_min }} minutos; as permissões de cada perfil ficam guardadas por 1 hora, e o botão <b>Atualizar agora</b> zera isso.
+        </p>
+        {% if aviso %}<div class="aviso verde">{{ aviso.texto }}</div>{% endif %}
+        <div class="cartao">
+            <form method="post" action="/admin/acessos">
+                <label for="cnpj">Empresa</label>
+                <select id="cnpj" name="cnpj" required>
+                    <option value="">Escolha…</option>
+                    {% for e in empresas %}<option value="{{ e.cnpj }}"{{ ' selected' if e.cnpj == cnpj else '' }}>{{ e.nome }}</option>{% endfor %}
+                </select>
+                <label for="email">E-mail do usuário</label>
+                <input id="email" name="email" type="email" autocomplete="off" value="{{ email }}" placeholder="usuario@empresa.com.br" required />
+                <button type="submit">Ver o que o app enxerga</button>
+            </form>
+            {% if erro %}<div class="aviso verm">{{ erro }}</div>{% endif %}
+        </div>
+        {% if resultado %}
+        <div class="cartao">
+            {% if resultado.perfil %}
+            <div class="lin"><span>Perfil que o app usa</span><b>{{ resultado.perfil }}</b></div>
+            <div class="lin"><span>Perfis por loja no ERP (loja, perfil)</span><b>{{ resultado.perfis_por_loja | join(' · ') if resultado.perfis_por_loja else '-' }}</b></div>
+            <div class="lin"><span>Dashboard (3301) no ERP agora</span>
+                <b class="{{ 'ok' if resultado.dashboard_erp == 'L' else 'ruim' if resultado.dashboard_erp == 'B' else '' }}">{{ {'L': 'Liberado', 'B': 'Bloqueado'}.get(resultado.dashboard_erp, 'não foi possível ler') }}</b></div>
+            <div class="lin"><span>Dashboard no app</span><b class="{{ 'ok' if resultado.dashboard_app else 'ruim' }}">{{ 'Libera' if resultado.dashboard_app else 'Bloqueia' }}</b></div>
+            <div class="lin"><span>Abas que o app mostra</span><b>{{ resultado.abas | join(', ') if resultado.abas else 'nenhuma' }}</b></div>
+            {% else %}
+            <div class="lin"><span>Perfil que o app usa</span><b class="ruim">nenhum (tratado como SEM PERFIL)</b></div>
+            {% endif %}
+            <div class="lin"><span>E-mail na lista de usuários da empresa</span><b>{{ 'sim' if resultado.email_na_lista_da_empresa else 'não' if resultado.email_na_lista_da_empresa is not none else 'não foi possível ler' }}</b></div>
+            {% for a in resultado.avisos %}<div class="aviso {{ 'verm' if a.startswith('DIVERGENTE') or a.startswith('O app não achou') else '' }}">{{ a }}</div>{% endfor %}
+            <form method="post" action="/admin/acessos/atualizar" style="margin-top:12px">
+                <input type="hidden" name="cnpj" value="{{ cnpj }}" />
+                <button type="submit" class="sec">Atualizar agora (esquecer o que o app guardou desta empresa)</button>
+            </form>
+        </div>
+        {% endif %}
+    </main>
+</body>
+</html>

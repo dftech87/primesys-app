@@ -4,13 +4,13 @@ from fastapi.templating import Jinja2Templates
 
 import secrets
 
-from app import backup, consumo, desempenho, limite
+from app import acessos, backup, consumo, desempenho, limite
 from app.meuerp_client import nome_do_balde
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
 from app.tenants import (
     create_tenant, dados_da_empresa_do_token, empresa_do_token, list_tenants, set_tenant_ativo, set_tenant_nome,
-    set_balanca_liberada, set_tenant_token, set_vendas_liberado,
+    get_tenant_by_cnpj, set_balanca_liberada, set_tenant_token, set_vendas_liberado,
 )
 
 import logging
@@ -256,6 +256,52 @@ async def admin_desempenho(request: Request, dias: int = 7, lentos: int = 0):
     for l in linhas:
         l["empresa"] = nomes.get(l["cnpj"], l["cnpj"] or "-")
     return templates.TemplateResponse(request, "admin_desempenho.html", {"linhas": linhas, "dias": max(1, min(dias, 90)), "lentos": 1 if lentos else 0})
+
+
+def _tela_acessos(request: Request, cnpj: str = "", email: str = "", resultado: dict | None = None, erro: str = ""):
+    empresas = sorted(({"cnpj": t["cnpj"], "nome": t["nome_fantasia"]} for t in list_tenants()), key=lambda e: e["nome"].lower())
+    return templates.TemplateResponse(request, "admin_acessos.html", {
+        "empresas": empresas, "cnpj": normalize_cnpj(cnpj), "email": email, "resultado": resultado, "erro": erro,
+        "aviso": request.session.pop("aviso", None), "revalidar_min": acessos.REVALIDAR_A_CADA // 60,
+    })
+
+
+@router.get("/acessos", response_class=HTMLResponse)
+async def admin_acessos(request: Request, c: str = ""):
+    """O que o app enxerga de um usuário (perfil, permissão do Dashboard no ERP contra o que o app guardou, abas) e o botão Atualizar agora."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    return _tela_acessos(request, cnpj=c)
+
+
+@router.post("/acessos", response_class=HTMLResponse)
+async def admin_acessos_ver(request: Request, cnpj: str = Form(""), email: str = Form("")):
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    tenant = get_tenant_by_cnpj(normalize_cnpj(cnpj))
+    email = email.strip()
+    if tenant is None or not tenant.get("api_token"):
+        return _tela_acessos(request, cnpj, email, erro="Escolha uma empresa cadastrada.")
+    if "@" not in email:
+        return _tela_acessos(request, cnpj, email, erro="Digite o e-mail do usuário.")
+    try:
+        resultado = await acessos.diagnosticar(tenant, email)
+    except Exception:
+        logger.exception("diagnóstico de acessos falhou (empresa %s)", tenant["cnpj"])
+        return _tela_acessos(request, cnpj, email, erro="Não foi possível consultar o ERP agora. Tente de novo em instantes.")
+    return _tela_acessos(request, cnpj, email, resultado)
+
+
+@router.post("/acessos/atualizar")
+async def admin_acessos_atualizar(request: Request, cnpj: str = Form("")):
+    """Esquece as permissões e os usuários guardados da empresa; as sessões abertas dela se reconferem na próxima chamada."""
+    if not _is_admin(request):
+        return RedirectResponse("/admin/login", status_code=303)
+    tenant = get_tenant_by_cnpj(normalize_cnpj(cnpj))
+    if tenant is not None:
+        acessos.esquecer_empresa(tenant["cnpj"])
+        _avisar(request, "Pronto: as permissões guardadas desta empresa foram esquecidas. Quem está com o app aberto é reconferido na próxima ação.")
+    return RedirectResponse(f"/admin/acessos?c={normalize_cnpj(cnpj)}", status_code=303)
 
 
 @router.get("/backup")
