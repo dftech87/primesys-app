@@ -2,10 +2,13 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+import asyncio
 import secrets
 
 from app import acessos, backup, consumo, desempenho, limite
-from app.meuerp_client import nome_do_balde
+from app.cache import cached
+from app.meuerp_client import MeuERPClient, nome_do_balde
+from app.sqlquery import executar
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
 from app.tenants import (
@@ -57,7 +60,30 @@ async def _conferencia(cliente: dict, todos: list[dict]) -> tuple[str, str]:
         problemas.append("Não foi possível conferir no ERP (token inválido ou ERP fora do ar)")
     elif dono != normalize_cnpj(cliente["cnpj"]):
         problemas.append(f"Token é da empresa de CNPJ {_cnpj_formatado(dono)}, não deste CNPJ")
-    return ("; ".join(problemas), "ruim") if problemas else ("Confere com o CNPJ", "bom")
+    if problemas:
+        return "; ".join(problemas), "ruim"
+    lojas = await _empresas_no_banco(cliente)
+    if lojas and lojas > 1:   # o token está certo; é só um aviso
+        return (f"Atenção: o ERP deste cliente tem {lojas} empresas (lojas) no mesmo banco. Produtos, preços e estoque já usam a loja "
+                "deste CNPJ, mas o Dashboard do Prime Info (vendas, caixa, compras, financeiro) soma as lojas."), "aviso"
+    return "Confere com o CNPJ", "bom"
+
+
+EMPRESAS_NO_BANCO_VALE = 24 * 3600   # muda raríssimo: 1 consulta por cliente por dia, só ao abrir o cliente no /admin
+ESPERA_EMPRESAS_NO_BANCO = 4.0       # a página do /admin nunca espera mais que isso pelo ERP
+
+
+async def _empresas_no_banco(cliente: dict) -> int | None:
+    """Quantas empresas (lojas) existem no banco do ERP deste cliente. None se não deu para saber agora."""
+    async def contar() -> int | None:
+        linhas = await executar(MeuERPClient(cliente["api_token"]), "select count(*) as n from empresa", max_paginas=1)
+        return int(linhas[0]["n"]) if linhas else None
+    try:
+        return await asyncio.wait_for(cached((cliente["cnpj"], "empresas-no-banco"), EMPRESAS_NO_BANCO_VALE, contar,
+                                             guardar_se=lambda v: v is not None), ESPERA_EMPRESAS_NO_BANCO)
+    except Exception:
+        logger.warning("não foi possível contar as empresas no banco do ERP (cliente %s)", cliente["cnpj"])
+        return None
 
 
 @router.get("/login", response_class=HTMLResponse)

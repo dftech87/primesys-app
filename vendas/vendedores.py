@@ -15,7 +15,7 @@ import logging
 import time
 
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar, i
+from app.sqlquery import empresa, executar, i
 from vendas import config
 from vendas.memoria import gravar, guardado, vence_em
 
@@ -65,21 +65,21 @@ _SQL_EMAIL_CONTATO = """
     join pessoa_contato c on c._idpessoa = f._idpessoa
     where coalesce(f.flaginativo, 'F') <> 'T' and coalesce(trim(c.email), '') <> ''"""
 
-# Perfil de cada usuário na empresa principal (a mesma regra do catálogo). Perfil 0 não tem permissões no ERP.
+# Perfil de cada usuário na empresa do CNPJ (a mesma regra do catálogo). Perfil 0 não tem permissões no ERP.
 _SQL_PERFIL_USUARIOS = """
     select _idusuario as id, idperfil as perfil
     from usuario_perfil_empresa
     where _idusuario in ({ids}) and coalesce(idperfil, 0) > 0
-      and _idempresa = (select min(_idempresa) from mercadoria_variacao_empresa)"""
+      and _idempresa = {empresa}"""
 
 
-async def _completar_perfis(client: MeuERPClient, mapa: dict[str, dict]) -> bool:
+async def _completar_perfis(client: MeuERPClient, mapa: dict[str, dict], cnpj: str | None = None) -> bool:
     """Preenche o perfil de quem a API não mostrou, lendo do banco do ERP. False se o ERP não respondeu."""
     faltando = {int(v["id_usuario"]) for v in mapa.values() if not v.get("id_perfil") and int(v.get("id_usuario") or 0) > 0}
     if not faltando:
         return True
     try:
-        linhas = await executar(client, _SQL_PERFIL_USUARIOS.format(ids=", ".join(i(x) for x in sorted(faltando))))
+        linhas = await executar(client, _SQL_PERFIL_USUARIOS.format(ids=", ".join(i(x) for x in sorted(faltando)), empresa=empresa(cnpj)))
     except Exception:
         logger.warning("perfis dos usuários indisponíveis no banco do ERP; %d usuário(s) sem perfil por enquanto", len(faltando))
         return False
@@ -90,7 +90,7 @@ async def _completar_perfis(client: MeuERPClient, mapa: dict[str, dict]) -> bool
     return True
 
 
-async def _montar_mapa(token: str) -> dict[str, dict]:
+async def _montar_mapa(token: str, cnpj: str | None = None) -> dict[str, dict]:
     """Mapa completo e-mail -> vendedor. Levanta MapaIncompleto (com o parcial) se alguma leitura falhou."""
     client = MeuERPClient(token)
     mapa: dict[str, dict] = {}
@@ -140,7 +140,7 @@ async def _montar_mapa(token: str) -> dict[str, dict]:
                 "nome_usuario": usuario.get("nome") or "",
                 "origem": "usuario",
             }
-    if not await _completar_perfis(client, mapa):
+    if not await _completar_perfis(client, mapa, cnpj):
         completo = False   # sem o perfil, o vendedor ficaria sem desconto: não guarda como verdade
     if not completo:
         raise MapaIncompleto(mapa)
@@ -159,7 +159,7 @@ async def do_email(tenant: dict, email: str) -> dict | None:
     if email not in mapa and not incompleto and time.monotonic() - _ultima_remontagem.get(cnpj, -1e9) > REMONTAR_NO_MINIMO_A_CADA:
         _ultima_remontagem[cnpj] = time.monotonic()
         try:   # remonta antes de trocar: se falhar no meio, o mapa guardado continua valendo
-            mapa = await _montar_mapa(tenant["api_token"])
+            mapa = await _montar_mapa(tenant["api_token"], cnpj)
             gravar(cnpj, CHAVE_MAPA, mapa, TTL_MAPA)
             incompleto = False
         except MapaIncompleto as parcial:
@@ -186,7 +186,7 @@ async def _nome_pessoa(token: str, id_pessoa: int) -> str:
 
 
 async def _mapa(tenant: dict) -> dict:
-    return await guardado(tenant["cnpj"], CHAVE_MAPA, TTL_MAPA, lambda: _montar_mapa(tenant["api_token"]))
+    return await guardado(tenant["cnpj"], CHAVE_MAPA, TTL_MAPA, lambda: _montar_mapa(tenant["api_token"], tenant["cnpj"]))
 
 
 async def do_funcionario(tenant: dict, id_funcionario: int) -> dict | None:
@@ -211,7 +211,7 @@ async def renovar_se_preciso(tenant: dict) -> None:
     if vence_em(cnpj, CHAVE_MAPA) > TTL_MAPA - RENOVAR_A_CADA:
         return
     try:
-        mapa = await _montar_mapa(tenant["api_token"])
+        mapa = await _montar_mapa(tenant["api_token"], cnpj)
     except MapaIncompleto:
         logger.warning("mapa de vendedores lido pela metade (empresa %s): o anterior continua valendo", cnpj)
         return

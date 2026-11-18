@@ -22,7 +22,7 @@ from datetime import timedelta
 from app.cache import cached
 from app.database import db_session
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar, i
+from app.sqlquery import EMPRESA_DE_MENOR_CODIGO, empresa, executar, i
 from vendas.db import agora_texto, carimbo_agora, texto_para_data
 
 logger = logging.getLogger(__name__)
@@ -46,14 +46,38 @@ def _marca(texto: str) -> str:
     return f"'{texto}'"
 
 
-async def _parametros(client: MeuERPClient) -> dict:
-    """Empresa, local de estoque padrão e tabela de preço padrão (os de menor código ativos)."""
+async def _parametros(client: MeuERPClient, cnpj: str | None = None) -> dict:
+    """Empresa (a do CNPJ do cliente), local de estoque padrão e tabela de preço padrão dessa empresa (os de menor código
+    ativos). Um banco do ERP pode ter mais de uma loja: sem filtrar pela empresa, a segunda loja veria a primeira.
+    Também devolve a escolha da regra antiga (menor código do banco inteiro), para saber se a troca muda algo."""
     linhas = await executar(client, f"""
-        select (select min(_idlocal) from local_estoque l where {_ATIVO.format(a='l')}) as local,
-               (select min(_idempresa) from mercadoria_variacao_empresa) as empresa,
-               (select min(_idtabela) from tabela_preco_empresa t where {_ATIVO.format(a='t')}) as tabela""", max_paginas=1)
+        select x.empresa, x.antiga,
+               coalesce((select min(_idlocal) from local_estoque l where l._idempresa = x.empresa and {_ATIVO.format(a='l')}),
+                        (select min(_idlocal) from local_estoque l where {_ATIVO.format(a='l')})) as local,
+               coalesce((select min(_idtabela) from tabela_preco_empresa t where t._idempresa = x.empresa and {_ATIVO.format(a='t')}),
+                        (select min(_idtabela) from tabela_preco_empresa t where {_ATIVO.format(a='t')})) as tabela,
+               (select min(_idlocal) from local_estoque l where {_ATIVO.format(a='l')}) as local_antigo,
+               (select min(_idtabela) from tabela_preco_empresa t where {_ATIVO.format(a='t')}) as tabela_antiga
+        from (select {empresa(cnpj)} as empresa, {EMPRESA_DE_MENOR_CODIGO} as antiga) x""", max_paginas=1)
     p = linhas[0] if linhas else {}
-    return {"empresa": int(p.get("empresa") or 1), "local": int(p.get("local") or 1), "tabela": int(p.get("tabela") or 1)}
+    par = {"empresa": int(p.get("empresa") or 1), "local": int(p.get("local") or 1), "tabela": int(p.get("tabela") or 1)}
+    antiga = f"{int(p.get('antiga') or 1)}|{int(p.get('local_antigo') or 1)}|{int(p.get('tabela_antiga') or 1)}"
+    return {**par, "assinatura": f"{par['empresa']}|{par['local']}|{par['tabela']}", "assinatura_antiga": antiga}
+
+
+def _conferir_parametros(cnpj: str, par: dict) -> bool:
+    """Se a empresa, o local ou a tabela escolhidos mudaram desde a última leitura (ou diferem da regra antiga, na primeira
+    vez), a próxima leitura de produtos e estoque é completa: o que era da escolha anterior sai dos celulares. Devolve se mudou."""
+    anterior = _controle(cnpj).get("parametros", {}).get("marca_erp") or par["assinatura_antiga"]
+    mudou = anterior != par["assinatura"]
+    if mudou:
+        for tabela in ("produtos", "estoque"):
+            _salvar_controle(cnpj, tabela, ultima_completa="")
+        logger.warning("catálogo %s: empresa/local/tabela mudou de %s para %s; leitura completa de produtos e estoque",
+                       cnpj, anterior, par["assinatura"])
+    if mudou or not _controle(cnpj).get("parametros"):
+        _salvar_controle(cnpj, "parametros", marca_erp=par["assinatura"])
+    return mudou
 
 
 # Só entra no catálogo do app o que dá para vender: produto ativo e com preço na tabela padrão. Na leitura completa o
@@ -217,7 +241,8 @@ _ultimo_forcado: dict[str, float] = {}
 async def _atualizar(tenant: dict, forcar: bool = False) -> None:
     cnpj = tenant["cnpj"]
     client = MeuERPClient(tenant["api_token"], segundo_plano=True)
-    par = await _parametros(client)
+    par = await _parametros(client, cnpj)
+    await asyncio.to_thread(_conferir_parametros, cnpj, par)
     construtores = {"produtos": _sql_produtos, "estoque": _sql_estoque, "clientes": _sql_clientes}
     controle = _controle(cnpj)
     for tabela in TABELAS:

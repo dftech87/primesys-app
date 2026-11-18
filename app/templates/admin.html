@@ -144,6 +144,8 @@
             <div class="app">
                 {% if aberto.conf_classe == 'bom' %}
                 <div><div class="t"><span class="ponto bom"></span>Token funcionando</div><div class="d">Conferido agora: o token é desta empresa</div></div>
+                {% elif aberto.conf_classe == 'aviso' %}
+                <div><div class="t"><span class="ponto bom"></span>Token funcionando</div><div class="d">Conferido agora: o token é desta empresa</div><div class="d ruim">{{ aberto.conf_texto }}</div></div>
                 {% else %}
                 <div><div class="t"><span class="ponto ruim"></span>Problema no token</div><div class="d ruim">{{ aberto.conf_texto }}</div></div>
                 {% endif %}

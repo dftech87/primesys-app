@@ -59,10 +59,10 @@ def _centavos(valor) -> float:
     return arredondado
 
 
-async def estado(client: MeuERPClient, id_variacao: int) -> tuple[list[dict], float | None]:
+async def estado(client: MeuERPClient, id_variacao: int, cnpj: str | None = None) -> tuple[list[dict], float | None]:
     """Tabelas de preço ativas e custo, lidos do ERP agora, numa chamada (SQL). Se a consulta falhar, vale o caminho antigo."""
     try:
-        return await ficha.estado_do_preco(client, id_variacao)
+        return await ficha.estado_do_preco(client, id_variacao, cnpj)
     except (ConsultaIndisponivel, ValueError):
         return await tabelas_ativas(client, id_variacao), await custo_atual(client, id_variacao)
 
@@ -111,7 +111,7 @@ def avaliar(atual: float, novo: float, custo, pode_ver_custo: bool, confirmo: bo
     return motivos
 
 
-async def _gravar(client: MeuERPClient, id_variacao: int, tabela: int, preco: float) -> dict:
+async def _gravar(client: MeuERPClient, id_variacao: int, tabela: int, preco: float, cnpj: str | None = None) -> dict:
     corpo = {"idMercadoriaVariacao": int(id_variacao), "idTabela": int(tabela), "preco": preco}
     try:
         resposta = await client.put("/api/mercadoria-tabela-preco/v1", json=corpo)
@@ -129,7 +129,7 @@ async def _gravar(client: MeuERPClient, id_variacao: int, tabela: int, preco: fl
     except httpx.HTTPError:
         # Sem resposta: pode ter gravado mesmo assim. Confere no ERP antes de dizer que falhou.
         try:
-            depois, _ = await estado(client, id_variacao)
+            depois, _ = await estado(client, id_variacao, cnpj)
             if any(t["codigo"] == int(tabela) and abs(t["preco"] - preco) < TOLERANCIA for t in depois):
                 logger.warning("o ERP demorou, mas o preço do produto %s foi gravado", id_variacao)
                 return {}
@@ -167,7 +167,7 @@ def _esquecer(cnpj: str, id_variacao: int) -> None:
 async def alterar(client: MeuERPClient, cnpj: str, email: str, nome: str, id_variacao: int, preco, preco_visto, tabela: int | None,
                   confirmo: bool, pode_ver_custo: bool) -> dict:
     novo = _centavos(preco)
-    tabelas, custo = await estado(client, id_variacao)
+    tabelas, custo = await estado(client, id_variacao, cnpj)
     escolhida = _escolher(tabelas, tabela)
     atual = escolhida["preco"]
     if preco_visto is not None and abs(float(preco_visto) - atual) > TOLERANCIA:
@@ -176,7 +176,7 @@ async def alterar(client: MeuERPClient, cnpj: str, email: str, nome: str, id_var
         raise PrecoRecusado("O novo preço é igual ao preço atual.")
     avaliar(atual, novo, custo, pode_ver_custo, confirmo)
 
-    resposta = await _gravar(client, id_variacao, escolhida["codigo"], novo)
+    resposta = await _gravar(client, id_variacao, escolhida["codigo"], novo, cnpj)
     try:
         anterior = float(resposta.get("precoAnterior", atual))
     except (TypeError, ValueError):
@@ -200,7 +200,7 @@ async def desfazer(client: MeuERPClient, cnpj: str, email: str, nome: str, id_va
     criada = datetime.strptime(linha["criado_em"], FORMATO_HORA).replace(tzinfo=timezone.utc)
     if _agora() - criada > JANELA_DESFAZER:
         raise PrecoRecusado("O prazo para desfazer (30 minutos) passou. Faça uma nova alteração de preço.", 409)
-    tabelas, _ = await estado(client, id_variacao)
+    tabelas, _ = await estado(client, id_variacao, cnpj)
     escolhida = next((t for t in tabelas if t["codigo"] == int(linha["tabela"])), None)
     if escolhida is None or abs(escolhida["preco"] - float(linha["preco_novo"])) > TOLERANCIA:
         raise PrecoRecusado("O preço mudou depois desta alteração, então não dá para desfazer automaticamente. Faça uma nova alteração.", 409)
@@ -214,7 +214,7 @@ async def desfazer(client: MeuERPClient, cnpj: str, email: str, nome: str, id_va
     if not reservado:
         raise PrecoRecusado("Esta alteração já foi desfeita.", 409)
     try:
-        await _gravar(client, id_variacao, int(linha["tabela"]), float(linha["preco_anterior"]))
+        await _gravar(client, id_variacao, int(linha["tabela"]), float(linha["preco_anterior"]), cnpj)
     except Exception:
         with db_session() as conn:
             conn.execute("UPDATE alteracoes_preco SET desfeita_em = NULL WHERE id = ? AND cnpj = ?", (id_alteracao, cnpj))

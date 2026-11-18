@@ -18,7 +18,7 @@ import httpx
 from app import desempenho
 from app.cache import cached, descartar, descartar_prefixo
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar, i
+from app.sqlquery import empresa, executar, i
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ _geracao: dict[str, int] = {}     # por empresa: sobe quando o /admin manda atua
 
 _SQL_USUARIOS_COM_PERFIL = """
     select _idusuario as id, max(idperfil) as perfil from usuario_perfil_empresa
-    where coalesce(idperfil, 0) > 0 and _idempresa = (select min(_idempresa) from mercadoria_variacao_empresa)
+    where coalesce(idperfil, 0) > 0 and _idempresa = {empresa}
     group by 1 order by 1"""
 
 # Por empresa: ids com perfil (e quando foram lidos) e o que já se sabe de cada id (e-mail, perfil, quando).
@@ -147,7 +147,7 @@ async def _perfil_do_email(tenant: dict, email: str) -> int | None:
         if perfil > 0 and dados["por_id"][conhecido]["email"] == email:
             return perfil
     if agora - dados["ids_em"] > REVER_IDS_A_CADA or not dados["ids"]:
-        linhas = await executar(client, _SQL_USUARIOS_COM_PERFIL, max_paginas=20)
+        linhas = await executar(client, _SQL_USUARIOS_COM_PERFIL.format(empresa=empresa(tenant["cnpj"])), max_paginas=20)
         dados["ids"] = [int(r["id"]) for r in linhas]
         dados["perfil_banco"] = {int(r["id"]): int(r["perfil"] or 0) for r in linhas}
         dados["ids_em"] = agora

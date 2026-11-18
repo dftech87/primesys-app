@@ -43,7 +43,7 @@ async def ler_balanca(request: Request, id_variacao: int):
     if recusa:
         return recusa
     try:
-        return await balanca.estado(MeuERPClient(tenant["api_token"]), id_variacao)
+        return await balanca.estado(MeuERPClient(tenant["api_token"]), id_variacao, tenant["cnpj"])
     except balanca.BalancaRecusada as erro:
         return JSONResponse({"detail": erro.detalhe, **erro.extra}, status_code=erro.status)
     except httpx.HTTPError as erro:

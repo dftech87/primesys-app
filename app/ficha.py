@@ -2,13 +2,12 @@
 
 O ERP deixa só 20 chamadas por minuto por cliente (12 para o Prime Info): a ficha por REST gastava 4 (cadastro, preço,
 custo, saldo) e abrir a folha de alterar preço mais 2. Aqui cada uma é uma consulta só. As regras são as mesmas do caminho
-antigo, que continua como reserva se a consulta falhar: preço = tabela ativa de menor código; empresa = a primeira do cadastro.
+antigo, que continua como reserva se a consulta falhar: preço = tabela ativa de menor código; empresa = a do CNPJ do cliente (sem achar, a primeira do cadastro).
 """
 
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar, i
+from app.sqlquery import empresa, executar, i
 
-_EMPRESA = "(select min(_idempresa) from mercadoria_variacao_empresa)"
 # O ERP grava 'T'/'F' em flaginativo (alguns cadastros antigos usam 'S'/'N').
 _PRECO_ATIVO = "coalesce(p.flaginativo, 'F') not in ('T', 'S')"
 
@@ -17,23 +16,24 @@ def _numero(valor) -> float | None:
     return None if valor is None else float(valor)
 
 
-async def ler(client: MeuERPClient, id_variacao: int, loja: int) -> dict | None:
+async def ler(client: MeuERPClient, id_variacao: int, loja: int, cnpj: str | None = None) -> dict | None:
     """Tudo da ficha numa chamada. None se o produto não existe (aí vale o caminho antigo, que responde 'não encontrado')."""
+    emp = empresa(cnpj)
     linhas = await executar(
         client,
         f"""select coalesce(nullif(trim(v.descricao), ''), m.descricao) as descricao, v.codigobarras, v.embalagem,
                    coalesce(ve.flaginativo, 'F') as inativo,
                    (select p.valpreco from mercadoria_tabela_preco p
-                     where p._idmercadoriavariacao = v._idmercadoriavariacao and p._idempresa = {_EMPRESA} and {_PRECO_ATIVO}
+                     where p._idmercadoriavariacao = v._idmercadoriavariacao and p._idempresa = {emp} and {_PRECO_ATIVO}
                      order by p._idtabela limit 1) as preco,
                    (select c.valcusto from mercadoria_custo c
-                     where c._idmercadoriavariacao = v._idmercadoriavariacao and c._idempresa = {_EMPRESA}) as custo,
+                     where c._idmercadoriavariacao = v._idmercadoriavariacao and c._idempresa = {emp}) as custo,
                    (select e.qtdsaldo from mercadoria_estoque e
-                     where e._idmercadoriavariacao = v._idmercadoriavariacao and e._idempresa = {_EMPRESA}
+                     where e._idmercadoriavariacao = v._idmercadoriavariacao and e._idempresa = {emp}
                        and e._idlocalestoque = {i(loja)}) as saldo
             from mercadoria_variacao v
             join mercadoria m on m._idmercadoria = v.idmercadoria
-            left join mercadoria_variacao_empresa ve on ve._idmercadoriavariacao = v._idmercadoriavariacao and ve._idempresa = {_EMPRESA}
+            left join mercadoria_variacao_empresa ve on ve._idmercadoriavariacao = v._idmercadoriavariacao and ve._idempresa = {emp}
             where v._idmercadoriavariacao = {i(id_variacao)}""",
         max_paginas=1,
     )
@@ -51,15 +51,16 @@ async def ler(client: MeuERPClient, id_variacao: int, loja: int) -> dict | None:
     }
 
 
-async def estado_do_preco(client: MeuERPClient, id_variacao: int) -> tuple[list[dict], float | None]:
+async def estado_do_preco(client: MeuERPClient, id_variacao: int, cnpj: str | None = None) -> tuple[list[dict], float | None]:
     """Tabelas de preço ativas (a primeira é a que a ficha mostra) e o custo, lidos agora, numa chamada só."""
+    emp = empresa(cnpj)
     linhas = await executar(
         client,
         f"""select p._idtabela as tabela, p.valpreco as preco, coalesce(p.flagvalidarvigencia, 'F') as vigencia,
                    (select c.valcusto from mercadoria_custo c
-                     where c._idmercadoriavariacao = p._idmercadoriavariacao and c._idempresa = {_EMPRESA}) as custo
+                     where c._idmercadoriavariacao = p._idmercadoriavariacao and c._idempresa = {emp}) as custo
             from mercadoria_tabela_preco p
-            where p._idmercadoriavariacao = {i(id_variacao)} and p._idempresa = {_EMPRESA} and {_PRECO_ATIVO}
+            where p._idmercadoriavariacao = {i(id_variacao)} and p._idempresa = {emp} and {_PRECO_ATIVO}
             order by p._idtabela""",
         max_paginas=1,
     )

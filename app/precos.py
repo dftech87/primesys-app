@@ -5,12 +5,12 @@ Uma única consulta SQL traz o preço de todos os produtos da lista (até 20), e
 """
 
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import executar, i
+from app.sqlquery import empresa, executar, i
 
 _ATIVO = "coalesce(p.flaginativo, 'F') not in ('T', 'S')"
 
 
-async def da_lista(client: MeuERPClient, ids: list[int]) -> dict[int, float]:
+async def da_lista(client: MeuERPClient, ids: list[int], cnpj: str | None = None) -> dict[int, float]:
     """{id da variação: preço de venda}. Produto sem preço (ou preço zero) fica de fora."""
     if not ids:
         return {}
@@ -19,7 +19,7 @@ async def da_lista(client: MeuERPClient, ids: list[int]) -> dict[int, float]:
         f"""select distinct on (p._idmercadoriavariacao) p._idmercadoriavariacao as id, p.valpreco as preco
             from mercadoria_tabela_preco p
             where p._idmercadoriavariacao in ({', '.join(i(x) for x in ids)})
-              and p._idempresa = (select min(_idempresa) from mercadoria_variacao_empresa)
+              and p._idempresa = {empresa(cnpj)}
               and {_ATIVO}
             order by p._idmercadoriavariacao, p._idtabela""",
         max_paginas=1,

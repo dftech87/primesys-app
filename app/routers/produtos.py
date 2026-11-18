@@ -158,7 +158,7 @@ async def _precos_da_lista(client: MeuERPClient, cnpj: str, ids: list[int]) -> d
     """Preços da lista, sem nunca travar nem derrubar a busca: ERP lento ou com erro = lista sem preço. Se passar do
     tempo, a consulta continua em segundo plano e fica guardada (a próxima busca já sai com o preço)."""
     async def buscar() -> dict[int, float]:
-        tabela = await precos.da_lista(client, ids)
+        tabela = await precos.da_lista(client, ids, cnpj)
         for id_variacao, valor in tabela.items():   # o mesmo preço que a ficha mostraria (tabela ativa de menor código)
             guardar((cnpj, "preco", id_variacao), TTL_CUSTO_PRECO, valor)
         return tabela
@@ -185,7 +185,7 @@ async def api_detalhe(request: Request, id_variacao: int, loja: int = Query(...)
     client = MeuERPClient(tenant["api_token"])
     cnpj = tenant["cnpj"]
     try:
-        dados = await cached((cnpj, "ficha", id_variacao, loja), TTL_FICHA, lambda: ficha.ler(client, id_variacao, loja), guardar_se=_nao_nulo)
+        dados = await cached((cnpj, "ficha", id_variacao, loja), TTL_FICHA, lambda: ficha.ler(client, id_variacao, loja, cnpj), guardar_se=_nao_nulo)
     except (ConsultaIndisponivel, ValueError):
         dados = None
     if dados is not None:

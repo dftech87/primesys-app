@@ -67,7 +67,7 @@ async def dados_da_edicao(request: Request, id_variacao: int):
     client = MeuERPClient(tenant["api_token"])
     ver_custo = acessos.pode(request, "custo")
     try:
-        tabelas, custo = await preco_venda.estado(client, id_variacao)   # preço e custo lidos agora, numa chamada só
+        tabelas, custo = await preco_venda.estado(client, id_variacao, tenant["cnpj"])   # preço e custo lidos agora, numa chamada só
         if not ver_custo:
             custo = None   # o custo só vai para quem o perfil deixa ver
     except httpx.HTTPError as erro:

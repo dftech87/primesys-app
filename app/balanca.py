@@ -16,7 +16,7 @@ import httpx
 
 from app.database import db_session
 from app.meuerp_client import MeuERPClient
-from app.sqlquery import ConsultaIndisponivel, executar, i
+from app.sqlquery import ConsultaIndisponivel, empresa, executar, i
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ _SQL_ESTADO = """
            upper(trim(coalesce(v.embalagem, ''))) as unidade
     from mercadoria_variacao v
     left join mercadoria_variacao_empresa ve on ve._idmercadoriavariacao = v._idmercadoriavariacao
-         and ve._idempresa = (select min(_idempresa) from mercadoria_variacao_empresa)
+         and ve._idempresa = {empresa}
     where v._idmercadoriavariacao = {id}"""
 
 
@@ -50,10 +50,10 @@ def _sim(valor) -> bool:
     return str(valor or "").strip().upper() in ("T", "S")
 
 
-async def estado(client: MeuERPClient, id_variacao: int) -> dict:
+async def estado(client: MeuERPClient, id_variacao: int, cnpj: str | None = None) -> dict:
     """Exportar, Solicitar e unidade do produto, lidos do ERP agora (uma consulta)."""
     try:
-        linhas = await executar(client, _SQL_ESTADO.format(id=i(id_variacao)), max_paginas=1)
+        linhas = await executar(client, _SQL_ESTADO.format(id=i(id_variacao), empresa=empresa(cnpj)), max_paginas=1)
     except (ConsultaIndisponivel, ValueError) as erro:
         raise BalancaRecusada("Não foi possível ler a balança do produto agora. Tente de novo em instantes.", 502) from erro
     if not linhas:
@@ -77,7 +77,7 @@ def _campos(antes: dict, novo: dict) -> dict:
             for chave, valor in (("exportarBalanca", "exportar"), ("solicitarBalanca", "solicitar")) if novo[valor] != antes[valor]}
 
 
-async def _gravar(client: MeuERPClient, id_variacao: int, campos: dict, esperado: dict) -> None:
+async def _gravar(client: MeuERPClient, id_variacao: int, campos: dict, esperado: dict, cnpj: str | None = None) -> None:
     try:
         resposta = await client.put(f"/api/mercadoria/v1/{int(id_variacao)}", json=campos)
     except httpx.HTTPStatusError as erro:
@@ -94,7 +94,7 @@ async def _gravar(client: MeuERPClient, id_variacao: int, campos: dict, esperado
     except httpx.HTTPError:
         # Sem resposta: pode ter gravado mesmo assim. Confere no ERP antes de dizer que falhou.
         try:
-            if await estado(client, id_variacao) == esperado:
+            if await estado(client, id_variacao, cnpj) == esperado:
                 logger.warning("o ERP demorou, mas a balança do produto %s foi gravada", id_variacao)
                 return
         except (httpx.HTTPError, BalancaRecusada):
@@ -123,7 +123,7 @@ def _registrar(cnpj: str, email: str, nome: str, id_variacao: int, tipo: str, an
 
 async def alterar(client: MeuERPClient, cnpj: str, email: str, nome: str, id_variacao: int, exportar: bool, solicitar: bool,
                   confirmo: bool) -> dict:
-    antes = await estado(client, id_variacao)
+    antes = await estado(client, id_variacao, cnpj)
     novo = {"exportar": bool(exportar), "solicitar": bool(solicitar)}
     campos = _campos(antes, novo)
     if not campos:
@@ -133,8 +133,8 @@ async def alterar(client: MeuERPClient, cnpj: str, email: str, nome: str, id_var
         raise BalancaRecusada("Confirme marcando a caixinha para salvar.", 409, confirmar=motivos)
 
     esperado = {**novo, "unidade": antes["unidade"]}
-    await _gravar(client, id_variacao, campos, esperado)
-    depois = await estado(client, id_variacao)
+    await _gravar(client, id_variacao, campos, esperado, cnpj)
+    depois = await estado(client, id_variacao, cnpj)
     if depois != esperado:
         logger.error("balança do produto %s não confere depois de gravar: esperado %s, lido %s", id_variacao, esperado, depois)
         raise BalancaRecusada("O ERP respondeu, mas a balança não ficou como pedido. Reabra a ficha e confira no ERP.", 502)
@@ -158,7 +158,7 @@ async def desfazer(client: MeuERPClient, cnpj: str, email: str, nome: str, id_va
         raise BalancaRecusada("O prazo para desfazer (30 minutos) passou. Faça uma nova alteração.", 409)
     deixou = {"exportar": bool(linha["exportar_novo"]), "solicitar": bool(linha["solicitar_novo"])}
     voltar = {"exportar": bool(linha["exportar_antes"]), "solicitar": bool(linha["solicitar_antes"])}
-    atual = await estado(client, id_variacao)
+    atual = await estado(client, id_variacao, cnpj)
     if {"exportar": atual["exportar"], "solicitar": atual["solicitar"]} != deixou:
         raise BalancaRecusada("A balança mudou depois desta alteração, então não dá para desfazer automaticamente. Faça uma nova alteração.", 409)
 
@@ -169,8 +169,8 @@ async def desfazer(client: MeuERPClient, cnpj: str, email: str, nome: str, id_va
     if not reservado:
         raise BalancaRecusada("Esta alteração já foi desfeita.", 409)
     try:
-        await _gravar(client, id_variacao, _campos(deixou, voltar), {**voltar, "unidade": atual["unidade"]})
-        depois = await estado(client, id_variacao)
+        await _gravar(client, id_variacao, _campos(deixou, voltar), {**voltar, "unidade": atual["unidade"]}, cnpj)
+        depois = await estado(client, id_variacao, cnpj)
         if {"exportar": depois["exportar"], "solicitar": depois["solicitar"]} != voltar:
             raise BalancaRecusada("O ERP respondeu, mas a balança não voltou como pedido. Reabra a ficha e confira no ERP.", 502)
     except Exception:
