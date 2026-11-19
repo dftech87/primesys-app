@@ -490,7 +490,19 @@
         .cxv-rotulos { display: flex; gap: 6px; margin-top: 4px; }
         .cxv-rotulos div { flex: 1; text-align: center; font-size: 10px; color: var(--texto-3); }
         .cxv-legenda { display: flex; gap: 14px; font-size: 12px; color: var(--texto-2); margin-top: 8px; }
-        .cxv-forn small { color: var(--texto-3); }
+        .cxv-forn-item { padding: 9px 0; border-bottom: 1px solid var(--linha); }
+        .cxv-forn-item:last-child { border-bottom: 0; }
+        .cxv-forn-topo { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+        .cxv-forn-topo b { white-space: nowrap; color: var(--texto); }
+        .cxv-forn-pos { width: 22px; height: 22px; border-radius: 50%; background: var(--aviso-fundo); color: var(--aviso-texto); font-size: 11px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+        .cxv-forn-nome { flex: 1; min-width: 0; font-weight: 600; color: var(--texto-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cxv-forn-baixo { display: flex; align-items: center; gap: 8px; margin: 5px 0 0 32px; font-size: 11px; color: var(--texto-3); white-space: nowrap; }
+        .cxv-forn-trilho { flex: 1; height: 6px; border-radius: 999px; background: var(--trilho); overflow: hidden; }
+        .cxv-forn-trilho span { display: block; height: 100%; border-radius: 999px; background: #f59e0b; }
+        .cxv-forn-item.outros .cxv-forn-pos { background: var(--trilho); color: var(--texto-2); }
+        .cxv-forn-item.outros .cxv-forn-nome { font-weight: 500; color: var(--texto-2); }
+        .cxv-forn-item.outros .cxv-forn-trilho span { background: var(--texto-3); }
         .cxv-pct-ano { font-size: 13px; color: var(--texto-2); }
         .cxv-tab { font-size: 13px; }
         .cxv-tab-linha { display: grid; grid-template-columns: 52px 1fr 1fr 58px; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--linha); align-items: baseline; }
@@ -1669,9 +1681,17 @@
             const blocoMeses = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>MÊS A MÊS</span><span>${ano.ano}</span></div>
                 <div class="cxv-tab"><div class="cxv-tab-linha cab"><span>Mês</span><span>Vendas fiscais</span><span>Compras</span><span>%</span></div>${linhasMes}</div></div>`;
 
-            let linhasForn = r.fornecedores.map((f) => `<div class="linha-info cxv-forn"><span class="desc">${esc(f.nome)} <small>· ${f.notas} ${f.notas === 1 ? 'nota' : 'notas'}</small></span><span class="val">${fmtMoney(f.total)}</span></div>`).join('');
-            if (r.outros) linhasForn += `<div class="linha-info"><span class="desc">Outros ${r.outros.qtd} fornecedores</span><span class="val">${fmtMoney(r.outros.total)}</span></div>`;
-            const blocoForn = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>MAIORES FORNECEDORES</span><span>no período</span></div>
+            // Maiores fornecedores em ranking: posição, nome, valor e uma barra com o peso de cada um nas compras do período.
+            const itemForn = (pos, nome, total, notas, outros) => {
+                const peso = r.compras > 0 ? total / r.compras * 100 : 0;
+                return `<div class="cxv-forn-item${outros ? ' outros' : ''}"><div class="cxv-forn-topo"><span class="cxv-forn-pos">${pos}</span>
+                    <span class="cxv-forn-nome">${nome}</span><b>${reais(total)}</b></div>
+                    <div class="cxv-forn-baixo"><div class="cxv-forn-trilho"><span style="width:${Math.min(100, peso)}%"></span></div>
+                    <span>${Math.round(peso)}% · ${notas} ${notas === 1 ? 'nota' : 'notas'}</span></div></div>`;
+            };
+            let linhasForn = r.fornecedores.map((f, i) => itemForn(i + 1, esc(f.nome), f.total, f.notas, false)).join('');
+            if (r.outros) linhasForn += itemForn('+', `Outros ${r.outros.qtd} fornecedores`, r.outros.total, r.outros.notas ?? 0, true);
+            const blocoForn = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>MAIORES FORNECEDORES</span><span>${r.compras > 0 ? reais(r.compras) + ' no período' : 'no período'}</span></div>
                 ${linhasForn || '<div class="nota">Nenhuma compra no período.</div>'}</div>`;
 
             const subVendas = `${nVendas} ${r.notasVenda === 1 ? 'nota' : 'notas'} · NFC-e + NF-e`;

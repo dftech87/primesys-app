@@ -166,7 +166,7 @@ def montar(serie: dict, totais: dict, lista_fornecedores: list[dict], inicio: da
                 "pct": _pct(compras_ano, vendas_ano)},
         "meses": meses,
         "fornecedores": topo,
-        "outros": {"qtd": len(resto), "total": round(sum(f["total"] for f in resto), 2)} if resto else None,
+        "outros": {"qtd": len(resto), "total": round(sum(f["total"] for f in resto), 2), "notas": sum(f["notas"] for f in resto)} if resto else None,
     }
 
 
