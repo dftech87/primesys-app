@@ -145,8 +145,13 @@ def montar(serie: dict, totais: dict, lista_fornecedores: list[dict], inicio: da
     if serie["ano"] == hoje.year:
         ate_mes = min(ate_mes, hoje.month)   # meses que ainda não chegaram não aparecem
     meses = [m for m in serie["meses"] if m["mes"] <= ate_mes]
-    vendas_ano = round(sum(m["vendas"] for m in meses), 2)
-    compras_ano = round(sum(m["compras"] for m in meses), 2)
+    # O acumulado começa no 1º mês com venda fiscal no ERP: antes disso a loja vendia em outro sistema e só as compras
+    # (emitidas antes, lançadas depois) estão no ERP — somá-las sem as vendas distorce o percentual (cliente 36596421000174:
+    # 33 compras de outubro sem venda nenhuma no ERP davam ~228% no ano).
+    desde_mes = next((m["mes"] for m in meses if m["vendas"] > 0), None)
+    no_ano = [m for m in meses if desde_mes is not None and m["mes"] >= desde_mes]
+    vendas_ano = round(sum(m["vendas"] for m in no_ano), 2)
+    compras_ano = round(sum(m["compras"] for m in no_ano), 2)
     topo = lista_fornecedores[:FORNECEDORES_NA_LISTA]
     resto = lista_fornecedores[FORNECEDORES_NA_LISTA:]
     return {
@@ -156,7 +161,8 @@ def montar(serie: dict, totais: dict, lista_fornecedores: list[dict], inicio: da
         "vendas": totais["vendas"], "notasVenda": totais["notasVenda"],
         "compras": totais["compras"], "notasCompra": totais["notasCompra"],
         "pct": _pct(totais["compras"], totais["vendas"]),
-        "ano": {"ano": serie["ano"], "ateMes": ate_mes, "vendas": vendas_ano, "compras": compras_ano, "pct": _pct(compras_ano, vendas_ano)},
+        "ano": {"ano": serie["ano"], "desdeMes": desde_mes, "ateMes": ate_mes, "vendas": vendas_ano, "compras": compras_ano,
+                "pct": _pct(compras_ano, vendas_ano)},
         "meses": meses,
         "fornecedores": topo,
         "outros": {"qtd": len(resto), "total": round(sum(f["total"] for f in resto), 2)} if resto else None,

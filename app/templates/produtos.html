@@ -491,6 +491,8 @@
         .cxv-rotulos div { flex: 1; text-align: center; font-size: 10px; color: var(--texto-3); }
         .cxv-legenda { display: flex; gap: 14px; font-size: 12px; color: var(--texto-2); margin-top: 8px; }
         .cxv-forn small { color: var(--texto-3); }
+        .cxv-pct-ano { font-size: 13px; color: var(--texto-2); }
+        .cxv-barra .sub:empty { display: none; }
 
         #lista, #comprasLista { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
         .card {
@@ -1635,26 +1637,27 @@
             if (r.pct == null) {
                 selo = '<div class="cxv-selo info"><div><b>Sem venda fiscal no período.</b></div></div>';
             } else {
-                const extra = classe === 'verde' ? '' : ' Converse com o contador.';
-                selo = `<div class="cxv-selo ${classe}"><div><b>Compras = ${fmtPct(r.pct)}% das vendas fiscais.</b>${extra}</div></div>`;
+                selo = `<div class="cxv-selo ${classe}"><div><b>Compras = ${fmtPct(r.pct)}% das vendas fiscais.</b></div></div>`;
             }
 
+            // Acumulado: desde o 1º mês com venda fiscal no ERP (o servidor decide). Barras neutras; só o % leva a cor.
             const ano = r.ano;
-            const classeAno = cxvClasse(ano.pct, lim);
-            const escala = Math.max(lim.vermelho * 1.25, ano.pct || 0);
-            const larguraAno = ano.pct == null ? 0 : Math.min(100, ano.pct / escala * 100);
-            const marca = lim.vermelho / escala * 100;
-            const corAno = { verde: 'var(--ok)', amarelo: 'var(--aviso)', vermelho: 'var(--erro)', info: 'var(--texto-3)' }[classeAno];
-            const pctAno = ano.pct == null ? '—' : `${fmtPct(ano.pct)}%`;
-            const blocoAno = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>ACUMULADO DO ANO</span><span>jan – ${CXV_MES[ano.ateMes - 1]}/${ano.ano}</span></div>
-                <div class="cxv-barra"><div class="topo"><span>Compras / vendas fiscais</span><b>${pctAno}</b></div>
-                <div class="trilho"><span style="width:${larguraAno}%;background:${corAno}"></span><i style="left:${marca}%"></i></div>
-                <div class="sub">Vendas ${fmtMoney(ano.vendas)} · Compras ${fmtMoney(ano.compras)}</div></div></div>`;
+            const corPct = { verde: 'var(--ok-texto)', amarelo: 'var(--aviso-texto)', vermelho: 'var(--erro-texto)', info: 'var(--texto-2)' }[cxvClasse(ano.pct, lim)];
+            const faixaAno = ano.desdeMes ? `${CXV_MES[ano.desdeMes - 1]} – ${CXV_MES[ano.ateMes - 1]}/${ano.ano}` : `${ano.ano}`;
+            const maiorAno = Math.max(ano.vendas, ano.compras);
+            const corpoAno = ano.desdeMes
+                ? `${cxvBarra('Vendas fiscais', CXV_COR.vendas, ano.vendas, maiorAno, '')}${cxvBarra('Compras', CXV_COR.compras, ano.compras, maiorAno, '')}
+                    <div class="cxv-pct-ano">Compras = <b style="color:${corPct}">${fmtPct(ano.pct)}%</b> das vendas fiscais</div>`
+                : '<div class="nota">Sem venda fiscal no ano.</div>';
+            const repetePeriodo = ano.vendas === r.vendas && ano.compras === r.compras;   // ex.: loja que começou a vender no ERP este mês
+            const blocoAno = repetePeriodo ? '' : `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>ACUMULADO DO ANO</span><span>${faixaAno}</span></div>${corpoAno}</div>`;
 
-            const topoMes = Math.max(1, ...r.meses.map((m) => Math.max(m.vendas, m.compras)));
-            const colunas = r.meses.map((m) => `<div class="cxv-mes" title="${CXV_MES[m.mes - 1]}: vendas ${fmtMoney(m.vendas)} · compras ${fmtMoney(m.compras)}">
+            const primeiro = r.meses.findIndex((m) => m.vendas > 0 || m.compras > 0);
+            const mesesVis = primeiro > 0 ? r.meses.slice(primeiro) : r.meses;   // sem os meses vazios do começo do ano
+            const topoMes = Math.max(1, ...mesesVis.map((m) => Math.max(m.vendas, m.compras)));
+            const colunas = mesesVis.map((m) => `<div class="cxv-mes" title="${CXV_MES[m.mes - 1]}: vendas ${fmtMoney(m.vendas)} · compras ${fmtMoney(m.compras)}">
                 <span style="height:${m.vendas / topoMes * 100}%;background:${CXV_COR.vendas}"></span><span style="height:${m.compras / topoMes * 100}%;background:${CXV_COR.compras}"></span></div>`).join('');
-            const rotulos = r.meses.map((m) => `<div>${CXV_MES[m.mes - 1]}</div>`).join('');
+            const rotulos = mesesVis.map((m) => `<div>${CXV_MES[m.mes - 1]}</div>`).join('');
             const blocoMeses = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>MÊS A MÊS</span><span>${ano.ano}</span></div>
                 <div class="cxv-meses">${colunas}</div><div class="cxv-rotulos">${rotulos}</div>
                 <div class="cxv-legenda"><span><span class="cxv-cor" style="background:${CXV_COR.vendas}"></span>Vendas fiscais</span><span><span class="cxv-cor" style="background:${CXV_COR.compras}"></span>Compras</span></div></div>`;
