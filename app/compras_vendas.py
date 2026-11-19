@@ -2,10 +2,11 @@
 
 O que conta (pedido do dono, validado no cliente 36596421000174 em 19/11/2026):
   - Vendas fiscais: NFC-e (65) e NF-e (55) de SAÍDA com status 'E' (emitido). Pré-venda (PV) NÃO entra: é o que a SEFAZ enxerga.
-  - Compras: NF-e de ENTRADA (55) e nota modelo 1A com status 'E', pela DATA DE EMISSÃO da nota, nunca pela de entrada
-    (NF-e emitida em setembro e lançada em novembro conta em setembro). A emissão está em documento_eletronico.datahora
-    (bate com o ano/mês da chave em 63 de 63 notas; documento.datahora é a data de lançamento). Nota 1A é de papel, sem
-    nota eletrônica: fica a data do documento. Acertos de estoque (AC, AS, AE), IM e SF não são compras.
+  - Compras: só NF-e de ENTRADA (55) com status 'E' — o que a SEFAZ enxerga —, pela DATA DE EMISSÃO da nota, nunca pela
+    de entrada (NF-e emitida em setembro e lançada em novembro conta em setembro). A emissão está em
+    documento_eletronico.datahora (bate com o ano/mês da chave em 63 de 63 notas; documento.datahora é a data de lançamento).
+    Nota modelo 1A (papel, sem chave, lançada como DIVERSO/CONSUMIDOR FINAL) NÃO entra (decisão do dono, 19/11/2026).
+    Acertos de estoque (AC, AS, AE), IM e SF também não.
   - Valor: getvaltotal() do documento (o mesmo do Dashboard). A emissão é sempre anterior ou igual à entrada, então
     `d.datahora >= início` também vale para as compras e deixa o banco usar o índice de data.
 Só as notas JÁ LANÇADAS no ERP: o manifesto (notas destinadas ao CNPJ) não está no banco nem na API do Meu ERP.
@@ -17,7 +18,7 @@ from app.meuerp_client import MeuERPClient
 from app.sqlquery import d, empresa, executar
 
 _VENDA_FISCAL = "d.modelo in ('55', '65') and d.tipomovimento = 'S' and d.status = 'E'"
-_COMPRA = "d.modelo in ('55', '1A') and d.tipomovimento = 'E' and d.status = 'E'"
+_COMPRA = "d.modelo = '55' and d.tipomovimento = 'E' and d.status = 'E'"
 _EMISSAO_COMPRA = "coalesce(e.datahora, d.datahora)"
 
 # Regime (CRT da empresa no ERP): 1 Simples, 2 Simples com excesso de sublimite, 4 MEI; 3 Regime Normal.

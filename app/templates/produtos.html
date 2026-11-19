@@ -492,6 +492,11 @@
         .cxv-legenda { display: flex; gap: 14px; font-size: 12px; color: var(--texto-2); margin-top: 8px; }
         .cxv-forn small { color: var(--texto-3); }
         .cxv-pct-ano { font-size: 13px; color: var(--texto-2); }
+        .cxv-tab { font-size: 13px; }
+        .cxv-tab-linha { display: grid; grid-template-columns: 52px 1fr 1fr 58px; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--linha); align-items: baseline; }
+        .cxv-tab-linha:last-child { border-bottom: 0; }
+        .cxv-tab-linha span:not(:first-child), .cxv-tab-linha b { text-align: right; white-space: nowrap; }
+        .cxv-tab-linha.cab { font-size: 11px; color: var(--texto-3); padding-top: 0; }
         .cxv-barra .sub:empty { display: none; }
 
         #lista, #comprasLista { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -1654,13 +1659,15 @@
 
             const primeiro = r.meses.findIndex((m) => m.vendas > 0 || m.compras > 0);
             const mesesVis = primeiro > 0 ? r.meses.slice(primeiro) : r.meses;   // sem os meses vazios do começo do ano
-            const topoMes = Math.max(1, ...mesesVis.map((m) => Math.max(m.vendas, m.compras)));
-            const colunas = mesesVis.map((m) => `<div class="cxv-mes" title="${CXV_MES[m.mes - 1]}: vendas ${fmtMoney(m.vendas)} · compras ${fmtMoney(m.compras)}">
-                <span style="height:${m.vendas / topoMes * 100}%;background:${CXV_COR.vendas}"></span><span style="height:${m.compras / topoMes * 100}%;background:${CXV_COR.compras}"></span></div>`).join('');
-            const rotulos = mesesVis.map((m) => `<div>${CXV_MES[m.mes - 1]}</div>`).join('');
+            const reais = (v) => v > 0 ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }) : '—';
+            const corDoPct = (pct) => ({ verde: 'var(--ok-texto)', amarelo: 'var(--aviso-texto)', vermelho: 'var(--erro-texto)', info: 'var(--texto-3)' })[cxvClasse(pct, lim)];
+            const linhasMes = mesesVis.slice().reverse().map((m) => {
+                const pct = m.vendas > 0 ? m.compras / m.vendas * 100 : null;
+                return `<div class="cxv-tab-linha"><span>${CXV_MES[m.mes - 1]}/${String(ano.ano).slice(2)}</span><span>${reais(m.vendas)}</span><span>${reais(m.compras)}</span>
+                    <b style="color:${corDoPct(pct)}">${pct == null ? '—' : fmtPct(pct) + '%'}</b></div>`;
+            }).join('');
             const blocoMeses = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>MÊS A MÊS</span><span>${ano.ano}</span></div>
-                <div class="cxv-meses">${colunas}</div><div class="cxv-rotulos">${rotulos}</div>
-                <div class="cxv-legenda"><span><span class="cxv-cor" style="background:${CXV_COR.vendas}"></span>Vendas fiscais</span><span><span class="cxv-cor" style="background:${CXV_COR.compras}"></span>Compras</span></div></div>`;
+                <div class="cxv-tab"><div class="cxv-tab-linha cab"><span>Mês</span><span>Vendas fiscais</span><span>Compras</span><span>%</span></div>${linhasMes}</div></div>`;
 
             let linhasForn = r.fornecedores.map((f) => `<div class="linha-info cxv-forn"><span class="desc">${esc(f.nome)} <small>· ${f.notas} ${f.notas === 1 ? 'nota' : 'notas'}</small></span><span class="val">${fmtMoney(f.total)}</span></div>`).join('');
             if (r.outros) linhasForn += `<div class="linha-info"><span class="desc">Outros ${r.outros.qtd} fornecedores</span><span class="val">${fmtMoney(r.outros.total)}</span></div>`;
