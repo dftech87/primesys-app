@@ -1,12 +1,14 @@
 import asyncio
+from datetime import date
 
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import acessos, compras, ficha, preco_venda, precos, versao
+from app import acessos, compras, compras_vendas, ficha, preco_venda, precos, versao
 from app.cache import cached, guardar
+from app.datas import hoje_loja
 from app.deps import current_tenant, revalidar_acessos, sem_permissao
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import ConsultaIndisponivel
@@ -275,6 +277,50 @@ async def api_entradas(request: Request, id_variacao: int, limite: int = Query(1
     except ConsultaIndisponivel:
         return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
     return {"entradas": itens, "limite": limite, "precoVenda": preco or 0}
+
+
+TTL_COMPRAS_VENDAS = 3600   # compras x vendas fiscais: visão de mês/ano, 1 hora basta (o ERP limita 20 chamadas/min)
+
+
+@router.get("/api/compras/resumo")
+async def api_compras_resumo(request: Request, inicio: str | None = Query(None), fim: str | None = Query(None)):
+    """Compras (pela data de emissão) x vendas fiscais (NFC-e + NF-e) do período, acumulado do ano, mês a mês e fornecedores.
+    Mesma permissão da aba Compras. Ao abrir: 2 consultas (série do ano e fornecedores); período fora de meses inteiros: +1."""
+    tenant = current_tenant(request)
+    if tenant is None:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    if not acessos.pode(request, "compras"):
+        return sem_permissao()
+
+    hoje = hoje_loja()
+    try:
+        data_inicio = date.fromisoformat(inicio) if inicio else hoje.replace(day=1)
+        data_fim = date.fromisoformat(fim) if fim else hoje
+    except ValueError:
+        return JSONResponse({"detail": "Data inválida."}, status_code=400)
+    data_fim = min(data_fim, hoje)
+    erro = compras_vendas.validar_periodo(data_inicio, data_fim)
+    if erro:
+        return JSONResponse({"detail": erro}, status_code=400)
+
+    client = MeuERPClient(tenant["api_token"])
+    cnpj = tenant["cnpj"]
+    try:
+        serie, lista = await asyncio.gather(
+            cached((cnpj, "compras-vendas-ano", data_fim.year), TTL_COMPRAS_VENDAS,
+                   lambda: compras_vendas.serie_do_ano(client, data_fim.year, cnpj)),
+            cached((cnpj, "compras-fornecedores", data_inicio, data_fim), TTL_COMPRAS_VENDAS,
+                   lambda: compras_vendas.fornecedores(client, data_inicio, data_fim)),
+        )
+        totais = compras_vendas.periodo_pela_serie(serie, data_inicio, data_fim, hoje)
+        if totais is None:
+            totais = await cached((cnpj, "compras-vendas-periodo", data_inicio, data_fim), TTL_COMPRAS_VENDAS,
+                                  lambda: compras_vendas.periodo(client, data_inicio, data_fim))
+    except ConsultaIndisponivel:
+        return JSONResponse({"detail": "Consulta indisponível no momento."}, status_code=502)
+    except httpx.HTTPError as erro_http:
+        return _erro_erp(erro_http)
+    return compras_vendas.montar(serie, totais, lista, data_inicio, data_fim, hoje)
 
 
 @router.get("/api/produtos/{id_variacao}/historico-preco")

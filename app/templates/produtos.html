@@ -465,6 +465,32 @@
         #vazio, #comprasVazio { padding: 60px 32px; text-align: center; color: var(--texto-2); }
         #vazio .emoji, #comprasVazio .emoji { font-size: 48px; margin-bottom: 16px; }
         #vazio .aviso, #comprasVazio .aviso { color: var(--azul-texto); font-size: 13px; margin-top: 10px; }
+        /* Compras x vendas fiscais (aba Compras) */
+        #comprasVazio { padding: 16px; text-align: left; }
+        .cxv-dica { text-align: center; font-size: 12px; color: var(--texto-2); padding: 4px 16px 24px; }
+        .cxv-barra { margin-bottom: 12px; }
+        .cxv-barra .topo { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; margin-bottom: 4px; color: var(--texto-1); }
+        .cxv-barra .topo b { color: var(--texto); white-space: nowrap; }
+        .cxv-barra .trilho { position: relative; height: 12px; border-radius: 999px; background: var(--trilho); }
+        .cxv-barra .trilho span { display: block; height: 100%; border-radius: 999px; }
+        .cxv-barra .trilho i { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--erro); }
+        .cxv-barra .sub { font-size: 11px; color: var(--texto-3); margin-top: 3px; }
+        .cxv-cor { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+        .cxv-selo { display: flex; gap: 10px; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.35; margin-top: 4px; }
+        .cxv-selo.verde { background: var(--ok-fundo); color: var(--ok-texto); }
+        .cxv-selo.amarelo { background: var(--aviso-fundo); color: var(--aviso-texto); }
+        .cxv-selo.vermelho { background: var(--erro-fundo); color: var(--erro-texto); }
+        .cxv-selo.info { background: var(--azul-fundo); color: var(--azul-texto); }
+        .cxv-bloco { border-top: 1px solid var(--linha); margin-top: 14px; padding-top: 12px; }
+        .cxv-bloco-tit { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--texto-2); margin-bottom: 8px; }
+        .cxv-bloco-tit span:last-child { font-weight: 500; color: var(--texto-3); }
+        .cxv-meses { display: flex; align-items: flex-end; gap: 6px; height: 110px; border-bottom: 1px solid var(--borda); }
+        .cxv-mes { flex: 1; display: flex; gap: 2px; align-items: flex-end; height: 100%; }
+        .cxv-mes span { flex: 1; border-radius: 3px 3px 0 0; min-height: 1px; }
+        .cxv-rotulos { display: flex; gap: 6px; margin-top: 4px; }
+        .cxv-rotulos div { flex: 1; text-align: center; font-size: 10px; color: var(--texto-3); }
+        .cxv-legenda { display: flex; gap: 14px; font-size: 12px; color: var(--texto-2); margin-top: 8px; }
+        .cxv-forn small { color: var(--texto-3); }
 
         #lista, #comprasLista { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
         .card {
@@ -581,9 +607,20 @@
 
             <div id="comprasView">
                 <div id="comprasVazio">
-                    <div class="emoji">🛒</div>
-                    <div>Pesquise um produto para ver as últimas notas fiscais de entrada: fornecedor, quantidade, custo e margem.</div>
-                    <div class="aviso">A primeira linha é a última entrada, que define o custo atual.</div>
+                    <!-- Compras x vendas fiscais: aparece enquanto não há produto pesquisado -->
+                    <div class="dash-atalhos" id="cxvAtalhos">
+                        <button type="button" data-periodo="mes" class="on">Este mês</button>
+                        <button type="button" data-periodo="mes_passado">Mês passado</button>
+                        <button type="button" data-periodo="ano">Este ano</button>
+                        <button type="button" data-periodo="outro" class="cal" aria-label="Escolher as datas">&#128197;</button>
+                    </div>
+                    <div class="dash-filtro" id="cxvFiltroDatas" hidden>
+                        <div><label for="cxvDe">De</label><input id="cxvDe" type="date" /></div>
+                        <div><label for="cxvAte">Até</label><input id="cxvAte" type="date" /></div>
+                        <button id="cxvFiltrar">Filtrar</button>
+                    </div>
+                    <div id="cxvPainel"></div>
+                    <div class="cxv-dica">🛒 Pesquise um produto acima para ver as últimas notas de entrada dele: fornecedor, quantidade, custo e margem.</div>
                 </div>
                 <div id="comprasLista" style="display:none;"></div>
                 <div id="comprasDetalhe" style="display:none;"></div>
@@ -1553,6 +1590,133 @@
         const fmtPct = (v) => Number(v).toFixed(1).replace('.', ',');
         const fmtDataBR = (iso) => iso.split('-').reverse().join('/');
 
+        // Compras x vendas fiscais (aba Compras): vendas = NFC-e + NF-e emitidas; compras pela DATA DE EMISSÃO da nota.
+        const CXV_COR = { vendas: 'var(--azul-grafico)', compras: '#f59e0b' };
+        const CXV_MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+        const elCxvPainel = document.getElementById('cxvPainel');
+        const elCxvFiltro = document.getElementById('cxvFiltroDatas');
+        const elCxvDe = document.getElementById('cxvDe');
+        const elCxvAte = document.getElementById('cxvAte');
+        let cxvPeriodo = 'mes';
+        let cxvSeq = 0;
+
+        function cxvDatas(periodo) {
+            const hoje = hojeISO();
+            const [a, m] = hoje.split('-').map(Number);
+            const iso = (ano, mes, dia) => `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+            if (periodo === 'mes_passado') {
+                const ano = m === 1 ? a - 1 : a, mes = m === 1 ? 12 : m - 1;
+                return { inicio: iso(ano, mes, 1), fim: iso(ano, mes, new Date(ano, mes, 0).getDate()) };
+            }
+            if (periodo === 'ano') return { inicio: iso(a, 1, 1), fim: hoje };
+            if (periodo === 'outro') return { inicio: elCxvDe.value, fim: elCxvAte.value };
+            return { inicio: iso(a, m, 1), fim: hoje };
+        }
+
+        function cxvClasse(pct, limites) {
+            if (pct == null) return 'info';
+            return pct > limites.vermelho ? 'vermelho' : pct > limites.amarelo ? 'amarelo' : 'verde';
+        }
+
+        function cxvBarra(nome, cor, valor, maximo, sub) {
+            const largura = valor > 0 && maximo > 0 ? Math.max(1, Math.round(valor / maximo * 100)) : 0;
+            return `<div class="cxv-barra"><div class="topo"><span><span class="cxv-cor" style="background:${cor}"></span>${nome}</span><b>${fmtMoney(valor)}</b></div>
+                <div class="trilho"><span style="width:${largura}%;background:${cor}"></span></div><div class="sub">${sub}</div></div>`;
+        }
+
+        function renderComprasVendas(r) {
+            const lim = r.limites;
+            const maior = Math.max(r.vendas, r.compras);
+            const nVendas = Number(r.notasVenda).toLocaleString('pt-BR');
+            const nCompras = Number(r.notasCompra).toLocaleString('pt-BR');
+            const classe = cxvClasse(r.pct, lim);
+            // A cor segue o regime do cliente (lido do ERP); a tela não fala de regime, para não poluir.
+            let selo;
+            if (r.pct == null) {
+                selo = '<div class="cxv-selo info"><div><b>Sem venda fiscal no período.</b></div></div>';
+            } else {
+                const extra = classe === 'verde' ? '' : ' Converse com o contador.';
+                selo = `<div class="cxv-selo ${classe}"><div><b>Compras = ${fmtPct(r.pct)}% das vendas fiscais.</b>${extra}</div></div>`;
+            }
+
+            const ano = r.ano;
+            const classeAno = cxvClasse(ano.pct, lim);
+            const escala = Math.max(lim.vermelho * 1.25, ano.pct || 0);
+            const larguraAno = ano.pct == null ? 0 : Math.min(100, ano.pct / escala * 100);
+            const marca = lim.vermelho / escala * 100;
+            const corAno = { verde: 'var(--ok)', amarelo: 'var(--aviso)', vermelho: 'var(--erro)', info: 'var(--texto-3)' }[classeAno];
+            const pctAno = ano.pct == null ? '—' : `${fmtPct(ano.pct)}%`;
+            const blocoAno = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>ACUMULADO DO ANO</span><span>jan – ${CXV_MES[ano.ateMes - 1]}/${ano.ano}</span></div>
+                <div class="cxv-barra"><div class="topo"><span>Compras / vendas fiscais</span><b>${pctAno}</b></div>
+                <div class="trilho"><span style="width:${larguraAno}%;background:${corAno}"></span><i style="left:${marca}%"></i></div>
+                <div class="sub">Vendas ${fmtMoney(ano.vendas)} · Compras ${fmtMoney(ano.compras)}</div></div></div>`;
+
+            const topoMes = Math.max(1, ...r.meses.map((m) => Math.max(m.vendas, m.compras)));
+            const colunas = r.meses.map((m) => `<div class="cxv-mes" title="${CXV_MES[m.mes - 1]}: vendas ${fmtMoney(m.vendas)} · compras ${fmtMoney(m.compras)}">
+                <span style="height:${m.vendas / topoMes * 100}%;background:${CXV_COR.vendas}"></span><span style="height:${m.compras / topoMes * 100}%;background:${CXV_COR.compras}"></span></div>`).join('');
+            const rotulos = r.meses.map((m) => `<div>${CXV_MES[m.mes - 1]}</div>`).join('');
+            const blocoMeses = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>MÊS A MÊS</span><span>${ano.ano}</span></div>
+                <div class="cxv-meses">${colunas}</div><div class="cxv-rotulos">${rotulos}</div>
+                <div class="cxv-legenda"><span><span class="cxv-cor" style="background:${CXV_COR.vendas}"></span>Vendas fiscais</span><span><span class="cxv-cor" style="background:${CXV_COR.compras}"></span>Compras</span></div></div>`;
+
+            let linhasForn = r.fornecedores.map((f) => `<div class="linha-info cxv-forn"><span class="desc">${esc(f.nome)} <small>· ${f.notas} ${f.notas === 1 ? 'nota' : 'notas'}</small></span><span class="val">${fmtMoney(f.total)}</span></div>`).join('');
+            if (r.outros) linhasForn += `<div class="linha-info"><span class="desc">Outros ${r.outros.qtd} fornecedores</span><span class="val">${fmtMoney(r.outros.total)}</span></div>`;
+            const blocoForn = `<div class="cxv-bloco"><div class="cxv-bloco-tit"><span>MAIORES FORNECEDORES</span><span>no período</span></div>
+                ${linhasForn || '<div class="nota">Nenhuma compra no período.</div>'}</div>`;
+
+            const subVendas = `${nVendas} ${r.notasVenda === 1 ? 'nota' : 'notas'} · NFC-e + NF-e`;
+            const subCompras = `${nCompras} ${r.notasCompra === 1 ? 'nota' : 'notas'} · pela data de emissão`;
+            elCxvPainel.innerHTML = `<div class="dash-panel"><h3>Compras x vendas fiscais</h3>
+                ${cxvBarra('Vendas fiscais', CXV_COR.vendas, r.vendas, maior, subVendas)}
+                ${cxvBarra('Compras', CXV_COR.compras, r.compras, maior, subCompras)}
+                ${selo}${blocoAno}${blocoMeses}${blocoForn}
+                <div class="nota">${fmtDataBR(r.periodo.inicio)} a ${fmtDataBR(r.periodo.fim)} · compras pela data de emissão, só notas já lançadas no ERP.</div></div>`;
+        }
+
+        async function carregarComprasVendas() {
+            const { inicio, fim } = cxvDatas(cxvPeriodo);
+            if (!inicio || !fim) return;
+            const seq = ++cxvSeq;
+            const chave = `cxv|${inicio}|${fim}`;
+            const visto = lerVisto(chave);
+            if (visto) {
+                renderComprasVendas(visto.dados);
+                if (estaFresco(visto)) return;
+            } else {
+                elCxvPainel.innerHTML = `<div class="dash-panel">${esqueleto(6)}</div>`;
+            }
+            try {
+                const res = await fetch(`/api/compras/resumo?${new URLSearchParams({ inicio, fim })}`);
+                const data = await res.json().catch(() => ({}));
+                if (seq !== cxvSeq) return;
+                if (!res.ok) throw new Error(data.detail || 'falha');
+                guardarVisto(chave, data);
+                renderComprasVendas(data);
+            } catch (err) {
+                if (seq !== cxvSeq || visto) return;
+                const msg = err.message && err.message !== 'falha' ? err.message : 'Não foi possível carregar compras x vendas agora.';
+                elCxvPainel.innerHTML = `<div class="dash-panel"><div class="indisponivel">${esc(msg)}</div></div>`;
+            }
+        }
+
+        document.getElementById('cxvAtalhos').addEventListener('click', (e) => {
+            const botao = e.target.closest('button[data-periodo]');
+            if (!botao) return;
+            document.querySelectorAll('#cxvAtalhos button').forEach((b) => b.classList.toggle('on', b === botao));
+            cxvPeriodo = botao.dataset.periodo;
+            elCxvFiltro.hidden = cxvPeriodo !== 'outro';
+            if (cxvPeriodo === 'outro') {
+                if (!elCxvDe.value) {
+                    const d = cxvDatas('mes');
+                    elCxvDe.value = d.inicio;
+                    elCxvAte.value = d.fim;
+                }
+                return;
+            }
+            carregarComprasVendas();
+        });
+        document.getElementById('cxvFiltrar').addEventListener('click', () => carregarComprasVendas());
+
         function mostrarTab(tab) {
             if (tab !== 'alertas' && !ACESSOS[tab]) return;
             origemFicha = null;   // trocar de aba pela barra inferior cancela o "voltar" para a tela de origem
@@ -1604,6 +1768,7 @@
 
             if (tab === 'compras') {
                 elSubtitulo.textContent = 'Compras · notas de entrada';
+                carregarComprasVendas();
                 return;
             }
 
