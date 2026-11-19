@@ -1894,11 +1894,12 @@
 
         // Vendas por tipo (NFC-e / pré-venda): rosca com o total, dois cartões e, ao tocar num cartão, as formas de pagamento.
         // Aparece sempre que houver venda no período, mesmo com um tipo só.
-        const CORES_TIPO = { fiscal: 'var(--azul-grafico)', naoFiscal: '#f59e0b' };
+        // Cada tipo com a sua cor: NF-e costuma ser fatia pequena e, com o mesmo azul da NFC-e, sumia na rosca.
+        const CORES_TIPO = { 'NFC-e': 'var(--azul-grafico)', 'NF-e': '#10b5d9', fiscal: 'var(--azul-grafico)', naoFiscal: '#f59e0b' };
         let tiposDados = [];
         let tipoAberto = null;
 
-        function corTipo(t) { return t.fiscal ? CORES_TIPO.fiscal : CORES_TIPO.naoFiscal; }
+        function corTipo(t) { return CORES_TIPO[t.tipo] || (t.fiscal ? CORES_TIPO.fiscal : CORES_TIPO.naoFiscal); }
 
         function desenharTipos() {
             const painel = document.getElementById('painelTipo');
@@ -1909,8 +1910,13 @@
             const soma = tiposDados.reduce((s, t) => s + Number(t.total), 0) || 1;
             const r = 50, circ = 2 * Math.PI * r;
             let acumulado = 0;
-            const arcos = tiposDados.map((t) => {
-                const parte = circ * Number(t.total) / soma;
+            // Fatia mínima de 3% só no desenho (os cartões mostram o valor e o percentual reais): uma NF-e com
+            // 0,4% do período virava um fio invisível na rosca.
+            const MINIMO = 0.03;
+            const fracoes = tiposDados.map((t) => Math.max(Number(t.total) / soma, MINIMO));
+            const somaFracoes = fracoes.reduce((s, f) => s + f, 0) || 1;
+            const arcos = tiposDados.map((t, i) => {
+                const parte = circ * fracoes[i] / somaFracoes;
                 const arco = `<circle cx="75" cy="75" r="${r}" fill="none" stroke="${corTipo(t)}" stroke-width="22"
                     stroke-dasharray="${parte} ${circ}" stroke-dashoffset="${-acumulado}" transform="rotate(-90 75 75)"/>`;
                 acumulado += parte;
