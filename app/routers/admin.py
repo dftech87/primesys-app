@@ -5,14 +5,14 @@ from fastapi.templating import Jinja2Templates
 import asyncio
 import secrets
 
-from app import acessos, backup, consumo, desempenho, limite
+from app import acessos, backup, consumo, desempenho, estado_api, limite
 from app.cache import cached
 from app.meuerp_client import MeuERPClient, nome_do_balde
 from app.sqlquery import executar
 from app.config import ADMIN_ATIVO, settings
 from app.security import normalize_cnpj
 from app.tenants import (
-    create_tenant, dados_da_empresa_do_token, empresa_do_token, list_tenants, set_tenant_ativo, set_tenant_nome,
+    create_tenant, list_tenants, set_tenant_ativo, set_tenant_nome,
     get_tenant_by_cnpj, set_tenant_token, set_vendas_liberado,
 )
 
@@ -47,19 +47,18 @@ def _voltar(cnpj: str = "", novo: bool = False) -> RedirectResponse:
     return RedirectResponse(destino, status_code=303)
 
 
-async def _conferencia(cliente: dict, todos: list[dict]) -> tuple[str, str]:
-    """O token do cliente aberto é da empresa do CNPJ? Está repetido em outro cadastro? (1 consulta ao ERP.)"""
+async def _conferencia(cliente: dict, todos: list[dict], api: dict) -> tuple[str, str]:
+    """O token do cliente aberto é da empresa do CNPJ? Está repetido em outro cadastro? (`api`: teste já feito, 1 consulta ao ERP.)"""
     if not cliente["api_token"]:
         return "Token ilegível (chave de criptografia ausente ou diferente)", "ruim"
     repetido = [t["nome_fantasia"] for t in todos if t["api_token"] == cliente["api_token"] and t["cnpj"] != cliente["cnpj"]]
-    dono = await empresa_do_token(cliente["api_token"])
     problemas = []
     if repetido:
         problemas.append("Token repetido com: " + ", ".join(repetido))
-    if dono is None:
-        problemas.append("Não foi possível conferir no ERP (token inválido ou ERP fora do ar)")
-    elif dono != normalize_cnpj(cliente["cnpj"]):
-        problemas.append(f"Token é da empresa de CNPJ {_cnpj_formatado(dono)}, não deste CNPJ")
+    if api["estado"] == "outra":
+        problemas.append(f"Token é da empresa de CNPJ {_cnpj_formatado(api['cnpj'])}, não deste CNPJ")
+    elif api["estado"] != "ok":
+        problemas.append("Não foi possível conferir a empresa do token: veja a situação da API acima")
     if problemas:
         return "; ".join(problemas), "ruim"
     lojas = await _empresas_no_banco(cliente)
@@ -123,7 +122,7 @@ async def admin_logout(request: Request):
 @router.get("", response_class=HTMLResponse)
 async def admin_home(request: Request, c: str = "", novo: int = 0):
     """Lista de clientes à esquerda e, à direita, o cliente aberto (ou o cadastro de um novo).
-    A lista não consulta o ERP; só o cliente aberto tem o token conferido."""
+    A página só testa a API do cliente aberto; a lista pede a situação dos outros depois, em /admin/api/{cnpj}."""
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
     todos = list_tenants()
@@ -136,8 +135,9 @@ async def admin_home(request: Request, c: str = "", novo: int = 0):
     if not novo:
         aberto = next((t for t in clientes if t["cnpj"] == cnpj), None) or (clientes[0] if clientes else None)
     if aberto:
-        texto, classe = await _conferencia(aberto, todos)
-        aberto = {**aberto, "conf_texto": texto, "conf_classe": classe}
+        api = await estado_api.do_cliente(aberto, agora=True)
+        texto, classe = await _conferencia(aberto, todos, api)
+        aberto = {**aberto, "conf_texto": texto, "conf_classe": classe, "api": estado_api.para_tela(api)}
     contexto = {"clientes": [{k: v for k, v in t.items() if k != "api_token"} for t in clientes],
                 "aberto": {k: v for k, v in aberto.items() if k != "api_token"} if aberto else None,
                 "novo": bool(novo) or not clientes, "aviso": request.session.pop("aviso", None),
@@ -145,14 +145,25 @@ async def admin_home(request: Request, c: str = "", novo: int = 0):
     return templates.TemplateResponse(request, "admin.html", contexto)
 
 
+@router.get("/api/{cnpj}")
+async def admin_estado_da_api(request: Request, cnpj: str, agora: int = 0):
+    """Situação da API do ERP de um cliente (1 leitura no ERP, guardada por 2 minutos; `agora=1` refaz o teste)."""
+    if not _is_admin(request):
+        return JSONResponse({"erro": "Sessão expirada. Entre de novo."}, status_code=401)
+    cliente = next((t for t in list_tenants() if t["cnpj"] == normalize_cnpj(cnpj)), None)
+    if cliente is None:
+        return JSONResponse({"erro": "Cliente não encontrado."}, status_code=404)
+    return JSONResponse(estado_api.para_tela(await estado_api.do_cliente(cliente, agora=bool(agora))), headers={"Cache-Control": "no-store"})
+
+
 @router.post("/tenants/consultar")
 async def admin_consultar_token(request: Request, api_token: str = Form(...)):
     """Novo cliente: diz de qual empresa é o token (CNPJ e nome, segundo o próprio ERP) e se já está cadastrada."""
     if not _is_admin(request):
         return JSONResponse({"erro": "Sessão expirada. Entre de novo."}, status_code=401)
-    dados = await dados_da_empresa_do_token(api_token.strip())
-    if dados is None:
-        return JSONResponse({"erro": "O ERP não reconheceu esse token. Confira se ele foi copiado inteiro."}, status_code=422)
+    dados = await estado_api.testar(api_token.strip())
+    if dados["estado"] != "ok":
+        return JSONResponse({"erro": estado_api.explicar(dados)}, status_code=422)
     existente = next((t for t in list_tenants() if t["cnpj"] == dados["cnpj"]), None)
     return {"cnpj": dados["cnpj"], "cnpj_fmt": _cnpj_formatado(dados["cnpj"]), "nome": dados["fantasia"] or dados["razao"],
             "ja_cadastrado": existente is not None, "nome_cadastrado": existente["nome_fantasia"] if existente else ""}
@@ -171,9 +182,9 @@ async def admin_create_tenant(
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
     token, nome = api_token.strip(), " ".join(nome_fantasia.split())[:120]
-    dados = await dados_da_empresa_do_token(token)
-    if dados is None:
-        _avisar(request, "Não cadastrado: o ERP não reconheceu esse token. Confira se ele foi copiado inteiro.", "ruim")
+    dados = await estado_api.testar(token)
+    if dados["estado"] != "ok":
+        _avisar(request, "Não cadastrado. " + estado_api.explicar(dados), "ruim")
         return _voltar(novo=True)
     cnpj = dados["cnpj"]
     if any(t["cnpj"] == cnpj for t in list_tenants()):
@@ -191,13 +202,15 @@ async def admin_trocar_token(request: Request, cnpj: str, api_token: str = Form(
     if not _is_admin(request):
         return RedirectResponse("/admin/login", status_code=303)
     token = api_token.strip()
-    dono = await empresa_do_token(token)
-    if dono is None:
-        _avisar(request, "Token não trocado: o ERP não reconheceu esse token. Confira se ele foi copiado inteiro.", "ruim")
+    teste = await estado_api.testar(token)
+    dono = teste["cnpj"]
+    if teste["estado"] != "ok":
+        _avisar(request, "Token não trocado (o anterior continua). " + estado_api.explicar(teste), "ruim")
     elif dono != normalize_cnpj(cnpj):
         _avisar(request, f"Token não trocado: ele é da empresa de CNPJ {_cnpj_formatado(dono)}, não deste cliente.", "ruim")
     else:
         set_tenant_token(cnpj, token)
+        estado_api.esquecer(cnpj)
         _avisar(request, "Token trocado e conferido com o CNPJ no ERP.")
     return _voltar(cnpj)
 

@@ -43,7 +43,16 @@
         .st.on { background: #dcfce7; color: #166534; } .st.off { background: #f1f5f9; color: #475569; }
         .verde { background: #16a34a; }
         .ponto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
-        .ponto.bom { background: #16a34a; } .ponto.ruim { background: #dc2626; }
+        .ponto.bom { background: #16a34a; } .ponto.ruim { background: #dc2626; } .ponto.meio { background: #d97706; } .ponto.cinza { background: #cbd5e1; }
+        /* Comunicação com a API do ERP */
+        .api { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 12px; margin-top: 16px; border: 1px solid; }
+        .api.bom { background: #dcfce7; border-color: #86efac; color: #166534; }
+        .api.ruim { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+        .api.meio { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+        .api .t { font-size: 16px; font-weight: 700; } .api .d { font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+        .api .q { font-size: 12px; margin-top: 5px; opacity: .85; } .api button { flex: none; } .api button:disabled { opacity: .6; cursor: default; }
+        .resumo-api { font-size: 12.5px; color: #64748b; margin-top: 10px; min-height: 17px; }
+        .resumo-api b.ruim { color: #b91c1c; } .resumo-api b.bom { color: #166534; }
         .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 10px; }
         .editar { display: none; margin: 0 0 10px; gap: 8px; }
         .editar.aberto { display: flex; }
@@ -57,7 +66,7 @@
         .dialogo p { margin: 0 0 16px; font-size: 14px; line-height: 1.5; }
         .dialogo div { display: flex; gap: 8px; justify-content: flex-end; }
         .vazio { color: #64748b; font-size: 13px; }
-        @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } .lista { max-height: 40vh; } .app { flex-wrap: wrap; } }
+        @media (max-width: 760px) { main { grid-template-columns: 1fr; padding: 16px; } .lista { max-height: 40vh; } .app, .api { flex-wrap: wrap; } }
     </style>
 </head>
 <body>
@@ -71,11 +80,13 @@
         <!-- Lista de clientes -->
         <aside class="panel">
             <input type="search" id="busca" placeholder="Buscar por nome ou CNPJ" autocomplete="off" />
+            <div class="resumo-api" id="resumoApi" role="status"></div>
             <div class="lista" id="lista">
                 {% for t in clientes %}
                 <a href="/admin?c={{ t.cnpj }}" class="{{ 'on' if aberto and aberto.cnpj == t.cnpj else '' }} {{ '' if t.ativo else 'inativo' }}"
-                   data-busca="{{ (t.nome_fantasia ~ ' ' ~ t.cnpj ~ ' ' ~ t.cnpj_fmt)|lower }}">
-                    <div class="nm">{{ t.nome_fantasia }}</div>
+                   data-busca="{{ (t.nome_fantasia ~ ' ' ~ t.cnpj ~ ' ' ~ t.cnpj_fmt)|lower }}"
+                   {% if t.ativo or t.vendas_liberado %}data-api="{{ t.cnpj }}"{% endif %}>
+                    <div class="nm">{% if t.ativo or t.vendas_liberado %}<span class="ponto cinza" title="API do ERP: testando"></span>{% endif %}{{ t.nome_fantasia }}</div>
                     <div class="sub">{{ t.cnpj_fmt }}
                         {% if not t.ativo %}<span class="tag d">desativado</span>{% elif t.vendas_liberado %}<span class="tag v">Vendas</span>{% endif %}</div>
                 </a>
@@ -118,6 +129,16 @@
             <h2>{{ aberto.nome_fantasia }}</h2>
             <div class="meta">{{ aberto.cnpj_fmt }} &middot; cliente desde {{ aberto.desde }}</div>
 
+            <div class="api {{ 'bom' if aberto.api.ok else ('meio' if aberto.api.estado in ('lento', 'limite') else 'ruim') }}" id="api" data-cnpj="{{ aberto.cnpj }}" data-estado="{{ aberto.api.estado }}" role="status">
+                <div>
+                    <div class="t" id="apiTitulo">{{ '✓' if aberto.api.ok else '✕' }} {{ aberto.api.titulo }}</div>
+                    <div class="d" id="apiMotivo">{% if aberto.api.motivo %}Resposta do ERP: “{{ aberto.api.motivo }}”{% endif %}</div>
+                    <div class="d" id="apiDica">{{ aberto.api.dica }}</div>
+                    <div class="q" id="apiQuando">Testado em {{ aberto.api.quando }}</div>
+                </div>
+                <button type="button" class="sec" id="apiTestar">Testar agora</button>
+            </div>
+
             <div class="secao">Acesso aos apps</div>
             <div class="app">
                 <div><div class="t">Prime Info</div><div class="d">App de relatórios do dono da loja</div></div>
@@ -147,7 +168,7 @@
                 {% elif aberto.conf_classe == 'aviso' %}
                 <div><div class="t"><span class="ponto bom"></span>Token funcionando</div><div class="d">Conferido agora: o token é desta empresa</div><div class="d ruim">{{ aberto.conf_texto }}</div></div>
                 {% else %}
-                <div><div class="t"><span class="ponto ruim"></span>Problema no token</div><div class="d ruim">{{ aberto.conf_texto }}</div></div>
+                <div><div class="t"><span class="ponto ruim"></span>Token não conferido</div><div class="d ruim">{{ aberto.conf_texto }}</div></div>
                 {% endif %}
                 <button type="button" class="sec" data-abrir="edToken">Trocar token</button>
             </div>
@@ -229,6 +250,63 @@
         btnConsultar.addEventListener('click', consultar);
         document.getElementById('novoToken').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); consultar(); } });
     }
+
+    // Comunicação com a API do ERP: faixa do cliente aberto e bolinha de cada cliente da lista
+    const corApi = (d) => d.ok ? 'bom' : (d.estado === 'lento' || d.estado === 'limite' ? 'meio' : 'ruim');
+    const faixa = document.getElementById('api');
+    const itensApi = [...document.querySelectorAll('#lista a[data-api]')];
+    const situacao = new Map();
+    function resumirApi() {
+        const alvo = document.getElementById('resumoApi');
+        const todos = itensApi.map((a) => situacao.get(a.dataset.api)).filter(Boolean);
+        if (!itensApi.length) return;
+        const bons = todos.filter((d) => d.ok).length, ruins = todos.length - bons;
+        alvo.replaceChildren('API do ERP: ');
+        const parte = (texto, classe) => { const b = document.createElement('b'); b.className = classe; b.textContent = texto; alvo.append(b); };
+        parte(`${bons} funcionando`, 'bom');
+        if (ruins) { alvo.append(' · '); parte(`${ruins} com problema`, 'ruim'); }
+        if (todos.length < itensApi.length) alvo.append(' · testando...');
+    }
+    function pintarApi(cnpj, d) {
+        situacao.set(cnpj, d);
+        const item = itensApi.find((a) => a.dataset.api === cnpj);
+        if (item) {
+            const p = item.querySelector('.ponto');
+            p.className = 'ponto ' + corApi(d);
+            p.title = 'API do ERP: ' + d.titulo + (d.motivo ? ' — ' + d.motivo : '');
+        }
+        if (faixa && faixa.dataset.cnpj === cnpj) {
+            faixa.className = 'api ' + corApi(d);
+            faixa.dataset.estado = d.estado;
+            document.getElementById('apiTitulo').textContent = (d.ok ? '✓ ' : '✕ ') + d.titulo;
+            document.getElementById('apiMotivo').textContent = d.motivo ? `Resposta do ERP: “${d.motivo}”` : '';
+            document.getElementById('apiDica').textContent = d.dica;
+            document.getElementById('apiQuando').textContent = 'Testado em ' + d.quando;
+        }
+        resumirApi();
+    }
+    async function buscarApi(cnpj, agora) {
+        try {
+            const r = await fetch(`/admin/api/${cnpj}${agora ? '?agora=1' : ''}`, { credentials: 'same-origin' });
+            if (!r.ok) return false;
+            pintarApi(cnpj, await r.json());
+            return true;
+        } catch (e) { return false; }
+    }
+    if (faixa) {
+        const btn = document.getElementById('apiTestar'), estadoInicial = faixa.dataset.estado;
+        btn.addEventListener('click', async () => {
+            btn.disabled = true; btn.textContent = 'Testando...';
+            const foi = await buscarApi(faixa.dataset.cnpj, true);
+            if (!foi) document.getElementById('apiQuando').textContent = 'Não foi possível testar agora. Recarregue a página.';
+            else if (faixa.dataset.estado !== estadoInicial) { location.href = '/admin?c=' + faixa.dataset.cnpj; return; }   // atualiza também o quadro do token
+            btn.disabled = false; btn.textContent = 'Testar agora';
+        });
+    }
+    // Lista: 3 por vez, sem atrasar a página. O servidor guarda cada resposta por 2 minutos.
+    const fila = itensApi.map((a) => a.dataset.api);
+    async function esvaziarFila() { while (fila.length) await buscarApi(fila.shift(), false); }
+    if (fila.length) { resumirApi(); for (let n = 0; n < 3; n += 1) esvaziarFila(); }
 
     // Celular: ao abrir um cliente, mostra o painel
     if (window.innerWidth <= 760 && location.search.includes('c=')) document.getElementById('painel').scrollIntoView();
