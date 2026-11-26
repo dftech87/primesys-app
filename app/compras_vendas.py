@@ -1,7 +1,9 @@
 """Compras x vendas fiscais (aba Compras do Prime Info).
 
 O que conta (pedido do dono, validado no cliente 36596421000174 em 19/11/2026):
-  - Vendas fiscais: NFC-e (65) e NF-e (55) de SAÍDA com status 'E' (emitido). Pré-venda (PV) NÃO entra: é o que a SEFAZ enxerga.
+  - Vendas fiscais: NFC-e (65) e NF-e (55) de SAÍDA com status 'E' (emitido) no ERP E AUTORIZADAS pela SEFAZ
+    (documento_eletronico.status 'A': códigos 100 e 150). Pendentes de transmissão (contingência, status 'P', código 999),
+    canceladas, rejeitadas e pré-venda (PV) NÃO entram: só o que a SEFAZ já enxerga (decisão do dono, 26/11/2026).
   - Compras: só NF-e de ENTRADA (55) com status 'E' — o que a SEFAZ enxerga —, pela DATA DE EMISSÃO da nota, nunca pela
     de entrada (NF-e emitida em setembro e lançada em novembro conta em setembro). A emissão está em
     documento_eletronico.datahora (bate com o ano/mês da chave em 63 de 63 notas; documento.datahora é a data de lançamento).
@@ -17,7 +19,7 @@ from datetime import date, timedelta
 from app.meuerp_client import MeuERPClient
 from app.sqlquery import d, empresa, executar
 
-_VENDA_FISCAL = "d.modelo in ('55', '65') and d.tipomovimento = 'S' and d.status = 'E'"
+_VENDA_FISCAL = "d.modelo in ('55', '65') and d.tipomovimento = 'S' and d.status = 'E' and e.status = 'A'"   # e = documento_eletronico
 _COMPRA = "d.modelo = '55' and d.tipomovimento = 'E' and d.status = 'E'"
 _EMISSAO_COMPRA = "coalesce(e.datahora, d.datahora)"
 
